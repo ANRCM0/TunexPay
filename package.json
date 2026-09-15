@@ -1,0 +1,30 @@
+{
+  "name": "tuoxin-pay",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "npm run dev --workspace @tuoxin-pay/api",
+    "dev:web": "npm run dev --workspace @tuoxin-pay/web",
+    "dev:worker": "npm run dev:worker --workspace @tuoxin-pay/api",
+    "build": "npm run db:generate && npm run build --workspace @tuoxin-pay/api && npm run build --workspace @tuoxin-pay/web",
+    "typecheck": "npm run typecheck --workspace @tuoxin-pay/api && npm run typecheck --workspace @tuoxin-pay/web",
+    "test": "npm run test --workspace @tuoxin-pay/api",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "app:create": "npm run app:create --workspace @tuoxin-pay/api --"
+  },
+  "devDependencies": {
+    "prisma": "6.12.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.12.0"
+  }
+}

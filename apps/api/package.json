@@ -1,0 +1,30 @@
+{
+  "name": "@tuoxin-pay/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:worker": "node dist/worker.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "app:create": "tsx src/scripts/create-app.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@prisma/client": "6.12.0",
+    "bullmq": "6.3.6",
+    "hono": "4.13.8",
+    "ioredis": "6.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "4.0.17"
+  }
+}

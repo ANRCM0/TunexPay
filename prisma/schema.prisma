@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum ApplicationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrderStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  CLOSED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum IntegrationProtocol {
+  NATIVE_V1
+  EPAY_V1
+}
+
+enum PaymentStatus {
+  CREATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  UNKNOWN
+  CLOSED
+}
+
+enum PaymentChannelCode {
+  ALIPAY
+  MOCK
+}
+
+enum RefundStatus {
+  CREATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  UNKNOWN
+}
+
+enum WebhookStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  DEAD
+}
+
+model Application {
+  id                     String             @id @default(cuid())
+  appId                  String             @unique @db.VarChar(40)
+  name                   String             @db.VarChar(120)
+  status                 ApplicationStatus  @default(ACTIVE)
+  apiKeyHash             String             @db.Char(64)
+  webhookUrl             String?            @db.VarChar(500)
+  webhookSecretEncrypted String             @db.Text
+  epayPid                String             @unique @db.VarChar(32)
+  epayKeyEncrypted       String             @db.Text
+  defaultChannel         PaymentChannelCode @default(MOCK)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  orders                 Order[]
+  refunds                Refund[]
+  webhookDeliveries      WebhookDelivery[]
+
+  @@index([status, createdAt])
+  @@map("applications")
+}
+
+model Order {
+  id                String              @id @default(cuid())
+  orderNo           String              @unique @db.VarChar(40)
+  externalOrderNo   String              @db.VarChar(80)
+  applicationId     String
+  amount            Int                 @db.UnsignedInt
+  currency          String              @default("CNY") @db.Char(3)
+  subject           String              @db.VarChar(160)
+  description       String?             @db.VarChar(500)
+  metadata          Json?
+  protocol          IntegrationProtocol @default(NATIVE_V1)
+  notifyUrl         String?             @db.VarChar(500)
+  returnUrl         String?             @db.VarChar(500)
+  status            OrderStatus         @default(CREATED)
+  idempotencyKey    String?             @db.VarChar(120)
+  requestHash       String              @db.Char(64)
+  winningPaymentId  String?             @db.VarChar(32)
+  expiresAt         DateTime?
+  paidAt            DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  application       Application         @relation(fields: [applicationId], references: [id])
+  payments          Payment[]
+  events            PaymentEvent[]
+  webhookDeliveries WebhookDelivery[]
+
+  @@unique([applicationId, externalOrderNo])
+  @@unique([applicationId, idempotencyKey])
+  @@index([applicationId, status, createdAt])
+  @@index([createdAt, id])
+  @@map("orders")
+}
+
+model Payment {
+  id             String             @id @default(cuid())
+  paymentNo      String             @unique @db.VarChar(40)
+  orderId        String
+  attemptNo      Int                @db.UnsignedSmallInt
+  idempotencyKey String?            @db.VarChar(120)
+  channel        PaymentChannelCode
+  method         String             @db.VarChar(32)
+  status         PaymentStatus      @default(CREATED)
+  amount         Int                @db.UnsignedInt
+  channelTradeNo String?            @unique @db.VarChar(100)
+  channelOrderNo String?            @db.VarChar(100)
+  clientPayload  Json?
+  rawResponse    Json?
+  errorCode      String?            @db.VarChar(80)
+  errorMessage   String?            @db.VarChar(500)
+  paidAt         DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  order          Order              @relation(fields: [orderId], references: [id])
+  refunds        Refund[]
+  events         PaymentEvent[]
+
+  @@unique([orderId, attemptNo])
+  @@unique([orderId, idempotencyKey])
+  @@index([orderId, status, createdAt])
+  @@index([status, updatedAt])
+  @@map("payments")
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  refundNo         String       @unique @db.VarChar(40)
+  externalRefundNo String       @db.VarChar(80)
+  applicationId    String
+  paymentId        String
+  amount           Int          @db.UnsignedInt
+  reason           String?      @db.VarChar(300)
+  status           RefundStatus @default(CREATED)
+  channelRefundNo  String?      @db.VarChar(100)
+  rawResponse      Json?
+  errorCode        String?      @db.VarChar(80)
+  errorMessage     String?      @db.VarChar(500)
+  succeededAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  application      Application  @relation(fields: [applicationId], references: [id])
+  payment          Payment      @relation(fields: [paymentId], references: [id])
+
+  @@unique([applicationId, externalRefundNo])
+  @@index([paymentId, status, createdAt])
+  @@index([applicationId, createdAt])
+  @@map("refunds")
+}
+
+model PaymentEvent {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  aggregateType String   @db.VarChar(24)
+  aggregateId   String   @db.VarChar(40)
+  orderId       String?
+  paymentId     String?
+  type          String   @db.VarChar(64)
+  source        String   @db.VarChar(32)
+  requestId     String?  @db.VarChar(64)
+  payload       Json?
+  createdAt     DateTime @default(now())
+  order         Order?   @relation(fields: [orderId], references: [id])
+  payment       Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([aggregateType, aggregateId, id])
+  @@index([orderId, id])
+  @@index([paymentId, id])
+  @@index([createdAt, id])
+  @@map("payment_events")
+}
+
+model ChannelCallback {
+  id           BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  channel      PaymentChannelCode
+  eventKey     String             @db.VarChar(160)
+  paymentNo    String?            @db.VarChar(40)
+  verified     Boolean            @default(false)
+  processed    Boolean            @default(false)
+  rawPayload   Json
+  errorMessage String?            @db.VarChar(500)
+  createdAt    DateTime           @default(now())
+  processedAt  DateTime?
+
+  @@unique([channel, eventKey])
+  @@index([paymentNo, createdAt])
+  @@map("channel_callbacks")
+}
+
+model WebhookDelivery {
+  id             String              @id @default(cuid())
+  applicationId  String
+  orderId        String
+  eventType      String              @db.VarChar(80)
+  protocol       IntegrationProtocol
+  url            String              @db.VarChar(500)
+  payload        Json
+  status         WebhookStatus       @default(PENDING)
+  attempts       Int                 @default(0) @db.UnsignedSmallInt
+  maxAttempts    Int                 @default(8) @db.UnsignedSmallInt
+  nextAttemptAt  DateTime            @default(now())
+  lockedUntil    DateTime?
+  lastError      String?             @db.VarChar(500)
+  responseStatus Int?
+  responseBody   String?             @db.Text
+  deliveredAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  application    Application         @relation(fields: [applicationId], references: [id])
+  order          Order               @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId, eventType, url])
+  @@index([status, nextAttemptAt, id])
+  @@index([lockedUntil, status])
+  @@index([applicationId, createdAt])
+  @@map("webhook_deliveries")
+}
