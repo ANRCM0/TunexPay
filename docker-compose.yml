@@ -1,0 +1,103 @@
+name: tuoxin-pay
+
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  DATABASE_URL: mysql://tuoxin:${MYSQL_PASSWORD:-tuoxin-change-me}@mysql:3306/tuoxin_pay
+  REDIS_URL: redis://redis:6379
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3001}
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
+  ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+  SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set SECRETS_ENCRYPTION_KEY in .env}
+  ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+  ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY:-}
+  ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+  ALIPAY_GATEWAY: ${ALIPAY_GATEWAY:-https://openapi.alipay.com/gateway.do}
+  ALIPAY_SIGN_TYPE: RSA2
+  MOCK_CHANNEL_ENABLED: ${MOCK_CHANNEL_ENABLED:-false}
+  MOCK_CHANNEL_TOKEN: ${MOCK_CHANNEL_TOKEN:-}
+  ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: tuoxin_pay
+      MYSQL_USER: tuoxin
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-tuoxin-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-change-me}
+      TZ: Asia/Shanghai
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+      PORT: 3001
+    command: ["sh", "-c", "npm run db:deploy && node apps/api/dist/server.js"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    command: ["node", "apps/api/dist/worker.js"]
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      INTERNAL_API_URL: http://api:3001
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+      MOCK_CHANNEL_TOKEN: ${MOCK_CHANNEL_TOKEN:-}
+    command: ["npm", "run", "start", "--workspace", "@tuoxin-pay/web"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:

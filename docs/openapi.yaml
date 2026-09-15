@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+  title: TUOXIN Pay API
+  version: 0.1.0
+servers:
+  - url: https://pay.example.com/api/v1
+security:
+  - ApplicationId: []
+    ApiKey: []
+paths:
+  /orders:
+    post:
+      summary: 创建业务订单
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrder'
+      responses:
+        '201':
+          description: 新订单
+        '200':
+          description: 幂等重放返回原订单
+        '409':
+          description: 相同业务单号或幂等键对应不同请求
+  /orders/{orderNo}:
+    get:
+      summary: 查询业务订单
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+      responses:
+        '200':
+          description: 订单及支付尝试
+  /orders/{orderNo}/pay:
+    post:
+      summary: 发起一次支付尝试
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel:
+                  type: string
+                  enum: [ALIPAY, MOCK]
+                method:
+                  type: string
+                  default: alipay
+      responses:
+        '201':
+          description: 支付尝试与 cashierUrl
+  /payments/{paymentNo}:
+    get:
+      summary: 读取本地支付状态
+      parameters:
+        - $ref: '#/components/parameters/PaymentNo'
+      responses:
+        '200':
+          description: 支付状态
+  /payments/{paymentNo}/query:
+    post:
+      summary: 向支付通道主动查单并推进状态
+      parameters:
+        - $ref: '#/components/parameters/PaymentNo'
+      responses:
+        '200':
+          description: 最新支付状态
+  /payments/{paymentNo}/close:
+    post:
+      summary: 关闭支付尝试；已成功或已关闭时幂等返回
+      parameters:
+        - $ref: '#/components/parameters/PaymentNo'
+      responses:
+        '200':
+          description: 最新支付状态
+  /refunds:
+    post:
+      summary: 创建退款
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentNo, externalRefundNo, amount]
+              properties:
+                paymentNo: { type: string }
+                externalRefundNo: { type: string, maxLength: 80 }
+                amount: { type: integer, minimum: 1, description: 整数分 }
+                reason: { type: string, maxLength: 300 }
+      responses:
+        '201':
+          description: 退款单
+components:
+  securitySchemes:
+    ApplicationId:
+      type: apiKey
+      in: header
+      name: X-App-Id
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, maxLength: 120 }
+    OrderNo:
+      name: orderNo
+      in: path
+      required: true
+      schema: { type: string }
+    PaymentNo:
+      name: paymentNo
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    CreateOrder:
+      type: object
+      required: [externalOrderNo, amount, subject]
+      properties:
+        externalOrderNo: { type: string, maxLength: 80 }
+        amount: { type: integer, minimum: 1, description: 整数分 }
+        currency: { type: string, const: CNY, default: CNY }
+        subject: { type: string, maxLength: 160 }
+        description: { type: string, maxLength: 500 }
+        metadata: { type: object, additionalProperties: true }
+        notifyUrl: { type: string, format: uri }
+        returnUrl: { type: string, format: uri }
+        expiresInSeconds: { type: integer, minimum: 60, maximum: 86400, default: 1800 }

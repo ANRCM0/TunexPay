@@ -1,0 +1,52 @@
+import { Queue, Worker } from "bullmq";
+import { Redis } from "ioredis";
+import { config } from "./config.js";
+import { db } from "./db.js";
+import { log } from "./lib/logger.js";
+import { deliverWebhook, listDueDeliveryIds, recoverExpiredDeliveries } from "./services/webhook-worker-service.js";
+
+const connection = new Redis(config().REDIS_URL, { maxRetriesPerRequest: null });
+const queue = new Queue("tuoxin-pay-webhooks", { connection });
+const worker = new Worker("tuoxin-pay-webhooks", async (job) => {
+  await deliverWebhook(String(job.data.id));
+}, { connection, concurrency: 8 });
+
+worker.on("completed", (job) => log("info", "webhook.completed", { jobId: job.id }));
+worker.on("failed", (job, error) => log("warn", "webhook.failed", { jobId: job?.id, error: error.message }));
+worker.on("error", (error) => log("error", "worker.error", { error: error.message }));
+
+let polling = false;
+async function poll(): Promise<void> {
+  if (polling) return;
+  polling = true;
+  try {
+    await recoverExpiredDeliveries();
+    const due = await listDueDeliveryIds();
+    for (const item of due) {
+      await queue.add("deliver", { id: item.id }, {
+        jobId: `${item.id}-${item.attempts}`,
+        removeOnComplete: { age: 3_600, count: 1_000 },
+        removeOnFail: { age: 86_400, count: 5_000 },
+      });
+    }
+  } catch (error) {
+    log("error", "worker.poll_failed", { error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    polling = false;
+  }
+}
+
+const interval = setInterval(() => void poll(), 3_000);
+void poll();
+log("info", "worker.started", { queue: "tuoxin-pay-webhooks" });
+
+async function shutdown(): Promise<void> {
+  clearInterval(interval);
+  await worker.close();
+  await queue.close();
+  await connection.quit();
+  await db.$disconnect();
+  process.exit(0);
+}
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());
