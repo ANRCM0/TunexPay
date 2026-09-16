@@ -281,7 +281,7 @@ model WebhookDelivery {
   orderId        String
   eventType      String              @db.VarChar(80)
   protocol       IntegrationProtocol
-  url            String              @db.VarChar(500)
+  url            String              @db.VarChar(300)
   payload        Json
   status         WebhookStatus       @default(PENDING)
   attempts       Int                 @default(0) @db.UnsignedSmallInt
