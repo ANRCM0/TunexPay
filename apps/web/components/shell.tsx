@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, ReceiptText, RotateCcw, Webhook } from "lucide-react";
+import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, Puzzle, ReceiptText, RotateCcw, Webhook } from "lucide-react";
 
 const navigation = [
   { label: "", items: [["/", "总览", LayoutDashboard, "#2563eb"]] },
   { label: "交易", items: [["/orders", "订单", ReceiptText, "#22a06b"], ["/refunds", "退款", RotateCcw, "#e8a13c"], ["/exceptions", "支付异常", AlertTriangle, "#e5534b"]] },
   { label: "资金", items: [["/reconciliation", "对账", FileCheck2, "#0ea5e9"], ["/webhooks", "Webhook", Webhook, "#8b5cf6"]] },
-  { label: "系统", items: [["/system", "系统监控", Gauge, "#14b8a6"], ["/applications", "应用", AppWindow, "#f97316"], ["/channels", "插件与通道", CreditCard, "#2563eb"], ["/notifications", "通知设置", Bell, "#eab308"], ["/audits", "操作审计", ListChecks, "#64748b"]] },
+  { label: "系统", items: [["/system", "系统监控", Gauge, "#14b8a6"], ["/applications", "应用", AppWindow, "#f97316"], ["/plugins", "支付插件", Puzzle, "#8b5cf6"], ["/channels", "支付通道", CreditCard, "#2563eb"], ["/notifications", "通知设置", Bell, "#eab308"], ["/audits", "操作审计", ListChecks, "#64748b"]] },
 ] as const;
 
 const CRUMB_MAP: [RegExp, string[]][] = [
@@ -22,8 +22,9 @@ const CRUMB_MAP: [RegExp, string[]][] = [
   [/^\/webhooks/, ["资金", "Webhook"]],
   [/^\/system/, ["系统", "系统监控"]],
   [/^\/applications/, ["系统", "应用"]],
-  [/^\/channels\/alipay-bill/, ["系统", "插件与通道", "账单收款配置"]],
-  [/^\/channels/, ["系统", "插件与通道"]],
+  [/^\/plugins/, ["系统", "支付插件"]],
+  [/^\/channels\/alipay-bill/, ["系统", "支付通道", "账单收款配置"]],
+  [/^\/channels/, ["系统", "支付通道"]],
   [/^\/notifications/, ["系统", "通知设置"]],
   [/^\/audits/, ["系统", "操作审计"]],
 ];
