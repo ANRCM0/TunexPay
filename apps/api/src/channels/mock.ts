@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { ChannelDefinitiveError } from "../lib/errors.js";
-import type { ChannelCreateInput, ChannelCreateResult, ChannelQueryResult, ChannelRefundInput, ChannelRefundResult, ChannelWebhookResult, PaymentChannel } from "./types.js";
+import type { ChannelCreateInput, ChannelCreateResult, ChannelQueryResult, ChannelRefundInput, ChannelRefundQueryInput, ChannelRefundResult, ChannelWebhookResult, PaymentChannel } from "./types.js";
 
 export class MockChannel implements PaymentChannel {
   readonly code = "MOCK" as const;
@@ -24,6 +24,10 @@ export class MockChannel implements PaymentChannel {
   }
 
   async refund(input: ChannelRefundInput): Promise<ChannelRefundResult> {
+    return { status: "SUCCESS", channelRefundNo: `mock_${input.refundNo}`, raw: { mock: true } };
+  }
+
+  async queryRefund(input: ChannelRefundQueryInput): Promise<ChannelRefundResult> {
     return { status: "SUCCESS", channelRefundNo: `mock_${input.refundNo}`, raw: { mock: true } };
   }
 

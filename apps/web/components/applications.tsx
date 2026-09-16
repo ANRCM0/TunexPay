@@ -36,7 +36,7 @@ export function Applications() {
       <form className="form-grid" onSubmit={submit}>
         <label>应用名称<input name="name" required placeholder="TUOXIN Matrix" /></label>
         <label>Webhook 地址<input name="webhookUrl" type="url" placeholder="https://example.com/webhook" /></label>
-        <label>默认通道<select name="defaultChannel" defaultValue="MOCK"><option value="MOCK">Mock（开发）</option><option value="ALIPAY">支付宝</option></select></label>
+        <label>默认通道<select name="defaultChannel" defaultValue="MOCK"><option value="MOCK">Mock（开发）</option><option value="ALIPAY">支付宝当面付</option><option value="ALIPAY_BILL">支付宝账单收款</option></select></label>
         <button className="button" disabled={saving}>{saving ? "创建中…" : "创建应用"}</button>
       </form>
       {formError && <div className="error">{formError}</div>}

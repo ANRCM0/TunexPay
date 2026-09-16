@@ -4,8 +4,10 @@ import { channelFor } from "../channels/registry.js";
 import { db } from "../db.js";
 import { generateId, sha256, stableJson } from "../lib/crypto.js";
 import { AppError, ChannelDefinitiveError, ChannelUncertainError, errorMessage } from "../lib/errors.js";
-import { assertRefundTransition, refundedOrderStatus } from "../lib/state-machine.js";
+import { RECOVERY_MAX_ATTEMPTS, initialRecoveryAt, isRecoverableRefund, recoveryAt } from "../lib/recovery-policy.js";
+import { assertRefundTransition, canRefundTransition, refundedOrderStatus } from "../lib/state-machine.js";
 import { createRefundSucceededDelivery } from "./outbox-service.js";
+import { resolveLateDuplicateExceptionAfterRefund } from "./payment-exception-service.js";
 
 export const createRefundSchema = z.object({
   paymentNo: z.string().min(1).max(40),
@@ -41,11 +43,16 @@ export async function createRefund(application: Application, input: CreateRefund
       if ((reserved._sum.amount ?? 0) + input.amount > payment.amount) throw new AppError("REFUND_AMOUNT_EXCEEDED", "退款金额超过可退金额", 409);
       const created = await tx.refund.create({ data: {
         refundNo: generateId("ref"), externalRefundNo: input.externalRefundNo, applicationId: application.id,
-        paymentId: payment.id, amount: input.amount, reason: input.reason,
+        paymentId: payment.id, amount: input.amount, reason: input.reason, status: "PROCESSING",
+        nextQueryAt: payment.channel === "ALIPAY" ? initialRecoveryAt() : null,
       } });
       await tx.paymentEvent.create({ data: {
         aggregateType: "REFUND", aggregateId: created.refundNo, orderId: payment.orderId, paymentId: payment.id,
         type: "REFUND_CREATED", source: "API", payload: { amount: created.amount, externalRefundNo: created.externalRefundNo },
+      } });
+      await tx.paymentEvent.create({ data: {
+        aggregateType: "REFUND", aggregateId: created.refundNo, orderId: payment.orderId, paymentId: payment.id,
+        type: "CHANNEL_REFUND_REQUESTED", source: "API", payload: { channel: payment.channel },
       } });
       return { refund: created, shouldDispatch: true };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -79,14 +86,18 @@ export async function createRefund(application: Application, input: CreateRefund
   }
 }
 
-async function updateRefund(refund: Refund, status: RefundStatus, data: Record<string, unknown>) {
+async function updateRefund(refund: Refund, status: RefundStatus, data: Record<string, unknown>, source = "CHANNEL") {
   assertRefundTransition(refund.status, status);
   return db.$transaction(async (tx) => {
-    const updated = await tx.refund.update({ where: { id: refund.id }, data: { status, ...data } });
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: refund.paymentId } });
+    const updated = await tx.refund.update({ where: { id: refund.id }, data: {
+      status,
+      ...data,
+      nextQueryAt: payment.channel === "ALIPAY" && isRecoverableRefund(status) ? recoveryAt(Math.max(1, refund.queryAttempts)) : null,
+    } });
     await tx.paymentEvent.create({ data: {
       aggregateType: "REFUND", aggregateId: refund.refundNo, orderId: payment.orderId, paymentId: payment.id,
-      type: `REFUND_${status}`, source: "CHANNEL", payload: {
+      type: `REFUND_${status}`, source, payload: {
         errorCode: typeof data.errorCode === "string" ? data.errorCode : null,
         errorMessage: typeof data.errorMessage === "string" ? data.errorMessage : null,
       },
@@ -95,8 +106,8 @@ async function updateRefund(refund: Refund, status: RefundStatus, data: Record<s
   });
 }
 
-async function finalizeRefund(refund: Refund, status: RefundStatus, raw: unknown, channelRefundNo?: string) {
-  if (status !== "SUCCESS") return updateRefund(refund, status, { rawResponse: raw as Prisma.InputJsonValue, channelRefundNo });
+async function finalizeRefund(refund: Refund, status: RefundStatus, raw: unknown, channelRefundNo?: string, source = "CHANNEL") {
+  if (status !== "SUCCESS") return updateRefund(refund, status, { rawResponse: raw as Prisma.InputJsonValue, channelRefundNo }, source);
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${refund.id} FOR UPDATE`;
     const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
@@ -105,17 +116,53 @@ async function finalizeRefund(refund: Refund, status: RefundStatus, raw: unknown
     const succeededAt = new Date();
     const updated = await tx.refund.update({ where: { id: current.id }, data: {
       status: "SUCCESS", succeededAt, channelRefundNo, rawResponse: raw as Prisma.InputJsonValue,
-      errorCode: null, errorMessage: null,
+      errorCode: null, errorMessage: null, nextQueryAt: null,
     } });
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: current.paymentId }, include: { order: { include: { application: true } } } });
     const total = await tx.refund.aggregate({ where: { paymentId: payment.id, status: "SUCCESS" }, _sum: { amount: true } });
-    const orderStatus = refundedOrderStatus(total._sum.amount ?? current.amount, payment.order.amount);
-    const order = await tx.order.update({ where: { id: payment.orderId }, data: { status: orderStatus } });
+    const isWinningPayment = payment.order.winningPaymentId === payment.id;
+    const orderStatus = isWinningPayment
+      ? refundedOrderStatus(total._sum.amount ?? current.amount, payment.order.amount)
+      : payment.order.status;
+    const order = isWinningPayment
+      ? await tx.order.update({ where: { id: payment.orderId }, data: { status: orderStatus } })
+      : payment.order;
     await tx.paymentEvent.create({ data: {
       aggregateType: "REFUND", aggregateId: updated.refundNo, orderId: order.id, paymentId: payment.id,
-      type: "REFUND_SUCCEEDED", source: "CHANNEL", payload: { amount: updated.amount, orderStatus },
+      type: "REFUND_SUCCEEDED", source, payload: { amount: updated.amount, orderStatus, isWinningPayment },
     } });
-    await createRefundSucceededDelivery(tx, payment.order.application, order, payment, updated);
+    if ((total._sum.amount ?? current.amount) >= payment.amount) {
+      await resolveLateDuplicateExceptionAfterRefund(tx, { paymentId: payment.id, orderId: order.id, refundNo: updated.refundNo });
+    }
+    if (isWinningPayment) await createRefundSucceededDelivery(tx, payment.order.application, order, payment, updated);
     return updated;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
+export async function queryRefund(applicationId: string | null, refundNo: string) {
+  const refund = await db.refund.findFirst({
+    where: { refundNo, ...(applicationId ? { applicationId } : {}) },
+    include: { payment: true },
+  });
+  if (!refund) throw new AppError("REFUND_NOT_FOUND", "退款单不存在", 404);
+  const result = await channelFor(refund.payment.channel).queryRefund({
+    paymentNo: refund.payment.paymentNo,
+    refundNo: refund.refundNo,
+    channelTradeNo: refund.payment.channelTradeNo,
+  });
+  if (result.status === "SUCCESS") return finalizeRefund(refund, "SUCCESS", result.raw, result.channelRefundNo, "QUERY");
+  if (refund.status !== result.status && refund.status !== "SUCCESS" && canRefundTransition(refund.status, result.status)) {
+    return updateRefund(refund, result.status, { rawResponse: result.raw as Prisma.InputJsonValue, channelRefundNo: result.channelRefundNo }, "QUERY");
+  }
+  if (refund.payment.channel === "ALIPAY" && isRecoverableRefund(refund.status) && !refund.nextQueryAt && refund.queryAttempts < RECOVERY_MAX_ATTEMPTS) {
+    return db.refund.update({ where: { id: refund.id }, data: { nextQueryAt: initialRecoveryAt() } });
+  }
+  return refund;
+}
+
+export async function markRefundSucceededFromReceipt(refundNo: string, amount: number, raw: Prisma.InputJsonValue, channelRefundNo?: string | null) {
+  const refund = await db.refund.findUnique({ where: { refundNo } });
+  if (!refund) throw new AppError("REFUND_NOT_FOUND", "退款单不存在", 404);
+  if (refund.amount !== amount) throw new AppError("REFUND_AMOUNT_MISMATCH", "账单退款金额与退款单金额不一致", 409, { expected: refund.amount, actual: amount });
+  return finalizeRefund(refund, "SUCCESS", raw, channelRefundNo ?? refund.channelRefundNo ?? undefined, "ALIPAY_BILL");
 }

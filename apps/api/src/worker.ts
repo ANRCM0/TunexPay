@@ -4,6 +4,9 @@ import { config } from "./config.js";
 import { db } from "./db.js";
 import { log } from "./lib/logger.js";
 import { deliverWebhook, listDueDeliveryIds, recoverExpiredDeliveries } from "./services/webhook-worker-service.js";
+import { runDuePaymentRecoveries, runDueRefundRecoveries } from "./services/recovery-service.js";
+import { runDueOrderExpirations } from "./services/expiration-service.js";
+import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
 
 const connection = new Redis(config().REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue("tuoxin-pay-webhooks", { connection });
@@ -29,6 +32,10 @@ async function poll(): Promise<void> {
         removeOnFail: { age: 86_400, count: 5_000 },
       });
     }
+    const [payments, refunds, expirations, receiptFlows] = await Promise.all([runDuePaymentRecoveries(), runDueRefundRecoveries(), runDueOrderExpirations(), recoverStaleAlipayBillFlows()]);
+    if (payments.claimed || refunds.claimed) log("info", "recovery.completed", { payments, refunds });
+    if (expirations.claimed) log("info", "expiration.completed", { expirations });
+    if (receiptFlows.found) log("info", "receipt_flow.recovered", { receiptFlows });
   } catch (error) {
     log("error", "worker.poll_failed", { error: error instanceof Error ? error.message : String(error) });
   } finally {

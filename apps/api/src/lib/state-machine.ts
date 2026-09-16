@@ -19,13 +19,19 @@ const refundTransitions: Record<RefundStatus, readonly RefundStatus[]> = {
 };
 
 export function assertPaymentTransition(from: PaymentStatus, to: PaymentStatus): void {
-  if (from === to) return;
-  if (!paymentTransitions[from].includes(to)) throw new AppError("INVALID_PAYMENT_TRANSITION", `支付状态不允许从 ${from} 变为 ${to}`, 409);
+  if (!canPaymentTransition(from, to)) throw new AppError("INVALID_PAYMENT_TRANSITION", `支付状态不允许从 ${from} 变为 ${to}`, 409);
+}
+
+export function canPaymentTransition(from: PaymentStatus, to: PaymentStatus): boolean {
+  return from === to || paymentTransitions[from].includes(to);
 }
 
 export function assertRefundTransition(from: RefundStatus, to: RefundStatus): void {
-  if (from === to) return;
-  if (!refundTransitions[from].includes(to)) throw new AppError("INVALID_REFUND_TRANSITION", `退款状态不允许从 ${from} 变为 ${to}`, 409);
+  if (!canRefundTransition(from, to)) throw new AppError("INVALID_REFUND_TRANSITION", `退款状态不允许从 ${from} 变为 ${to}`, 409);
+}
+
+export function canRefundTransition(from: RefundStatus, to: RefundStatus): boolean {
+  return from === to || refundTransitions[from].includes(to);
 }
 
 export function refundedOrderStatus(totalRefunded: number, orderAmount: number): OrderStatus {

@@ -37,6 +37,7 @@ enum PaymentStatus {
 
 enum PaymentChannelCode {
   ALIPAY
+  ALIPAY_BILL
   MOCK
 }
 
@@ -53,6 +54,50 @@ enum WebhookStatus {
   PROCESSING
   SUCCESS
   DEAD
+}
+
+enum ReceiptDirection {
+  INCOME
+  REFUND
+}
+
+enum ReceiptMatchStatus {
+  UNMATCHED
+  PROCESSING
+  MATCHED
+  MISMATCH
+  IGNORED
+}
+
+enum ReceiptMatchMode {
+  DIRECT
+  REMARK
+  AMOUNT
+}
+
+enum PaymentExceptionType {
+  LATE_DUPLICATE
+  RECEIPT_AMBIGUOUS
+  PAYMENT_STATE_CONFLICT
+}
+
+enum PaymentExceptionStatus {
+  OPEN
+  PROCESSING
+  RESOLVED
+  IGNORED
+}
+
+enum PaymentExceptionSeverity {
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReconciliationRunStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
 }
 
 model Application {
@@ -94,6 +139,10 @@ model Order {
   requestHash       String              @db.Char(64)
   winningPaymentId  String?             @db.VarChar(32)
   expiresAt         DateTime?
+  expirationAttempts Int                @default(0) @db.UnsignedSmallInt
+  expirationNextAttemptAt DateTime?
+  expirationLockedUntil DateTime?
+  expirationError   String?             @db.VarChar(500)
   paidAt            DateTime?
   closedAt          DateTime?
   createdAt         DateTime            @default(now())
@@ -102,11 +151,13 @@ model Order {
   payments          Payment[]
   events            PaymentEvent[]
   webhookDeliveries WebhookDelivery[]
+  paymentExceptions PaymentException[]
 
   @@unique([applicationId, externalOrderNo])
   @@unique([applicationId, idempotencyKey])
   @@index([applicationId, status, createdAt])
   @@index([createdAt, id])
+  @@index([status, expirationNextAttemptAt, id])
   @@map("orders")
 }
 
@@ -120,23 +171,38 @@ model Payment {
   method         String             @db.VarChar(32)
   status         PaymentStatus      @default(CREATED)
   amount         Int                @db.UnsignedInt
+  channelAmount  Int                @db.UnsignedInt
+  receivedAmount Int?               @db.UnsignedInt
   channelTradeNo String?            @unique @db.VarChar(100)
   channelOrderNo String?            @db.VarChar(100)
+  receiptMatchMode ReceiptMatchMode?
+  receiptMatchReference String?     @db.VarChar(64)
+  receiptValidFrom DateTime?
+  receiptValidUntil DateTime?
   clientPayload  Json?
   rawResponse    Json?
   errorCode      String?            @db.VarChar(80)
   errorMessage   String?            @db.VarChar(500)
+  queryAttempts  Int                @default(0) @db.UnsignedSmallInt
+  nextQueryAt    DateTime?
+  lastQueriedAt  DateTime?
   paidAt         DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   order          Order              @relation(fields: [orderId], references: [id])
   refunds        Refund[]
   events         PaymentEvent[]
+  receipts       Receipt[]
+  paymentExceptions PaymentException[]
+  receiptReservation ReceiptMatchReservation?
 
   @@unique([orderId, attemptNo])
   @@unique([orderId, idempotencyKey])
   @@index([orderId, status, createdAt])
   @@index([status, updatedAt])
+  @@index([status, nextQueryAt, id])
+  @@index([channel, receiptMatchReference])
+  @@index([channel, channelAmount, receiptValidUntil])
   @@map("payments")
 }
 
@@ -153,15 +219,20 @@ model Refund {
   rawResponse      Json?
   errorCode        String?      @db.VarChar(80)
   errorMessage     String?      @db.VarChar(500)
+  queryAttempts    Int          @default(0) @db.UnsignedSmallInt
+  nextQueryAt      DateTime?
+  lastQueriedAt    DateTime?
   succeededAt      DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   application      Application  @relation(fields: [applicationId], references: [id])
   payment          Payment      @relation(fields: [paymentId], references: [id])
+  receipts         Receipt[]
 
   @@unique([applicationId, externalRefundNo])
   @@index([paymentId, status, createdAt])
   @@index([applicationId, createdAt])
+  @@index([status, nextQueryAt, id])
   @@map("refunds")
 }
 
@@ -230,4 +301,139 @@ model WebhookDelivery {
   @@index([lockedUntil, status])
   @@index([applicationId, createdAt])
   @@map("webhook_deliveries")
+}
+
+model Receipt {
+  id                String             @id @default(cuid())
+  provider          PaymentChannelCode
+  statementDate     DateTime           @db.Date
+  direction         ReceiptDirection
+  providerTradeNo   String?            @db.VarChar(100)
+  merchantOrderNo   String?            @db.VarChar(80)
+  providerRefundNo  String?            @db.VarChar(100)
+  merchantRefundNo  String?            @db.VarChar(80)
+  amount            Int                @db.UnsignedInt
+  currency          String             @default("CNY") @db.Char(3)
+  occurredAt        DateTime
+  fingerprint       String             @unique @db.Char(64)
+  matchStatus       ReceiptMatchStatus @default(UNMATCHED)
+  mismatchReason    String?            @db.VarChar(500)
+  accountKey        String?            @db.VarChar(80)
+  remark            String?            @db.VarChar(300)
+  matchMode         ReceiptMatchMode?
+  lockedUntil       DateTime?
+  rawPayload        Json
+  paymentId         String?
+  refundId          String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  payment           Payment?           @relation(fields: [paymentId], references: [id])
+  refund            Refund?            @relation(fields: [refundId], references: [id])
+
+  @@index([provider, statementDate, id])
+  @@index([matchStatus, occurredAt, id])
+  @@index([provider, matchStatus, lockedUntil])
+  @@index([paymentId, id])
+  @@index([refundId, id])
+  @@map("receipts")
+}
+
+model ReconciliationRun {
+  id              String                  @id @default(cuid())
+  provider        PaymentChannelCode
+  statementDate   DateTime                @db.Date
+  status          ReconciliationRunStatus @default(PROCESSING)
+  fileName        String?                 @db.VarChar(255)
+  importedCount   Int                     @default(0) @db.UnsignedInt
+  duplicateCount  Int                     @default(0) @db.UnsignedInt
+  matchedCount    Int                     @default(0) @db.UnsignedInt
+  mismatchedCount Int                     @default(0) @db.UnsignedInt
+  unmatchedCount  Int                     @default(0) @db.UnsignedInt
+  skippedCount    Int                     @default(0) @db.UnsignedInt
+  errorMessage    String?                 @db.VarChar(500)
+  startedAt       DateTime                @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([provider, statementDate])
+  @@index([status, statementDate])
+  @@map("reconciliation_runs")
+}
+
+model ReceiptAccount {
+  id        String   @id @db.VarChar(80)
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reservations ReceiptMatchReservation[]
+
+  @@map("receipt_accounts")
+}
+
+model ReceiptMatchReservation {
+  id         String           @id @default(cuid())
+  accountId  String           @db.VarChar(80)
+  mode       ReceiptMatchMode
+  value      String           @db.VarChar(64)
+  paymentId  String           @unique
+  expiresAt  DateTime
+  createdAt  DateTime         @default(now())
+  account    ReceiptAccount   @relation(fields: [accountId], references: [id])
+  payment    Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, mode, value])
+  @@index([accountId, expiresAt])
+  @@map("receipt_match_reservations")
+}
+
+model PaymentException {
+  id            String                   @id @default(cuid())
+  exceptionNo   String                   @unique @db.VarChar(40)
+  type          PaymentExceptionType
+  status        PaymentExceptionStatus   @default(OPEN)
+  severity      PaymentExceptionSeverity
+  subjectType   String                   @db.VarChar(24)
+  subjectId     String                   @db.VarChar(191)
+  orderId       String?
+  paymentId     String?
+  source        String                   @db.VarChar(32)
+  summary       String                   @db.VarChar(300)
+  detail        Json?
+  resolution    String?                  @db.VarChar(500)
+  resolutionRef String?                  @db.VarChar(80)
+  detectedAt    DateTime                 @default(now())
+  resolvedAt    DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  order         Order?                   @relation(fields: [orderId], references: [id])
+  payment       Payment?                 @relation(fields: [paymentId], references: [id])
+
+  @@unique([subjectType, subjectId, type])
+  @@index([status, severity, detectedAt])
+  @@index([orderId, createdAt])
+  @@index([paymentId, createdAt])
+  @@map("payment_exceptions")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  actor        String   @default("admin-token") @db.VarChar(80)
+  action       String   @db.VarChar(80)
+  resourceType String?  @db.VarChar(40)
+  resourceId   String?  @db.VarChar(191)
+  method       String   @db.VarChar(12)
+  path         String   @db.VarChar(255)
+  requestId    String?  @db.VarChar(64)
+  ipAddress    String?  @db.VarChar(64)
+  userAgent    String?  @db.VarChar(500)
+  success      Boolean
+  statusCode   Int      @db.UnsignedSmallInt
+  errorCode    String?  @db.VarChar(80)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt, id])
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId, createdAt])
+  @@map("admin_audit_logs")
 }

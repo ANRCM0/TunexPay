@@ -44,6 +44,7 @@ export async function createOrder(
 
   try {
     const order = await db.$transaction(async (tx) => {
+      const expiresAt = new Date(Date.now() + input.expiresInSeconds * 1_000);
       const created = await tx.order.create({
         data: {
           orderNo: generateId("ord"),
@@ -59,7 +60,8 @@ export async function createOrder(
           protocol,
           idempotencyKey: normalizedKey,
           requestHash,
-          expiresAt: new Date(Date.now() + input.expiresInSeconds * 1_000),
+          expiresAt,
+          expirationNextAttemptAt: expiresAt,
         },
       });
       await tx.paymentEvent.create({
