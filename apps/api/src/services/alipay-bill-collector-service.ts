@@ -114,7 +114,7 @@ export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID)
     log("warn", "alipay_bill.collection_failed", { code });
   } finally {
     await db.billCollectorState.updateMany({ where: owned, data: { leaseOwner: null, lockedUntil: null } });
-    await db.billCollectorState.updateMany({ where: { id: state.id, leaseOwner: null, nextRunAt: { lte: now } }, data: { nextRunAt: new Date(Date.now() + cfg.ALIPAY_BILL_POLL_SECONDS * 1000) } });
+    await db.billCollectorState.updateMany({ where: { id: state.id, leaseOwner: null, nextRunAt: { lte: now } }, data: { nextRunAt: new Date(Date.now() + (demand ? 1 : cfg.ALIPAY_BILL_POLL_SECONDS) * 1000) } });
   }
 }
 

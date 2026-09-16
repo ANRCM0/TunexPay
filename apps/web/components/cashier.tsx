@@ -1,14 +1,37 @@
 "use client";
 
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
-import { api, useApi } from "../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "../lib/api";
 import { ChannelTag, Status, money, statusText } from "./common";
 
 type Payment = { paymentNo: string; status: string; channel: string; amount: number; businessAmount: number; currency: string; subject: string; payable: boolean; validUntil: string | null; createdAt?: string; clientPayload: { type?: string; value?: string; remark?: string | null; validUntil?: string | null } | null; returnUrl: string | null };
 
 export function Cashier({ paymentNo }: { paymentNo: string }) {
-  const { data, loading, error, reload } = useApi<Payment>(`/public/payments/${paymentNo}`, 2_000);
+  const [data, setData] = useState<Payment | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [cycle, setCycle] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      for (;;) {
+        try {
+          const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=15`, { signal: controller.signal });
+          if (controller.signal.aborted) return;
+          setData(result.data); setError(""); setLoading(false);
+          if (["SUCCESS", "FAILED", "CLOSED"].includes(result.data.status)) return;
+        } catch (cause) {
+          if (controller.signal.aborted) return;
+          setError(cause instanceof Error ? cause.message : "支付单读取失败");
+          setLoading(false);
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [paymentNo, cycle]);
+  const reload = useCallback(async () => { setCycle(value => value + 1); }, []);
   const [qr, setQr] = useState("");
   const [qrError, setQrError] = useState("");
   const [actionError, setActionError] = useState("");
