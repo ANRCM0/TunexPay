@@ -37,7 +37,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
   }
   const paid = data?.status === "SUCCESS";
   return <div className="cashier-shell"><section className="card cashier">
-    <div className="cashier-logo">T</div>
+    <div className="brand-badge">T</div>
     {loading && <div className="loading">正在读取订单…</div>}
     {error && <div className="error">{error}</div>}
     {data && <>

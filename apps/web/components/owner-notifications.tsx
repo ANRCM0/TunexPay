@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState } from "./common";
+import { LoadingState, Section } from "./common";
 type Draft = { revision: number; emailEnabled: boolean; feishuEnabled: boolean; smtpHost: string; smtpPort: 465 | 587; smtpUser: string; from: string; to: string; paymentSuccess: boolean; anomalies: boolean; webhookFailure: boolean; collectorFailure: boolean };
 type View = Draft & { smtpPasswordConfigured: boolean; feishuWebhookConfigured: boolean; feishuSecretConfigured: boolean };
 type Delivery = { id: string; channel: string; title: string; status: string; attempts: number; lastError: string | null; createdAt: string };
@@ -24,7 +24,7 @@ export function OwnerNotificationsPanel() {
     setBusy(true); try { await api("/owner-notifications/test",{method:"POST",body:JSON.stringify({channel})}); setNotice("测试任务已排队，请查看下方投递状态（SUCCESS 才代表发送成功）。"); await reloadDeliveries(); }
     catch(e) { setNotice(e instanceof Error ? e.message : "测试失败"); } finally {setBusy(false);}
   }
-  return <section className="card section detail-section"><div className="section-title"><h2>本人通知 · 邮箱与飞书</h2><span className="muted">与业务回调独立 · 密钥加密保存</span></div>
+  return <Section title="本人通知 · 邮箱与飞书" action={<span className="muted">与业务回调独立 · 密钥加密保存</span>} className="detail-section">
     {notice && <div className="operation-notice" aria-live="polite">{notice}</div>}
     <LoadingState loading={loading} error={error}>{draft && data && <form onSubmit={e => void save(e)}><fieldset className="bill-settings-fields" disabled={busy}>
       <div className="bill-settings-grid">
@@ -38,5 +38,5 @@ export function OwnerNotificationsPanel() {
       <div className="bill-settings-actions"><button className="button" type="submit">保存通知配置</button><button className="button" type="button" disabled={!data.emailEnabled} onClick={()=>void test("EMAIL")}>测试邮箱</button><button className="button" type="button" disabled={!data.feishuEnabled} onClick={()=>void test("FEISHU")}>测试飞书</button><button className="button" type="button" onClick={()=>void reload()}>重新加载</button></div>
     </fieldset></form>}</LoadingState>
     <h3>最近 50 条投递记录</h3>{deliveries?.map(row=><p key={row.id} className="muted">{new Date(row.createdAt).toLocaleString()} · {row.channel} · {row.title} · {row.status} · 尝试 {row.attempts} 次 {row.lastError ?? ""}</p>)}
-  </section>;
+  </Section>;
 }

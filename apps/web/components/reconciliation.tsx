@@ -3,7 +3,7 @@
 import { FileUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Status, money, time } from "./common";
+import { LoadingState, PageHead, Section, Status, money, time } from "./common";
 
 type Run = {
   id: string; statementDate: string; status: string; fileName: string | null; importedCount: number; duplicateCount: number;
@@ -53,6 +53,10 @@ export function Reconciliation() {
     finally { setMatching(""); }
   }
 
+  const statusFilter = <select value={status} onChange={event => setStatus(event.target.value)} aria-label="匹配状态">
+    <option value="">全部状态</option><option value="MISMATCH">存在差错</option><option value="UNMATCHED">未匹配</option><option value="PROCESSING">处理中</option><option value="MATCHED">已匹配</option>
+  </select>;
+
   return <>
     <PageHead eyebrow="Alipay Reconciliation" title="支付宝账单对账" copy="上传支付宝交易明细 CSV；系统会幂等导入，逐笔核对单号、渠道流水和金额。" />
     {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
@@ -66,23 +70,36 @@ export function Reconciliation() {
       <div className="channel-safety">账单日期用于归档。收入与退款只会通过支付核心的统一成功入口更新，不会直接改订单。</div>
     </section>
 
-    <section className="card section detail-section">
-      <div className="section-title"><h2>导入批次</h2><span className="muted">按账单日期幂等覆盖统计</span></div>
+    <Section title="导入批次" action={<span className="muted">按账单日期幂等覆盖统计</span>} className="detail-section">
       <LoadingState loading={runsLoading} error={runsError} empty={!runs?.length}>
-        <div className="table-wrap"><table><thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead><tbody>
-          {runs?.map(run => <tr key={run.id}><td><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td><td><Status value={run.status} />{run.errorMessage && <div className="row-error">{run.errorMessage}</div>}</td><td>新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td><td><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td><td>{time(run.completedAt)}</td></tr>)}
-        </tbody></table></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead>
+          <tbody>{runs?.map(run => <tr key={run.id}>
+            <td><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td>
+            <td><Status value={run.status} />{run.errorMessage && <div className="row-error">{run.errorMessage}</div>}</td>
+            <td>新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
+            <td><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
+            <td>{time(run.completedAt)}</td>
+          </tr>)}</tbody>
+        </table></div>
       </LoadingState>
-    </section>
+    </Section>
 
-    <section className="card section detail-section">
-      <div className="section-title"><h2>标准化流水</h2><select value={status} onChange={event => setStatus(event.target.value)} aria-label="匹配状态"><option value="">全部状态</option><option value="MISMATCH">存在差错</option><option value="UNMATCHED">未匹配</option><option value="PROCESSING">处理中</option><option value="MATCHED">已匹配</option></select></div>
+    <Section title="标准化流水" action={statusFilter} className="detail-section">
       <LoadingState loading={receiptsLoading} error={receiptsError} empty={!receipts?.length}>
-        <div className="table-wrap"><table><thead><tr><th>业务 / 时间</th><th>账单标识</th><th>金额</th><th>系统记录</th><th>匹配状态</th><th>操作</th></tr></thead><tbody>
-          {receipts?.map(item => <tr key={item.id}><td><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td><td><div className="mono">{item.providerTradeNo ?? item.providerRefundNo ?? "—"}</div><div className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo ?? "—"}</div></td><td><strong>{money(item.amount)}</strong></td><td>{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</div></> : "—"}</td><td><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td><td>{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td></tr>)}
-        </tbody></table></div>
+        <div className="table-wrap"><table>
+          <thead><tr><th>业务 / 时间</th><th>账单标识</th><th>金额</th><th>系统记录</th><th>匹配状态</th><th>操作</th></tr></thead>
+          <tbody>{receipts?.map(item => <tr key={item.id}>
+            <td><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td>
+            <td><div className="mono">{item.providerTradeNo ?? item.providerRefundNo ?? "—"}</div><div className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo ?? "—"}</div></td>
+            <td><strong>{money(item.amount)}</strong></td>
+            <td>{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</div></> : "—"}</td>
+            <td><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td>
+            <td>{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
+          </tr>)}</tbody>
+        </table></div>
       </LoadingState>
-    </section>
+    </Section>
   </>;
 }
 

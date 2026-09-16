@@ -1,3 +1,3 @@
-import { Audits } from "../../components/audits";
+import { Audits } from "../../../components/audits";
 
 export default function Page() { return <Audits />; }

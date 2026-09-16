@@ -1,4 +1,4 @@
-import { OrderDetail } from "../../../components/order-detail";
+import { OrderDetail } from "../../../../components/order-detail";
 
 export default async function Page({ params }: { params: Promise<{ orderNo: string }> }) {
   const { orderNo } = await params;
