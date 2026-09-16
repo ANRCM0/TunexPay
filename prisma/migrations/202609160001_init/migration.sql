@@ -151,7 +151,7 @@ CREATE TABLE `webhook_deliveries` (
     `orderId` VARCHAR(191) NOT NULL,
     `eventType` VARCHAR(80) NOT NULL,
     `protocol` ENUM('NATIVE_V1', 'EPAY_V1') NOT NULL,
-    `url` VARCHAR(500) NOT NULL,
+    `url` VARCHAR(300) NOT NULL,
     `payload` JSON NOT NULL,
     `status` ENUM('PENDING', 'PROCESSING', 'SUCCESS', 'DEAD') NOT NULL DEFAULT 'PENDING',
     `attempts` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
