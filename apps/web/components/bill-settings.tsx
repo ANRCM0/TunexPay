@@ -68,7 +68,7 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
             <div className="bill-settings-grid">
               <NumberField label="首次启动回看（秒）" value={draft.lookbackSeconds} min={300} max={86400} onChange={value => update("lookbackSeconds", value)} />
               <NumberField label="重复补拉窗口（秒）" value={draft.overlapSeconds} min={60} max={3600} onChange={value => update("overlapSeconds", value)} />
-              <NumberField label="最新流水查询延迟（秒）" value={draft.lagSeconds} min={5} max={300} onChange={value => update("lagSeconds", value)} />
+              <NumberField label="最新流水查询延迟（秒）" value={draft.lagSeconds} min={2} max={300} onChange={value => update("lagSeconds", value)} />
               <label>外部 Watcher 令牌（{data.watcherTokenConfigured ? "已配置" : "可选"}）<input type="password" value={secrets.watcherToken} disabled={clear.watcherToken} maxLength={200} autoComplete="new-password" placeholder="内置采集不需要；留空保留" onChange={event => setSecrets(current => ({ ...current, watcherToken: event.target.value }))} /></label>
             </div>
             <div className="bill-settings-switches">{(["privateKey", "publicKey", "watcherToken"] as const).map(key => <label key={key}><input type="checkbox" checked={clear[key]} onChange={event => setClear(current => ({ ...current, [key]: event.target.checked }))} />清除{key === "privateKey" ? "应用私钥" : key === "publicKey" ? "支付宝公钥" : "外部令牌"}</label>)}</div>
