@@ -48,16 +48,16 @@ export function Channels() {
       <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>
           {channels.data?.map(channel => <tr key={channel.id}>
-            <td><strong>{channel.name}</strong><div className="muted">{channel.plugin}</div><code>{channel.id}</code></td>
+            <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="mono muted">{channel.plugin} · {channel.id}</div></div></div></td>
             <td><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
-            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span><p className="channel-check-detail">{channel.checkMessage}</p>
-              {channel.testPayment && <div className="muted">实付订单：<Status value={channel.testPayment.status} />{!channel.testPayment.currentRevision && "（旧配置）"}</div>}
+            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg clamp-2" title={channel.checkMessage}>{channel.checkMessage}</div>}
+              {channel.testPayment && <div className="muted check-msg">实付订单 <Status value={channel.testPayment.status} />{!channel.testPayment.currentRevision && "（旧配置）"}</div>}
             </td><td>{time(channel.checkedAt)}</td>
             <td><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
-              <button className="button secondary" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "真实接口检测"}</button>
-              <button className="button secondary" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "创建 ¥0.01 实付单"}</button>
-              {channel.testPayment?.currentRevision && <a className="button secondary" href={channel.testPayment.cashierUrl} target="_blank" rel="noreferrer">打开测试收银台</a>}
+              <button className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
+              <button className="link-button" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "实付 ¥0.01"}</button>
+              {channel.testPayment?.currentRevision && <a className="link-button" href={channel.testPayment.cashierUrl} target="_blank" rel="noreferrer">收银台</a>}
             </div></td>
           </tr>)}
         </tbody></table></div>
