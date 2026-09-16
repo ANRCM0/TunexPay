@@ -51,6 +51,8 @@ export async function prepareReceiptPayment(
     paymentId: payment.id,
     expiresAt: validUntil,
   } });
+  // Wake the collector on the next worker tick instead of waiting out the poll interval.
+  await tx.billCollectorState.updateMany({ where: { id: accountId }, data: { nextRunAt: now } });
   return tx.payment.update({ where: { id: payment.id }, data: {
     channelAmount,
     receiptMatchMode: mode,
