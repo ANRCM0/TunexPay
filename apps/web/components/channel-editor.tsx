@@ -4,7 +4,7 @@ import { api, useApi } from "../lib/api";
 import { Section } from "./common";
 import type { Channel } from "./channels";
 
-const defaults: Record<string, string | number | boolean> = { appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "", collectorEnabled: false, matchMode: "REMARK", validSeconds: 300, amountOffsetMax: 99, pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15 };
+const defaults: Record<string, string | number | boolean> = { appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "", collectorEnabled: false, matchMode: "AMOUNT", validSeconds: 300, amountOffsetMax: 99, pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15 };
 export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: string; channel?: Channel; onSaved: () => Promise<void>; onClose: () => void }) {
   const [name, setName] = useState(channel?.name || "");
   const [enabled, setEnabled] = useState(channel?.enabled || false);
@@ -39,7 +39,8 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
           <label>收款用户 ID<input value={String(settings.userId)} maxLength={32} placeholder="2088 开头的 16 位 ID" onChange={event => update("userId", event.target.value)} /></label>
           <label className="channel-enable"><input type="checkbox" checked={Boolean(settings.collectorEnabled)} onChange={event => update("collectorEnabled", event.target.checked)} />启用该通道的自动账单采集</label>
           <label className="bill-settings-wide">收款码内容<textarea rows={3} maxLength={4000} value={String(settings.qrContent)} onChange={event => update("qrContent", event.target.value)} placeholder="二维码解析后的完整内容" /></label>
-          <label>匹配方式<select value={String(settings.matchMode)} onChange={event => update("matchMode", event.target.value)}><option value="REMARK">付款备注</option><option value="AMOUNT">金额偏移</option></select></label>
+          <label>匹配方式<select value={String(settings.matchMode)} onChange={event => update("matchMode", event.target.value)}><option value="AMOUNT">金额偏移（内置采集推荐）</option><option value="REMARK">付款备注（仅外部 Watcher）</option></select></label>
+          <p className="muted bill-settings-wide">官方账务接口不下发付款备注，内置采集器只能用金额匹配；备注匹配需要接入能抓到备注的外部 Watcher。</p>
           <label>外部 Watcher 令牌（{settings.watcherTokenConfigured ? "已配置" : "未配置"}）<input type="password" value={secrets.watcherToken} disabled={clear.watcherToken} autoComplete="new-password" maxLength={200} placeholder="不用内置采集时填写，至少 24 字符" onChange={event => setSecrets(previous => ({ ...previous, watcherToken: event.target.value }))} /></label>
           {([ ["validSeconds", "识别有效期（秒）", 60, 3600], ["amountOffsetMax", "最大金额偏移（分）", 0, 99], ["pollSeconds", "采集间隔（秒）", 3, 3600], ["overlapSeconds", "重叠补拉（秒）", 60, 3600], ["lagSeconds", "采集延迟（秒）", 5, 300], ["lookbackSeconds", "首次回看（秒）", 300, 86400] ] as const).map(([key, label, min, max]) => <label key={key}>{label}<input type="number" required min={min} max={max} step={1} value={Number(settings[key])} onChange={event => update(key, Number(event.target.value))} /></label>)}
         </>}

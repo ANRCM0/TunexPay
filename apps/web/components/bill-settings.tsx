@@ -57,7 +57,7 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
             <label>收款支付宝用户 ID<input value={draft.userId} maxLength={32} placeholder="2088 开头的 16 位用户 ID" onChange={event => update("userId", event.target.value)} autoComplete="off" /></label>
             <label className="bill-settings-wide">支付宝官方网关<input type="url" value={draft.gateway} onChange={event => update("gateway", event.target.value)} required /></label>
             <label className="bill-settings-wide">收款码内容<textarea rows={3} value={draft.qrContent} maxLength={4000} placeholder="填写从收款二维码解析出的完整内容，不是图片文件路径" onChange={event => update("qrContent", event.target.value)} /></label>
-            <label>匹配模式<select value={draft.matchMode} onChange={event => update("matchMode", event.target.value as Draft["matchMode"])}><option value="REMARK">付款备注（推荐）</option><option value="AMOUNT">金额偏移</option></select></label>
+            <label>匹配模式<select value={draft.matchMode} onChange={event => update("matchMode", event.target.value as Draft["matchMode"])}><option value="AMOUNT">金额偏移（内置采集推荐）</option><option value="REMARK">付款备注（仅外部 Watcher）</option></select></label>
             <NumberField label="识别有效期（秒）" value={draft.validSeconds} min={60} max={3600} onChange={value => update("validSeconds", value)} />
             <NumberField label="最大金额偏移（分）" value={draft.amountOffsetMax} min={0} max={99} onChange={value => update("amountOffsetMax", value)} />
             <NumberField label="查询间隔（秒）" value={draft.pollSeconds} min={3} max={3600} onChange={value => update("pollSeconds", value)} />
