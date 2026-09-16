@@ -5,6 +5,7 @@ import { safeEqual } from "../lib/crypto.js";
 import { AppError } from "../lib/errors.js";
 import { handleAlipayWebhook, mockSucceed, publicPayment } from "../services/payment-service.js";
 import { ingestAlipayBillFlows } from "../services/receipt-flow-service.js";
+import { billRuntimeConfig } from "../services/bill-settings-service.js";
 
 export const channelRoutes = new Hono<AppEnv>();
 
@@ -16,8 +17,8 @@ channelRoutes.post("/alipay/webhook", async (c) => {
 });
 
 channelRoutes.post("/alipay-bill/flows", async (c) => {
-  const cfg = config();
-  if (!cfg.ALIPAY_BILL_ENABLED) throw new AppError("NOT_FOUND", "接口不存在", 404);
+  const cfg = await billRuntimeConfig();
+  if (!cfg.ALIPAY_BILL_WATCHER_TOKEN) throw new AppError("NOT_FOUND", "接口不存在", 404);
   const token = c.req.header("x-watcher-token") || "";
   if (!token || !cfg.ALIPAY_BILL_WATCHER_TOKEN || !safeEqual(token, cfg.ALIPAY_BILL_WATCHER_TOKEN)) {
     throw new AppError("UNAUTHORIZED", "Watcher 令牌无效", 401);

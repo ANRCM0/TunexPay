@@ -1,5 +1,5 @@
 import type { Payment, Prisma } from "@prisma/client";
-import { config } from "../config.js";
+import { billRuntimeConfig } from "./bill-settings-service.js";
 import { AppError } from "../lib/errors.js";
 
 export const ALIPAY_BILL_ACCOUNT_ID = "alipay-bill-default";
@@ -9,8 +9,8 @@ export async function prepareReceiptPayment(
   payment: Payment,
   orderExpiresAt: Date | null,
 ): Promise<Payment> {
-  const cfg = config();
   if (payment.channel !== "ALIPAY_BILL") return payment;
+  const cfg = await billRuntimeConfig(tx, true);
   if (!cfg.ALIPAY_BILL_ENABLED) throw new AppError("ALIPAY_BILL_NOT_CONFIGURED", "支付宝账单收款通道尚未启用", 409);
 
   await tx.receiptAccount.upsert({

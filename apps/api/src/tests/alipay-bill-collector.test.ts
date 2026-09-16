@@ -4,7 +4,11 @@ const mocks = vi.hoisted(() => ({ query: vi.fn(), ingest: vi.fn(), upsert: vi.fn
   ALIPAY_BILL_COLLECTOR_ENABLED: true, ALIPAY_APP_ID: "app", ALIPAY_BILL_USER_ID: "2088000000000000", ALIPAY_GATEWAY: "https://openapi.alipay.com/gateway.do", ALIPAY_BILL_QR_CONTENT: "qr", ALIPAY_BILL_LOOKBACK_SECONDS: 3600, ALIPAY_BILL_OVERLAP_SECONDS: 300, ALIPAY_BILL_LAG_SECONDS: 15, ALIPAY_BILL_POLL_SECONDS: 10,
 } }));
 vi.mock("../config.js", () => ({ config: () => mocks.cfg }));
-vi.mock("../db.js", () => ({ db: { billCollectorState: { upsert: mocks.upsert, update: mocks.update, updateMany: mocks.updateMany, findUniqueOrThrow: mocks.find, findUnique: mocks.find } } }));
+vi.mock("../db.js", () => {
+  const database = { billCollectorState: { upsert: mocks.upsert, update: mocks.update, updateMany: mocks.updateMany, findUniqueOrThrow: mocks.find, findUnique: mocks.find } };
+  return { db: { ...database, $transaction: async (callback: (tx: typeof database) => Promise<unknown>) => callback(database) } };
+});
+vi.mock("../services/bill-settings-service.js", () => ({ billRuntimeConfig: async () => ({ ...mocks.cfg, billRevision: 1 }) }));
 vi.mock("../channels/alipay.js", () => ({ AlipayChannel: class { queryAccountLogs = mocks.query; } }));
 vi.mock("../services/receipt-flow-service.js", () => ({ ingestAlipayBillFlows: mocks.ingest }));
 vi.mock("../services/receipt-reservation-service.js", () => ({ ALIPAY_BILL_ACCOUNT_ID: "alipay-bill-default" }));

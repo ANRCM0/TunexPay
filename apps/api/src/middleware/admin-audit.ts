@@ -63,6 +63,7 @@ export function describeAdminAction(method: string, path: string): AuditDescript
   if (root === "applications" && operation === "rotate-api-key") return descriptor("APPLICATION_API_KEY_ROTATE", "APPLICATION", id ?? null);
   if (root === "applications" && operation === "default-channel") return descriptor("APPLICATION_CHANNEL_CHANGE", "APPLICATION", id ?? null);
   if (root === "channels" && id === "alipay" && operation === "check") return descriptor("ALIPAY_CONNECTION_CHECK", "CHANNEL", "ALIPAY");
+  if (root === "channels" && id === "alipay-bill" && operation === "settings") return descriptor("ALIPAY_BILL_SETTINGS_UPDATE", "CHANNEL", "ALIPAY_BILL");
   if (root === "payments" && operation === "query") return descriptor("PAYMENT_QUERY", "PAYMENT", id ?? null);
   if (root === "payments" && operation === "close") return descriptor("PAYMENT_CLOSE", "PAYMENT", id ?? null);
   if (root === "refunds" && operation === "query") return descriptor("REFUND_QUERY", "REFUND", id ?? null);

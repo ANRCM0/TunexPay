@@ -41,16 +41,11 @@ export function config(): Config {
     const encodedKey = parsed.SECRETS_ENCRYPTION_KEY;
     const decodedKey = /^[a-f\d]{64}$/i.test(encodedKey) ? Buffer.from(encodedKey, "hex") : Buffer.from(encodedKey, "base64");
     if (decodedKey.length !== 32) throw new Error("SECRETS_ENCRYPTION_KEY must encode exactly 32 bytes");
-    if (parsed.ALIPAY_BILL_COLLECTOR_ENABLED && (!parsed.ALIPAY_BILL_ENABLED || !/^2088\d{12}$/.test(parsed.ALIPAY_BILL_USER_ID) || !parsed.ALIPAY_APP_ID || !parsed.ALIPAY_PRIVATE_KEY || !parsed.ALIPAY_PUBLIC_KEY)) {
-      throw new Error("Alipay bill collector requires bill channel, 2088 user ID and Alipay app/private/public keys");
-    }
     if (parsed.NODE_ENV === "production") {
       if (parsed.ADMIN_TOKEN === "development-admin-token-change-me" || parsed.ADMIN_TOKEN.startsWith("replace-with")) throw new Error("ADMIN_TOKEN must be changed in production");
       if (/^0{64}$/.test(encodedKey) || encodedKey.startsWith("replace-with")) throw new Error("SECRETS_ENCRYPTION_KEY must be changed in production");
       if (parsed.MOCK_CHANNEL_ENABLED && !parsed.MOCK_CHANNEL_TOKEN) throw new Error("MOCK_CHANNEL_TOKEN is required when the mock channel is enabled");
       if (parsed.MOCK_CHANNEL_ENABLED && parsed.MOCK_CHANNEL_TOKEN === "local-development-only") throw new Error("MOCK_CHANNEL_TOKEN must be changed in production");
-      if (parsed.ALIPAY_BILL_ENABLED && !parsed.ALIPAY_BILL_QR_CONTENT) throw new Error("ALIPAY_BILL_QR_CONTENT is required when the bill channel is enabled");
-      if (parsed.ALIPAY_BILL_ENABLED && !parsed.ALIPAY_BILL_COLLECTOR_ENABLED && parsed.ALIPAY_BILL_WATCHER_TOKEN.length < 24) throw new Error("ALIPAY_BILL_WATCHER_TOKEN must contain at least 24 characters with an external watcher");
     }
     cached = parsed;
   }

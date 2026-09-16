@@ -11,6 +11,7 @@ import { assertPaymentTransition, canPaymentTransition } from "../lib/state-mach
 import { createPaymentSucceededDelivery } from "./outbox-service.js";
 import { openLateDuplicateException } from "./payment-exception-service.js";
 import { prepareReceiptPayment } from "./receipt-reservation-service.js";
+import { billRuntimeConfig } from "./bill-settings-service.js";
 
 export const createPaymentSchema = z.object({
   channel: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).optional(),
@@ -24,6 +25,7 @@ export async function createPayment(application: Application, orderNo: string, i
   if (key && key.length > 120) throw new AppError("INVALID_IDEMPOTENCY_KEY", "Idempotency-Key 不能超过 120 个字符");
   const channel = input.channel ?? application.defaultChannel;
   const dispatch = await db.$transaction(async (tx) => {
+    if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true);
     await tx.$queryRaw`SELECT id FROM orders WHERE orderNo = ${orderNo} FOR UPDATE`;
     const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id } });
     if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
