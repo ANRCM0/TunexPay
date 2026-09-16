@@ -8,6 +8,7 @@ import type {
   ChannelCreateResult,
   ChannelQueryResult,
   ChannelRefundInput,
+  ChannelRefundQueryInput,
   ChannelRefundResult,
   ChannelWebhookResult,
   PaymentChannel,
@@ -52,6 +53,10 @@ function mapTradeStatus(status: unknown): PaymentStatus {
   if (status === "TRADE_SUCCESS" || status === "TRADE_FINISHED") return "SUCCESS";
   if (status === "TRADE_CLOSED") return "CLOSED";
   return "PROCESSING";
+}
+
+export function mapRefundQueryStatus(refundAmount: unknown): "SUCCESS" | "PROCESSING" {
+  return Number(refundAmount ?? 0) > 0 ? "SUCCESS" : "PROCESSING";
 }
 
 export class AlipayChannel implements PaymentChannel {
@@ -109,6 +114,25 @@ export class AlipayChannel implements PaymentChannel {
       channelRefundNo: String(response.trade_no ?? input.channelTradeNo ?? ""),
       raw: response,
     };
+  }
+
+  async queryRefund(input: ChannelRefundQueryInput): Promise<ChannelRefundResult> {
+    try {
+      const response = await this.call("alipay.trade.fastpay.refund.query", {
+        ...(input.channelTradeNo ? { trade_no: input.channelTradeNo } : { out_trade_no: input.paymentNo }),
+        out_request_no: input.refundNo,
+      });
+      return {
+        status: mapRefundQueryStatus(response.refund_amount),
+        channelRefundNo: response.trade_no ? String(response.trade_no) : undefined,
+        raw: response,
+      };
+    } catch (error) {
+      if (error instanceof ChannelDefinitiveError && ["ACQ.TRADE_NOT_EXIST", "ACQ.REFUND_NOT_EXIST"].includes(error.code)) {
+        return { status: "PROCESSING", raw: error.details };
+      }
+      throw error;
+    }
   }
 
   async handleWebhook(payload: Record<string, string>): Promise<ChannelWebhookResult> {

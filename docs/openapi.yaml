@@ -48,7 +48,7 @@ paths:
               properties:
                 channel:
                   type: string
-                  enum: [ALIPAY, MOCK]
+                  enum: [ALIPAY, ALIPAY_BILL, MOCK]
                 method:
                   type: string
                   default: alipay
@@ -97,6 +97,42 @@ paths:
       responses:
         '201':
           description: 退款单
+  /refunds/{refundNo}/query:
+    post:
+      summary: 向支付通道主动查询退款结果并推进状态
+      parameters:
+        - $ref: '#/components/parameters/RefundNo'
+      responses:
+        '200':
+          description: 最新退款状态
+  /channels/alipay-bill/flows:
+    post:
+      summary: Watcher 投递支付宝标准化收款流水
+      description: 支持单条、`{record:{...}}` 或 `{records:[...]}`；`amount` 使用整数分，兼容 MPAY 的 `price` 元字符串。
+      security: []
+      parameters:
+        - name: X-Watcher-Token
+          in: header
+          required: true
+          schema: { type: string, minLength: 24 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [providerTradeNo, amount, paidAt]
+              properties:
+                providerTradeNo: { type: string, maxLength: 100 }
+                merchantOrderNo: { type: string, maxLength: 80 }
+                amount: { type: integer, minimum: 1, description: 整数分 }
+                paidAt: { type: string, format: date-time }
+                remark: { type: string, maxLength: 300 }
+      responses:
+        '200':
+          description: 去重和匹配结果
+        '401':
+          description: Watcher 令牌无效
 components:
   securitySchemes:
     ApplicationId:
@@ -120,6 +156,11 @@ components:
       schema: { type: string }
     PaymentNo:
       name: paymentNo
+      in: path
+      required: true
+      schema: { type: string }
+    RefundNo:
+      name: refundNo
       in: path
       required: true
       schema: { type: string }

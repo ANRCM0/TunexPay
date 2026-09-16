@@ -3,7 +3,7 @@ export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; ti
 }
 
 export function Status({ value }: { value: string }) {
-  return <span className={`badge ${value}`}>{value}</span>;
+  return <span className={`badge ${value}`} title={value}>{statusText(value)}</span>;
 }
 
 export function LoadingState({ loading, error, empty, children }: { loading: boolean; error: string; empty?: boolean; children: React.ReactNode }) {
@@ -15,3 +15,26 @@ export function LoadingState({ loading, error, empty, children }: { loading: boo
 
 export function money(cents: number) { return `¥${(cents / 100).toFixed(2)}`; }
 export function time(value: string | null | undefined) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—"; }
+
+const statusLabels: Record<string, string> = {
+  ACTIVE: "启用",
+  DISABLED: "停用",
+  CREATED: "已创建",
+  PENDING: "待支付",
+  PROCESSING: "处理中",
+  SUCCESS: "成功",
+  FAILED: "失败",
+  UNKNOWN: "结果未知",
+  CLOSED: "已关闭",
+  PARTIALLY_REFUNDED: "部分退款",
+  REFUNDED: "已退款",
+  DEAD: "重试耗尽",
+  MATCHED: "已匹配",
+  MISMATCH: "存在差错",
+  UNMATCHED: "未匹配",
+  IGNORED: "已忽略",
+  OPEN: "待处理",
+  RESOLVED: "已解决",
+};
+
+export function statusText(value: string) { return statusLabels[value] ?? value; }

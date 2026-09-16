@@ -4,13 +4,14 @@ import type { AppEnv } from "../types.js";
 import { applicationAuth } from "../middleware/auth.js";
 import { createOrder, createOrderSchema, findApplicationOrder } from "../services/order-service.js";
 import { closePayment, createPayment, createPaymentSchema, getPayment, queryPayment } from "../services/payment-service.js";
-import { createRefund, createRefundSchema } from "../services/refund-service.js";
+import { createRefund, createRefundSchema, queryRefund } from "../services/refund-service.js";
 
 export const nativeRoutes = new Hono<AppEnv>();
 nativeRoutes.use("/orders", applicationAuth);
 nativeRoutes.use("/orders/*", applicationAuth);
 nativeRoutes.use("/payments/*", applicationAuth);
 nativeRoutes.use("/refunds", applicationAuth);
+nativeRoutes.use("/refunds/*", applicationAuth);
 
 nativeRoutes.post("/orders", async (c) => {
   const input = createOrderSchema.parse(await c.req.json());
@@ -50,4 +51,9 @@ nativeRoutes.post("/refunds", async (c) => {
   const input = createRefundSchema.parse(await c.req.json());
   const refund = await createRefund(c.get("application"), input);
   return c.json({ data: refund }, 201);
+});
+
+nativeRoutes.post("/refunds/:refundNo/query", async (c) => {
+  const refundNo = z.string().max(40).parse(c.req.param("refundNo"));
+  return c.json({ data: await queryRefund(c.get("application").id, refundNo) });
 });

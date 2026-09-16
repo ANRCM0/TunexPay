@@ -14,6 +14,12 @@ const envSchema = z.object({
   ALIPAY_PUBLIC_KEY: z.string().default(""),
   ALIPAY_GATEWAY: z.string().url().default("https://openapi.alipay.com/gateway.do"),
   ALIPAY_SIGN_TYPE: z.literal("RSA2").default("RSA2"),
+  ALIPAY_BILL_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  ALIPAY_BILL_QR_CONTENT: z.string().default(""),
+  ALIPAY_BILL_MATCH_MODE: z.enum(["REMARK", "AMOUNT"]).default("REMARK"),
+  ALIPAY_BILL_VALID_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
+  ALIPAY_BILL_AMOUNT_OFFSET_MAX: z.coerce.number().int().min(0).max(99).default(99),
+  ALIPAY_BILL_WATCHER_TOKEN: z.string().default(""),
   MOCK_CHANNEL_ENABLED: z.string().default("false").transform((value) => value === "true"),
   MOCK_CHANNEL_TOKEN: z.string().default(""),
   ALLOW_PRIVATE_WEBHOOKS: z.string().default("false").transform((value) => value === "true"),
@@ -34,6 +40,8 @@ export function config(): Config {
       if (/^0{64}$/.test(encodedKey) || encodedKey.startsWith("replace-with")) throw new Error("SECRETS_ENCRYPTION_KEY must be changed in production");
       if (parsed.MOCK_CHANNEL_ENABLED && !parsed.MOCK_CHANNEL_TOKEN) throw new Error("MOCK_CHANNEL_TOKEN is required when the mock channel is enabled");
       if (parsed.MOCK_CHANNEL_ENABLED && parsed.MOCK_CHANNEL_TOKEN === "local-development-only") throw new Error("MOCK_CHANNEL_TOKEN must be changed in production");
+      if (parsed.ALIPAY_BILL_ENABLED && !parsed.ALIPAY_BILL_QR_CONTENT) throw new Error("ALIPAY_BILL_QR_CONTENT is required when the bill channel is enabled");
+      if (parsed.ALIPAY_BILL_ENABLED && parsed.ALIPAY_BILL_WATCHER_TOKEN.length < 24) throw new Error("ALIPAY_BILL_WATCHER_TOKEN must contain at least 24 characters");
     }
     cached = parsed;
   }

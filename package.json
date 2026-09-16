@@ -14,7 +14,7 @@
     "dev:worker": "npm run dev:worker --workspace @tuoxin-pay/api",
     "build": "npm run db:generate && npm run build --workspace @tuoxin-pay/api && npm run build --workspace @tuoxin-pay/web",
     "typecheck": "npm run typecheck --workspace @tuoxin-pay/api && npm run typecheck --workspace @tuoxin-pay/web",
-    "test": "npm run test --workspace @tuoxin-pay/api",
+    "test": "npm run test --workspace @tuoxin-pay/api && npm run test --workspace @tuoxin-pay/web",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

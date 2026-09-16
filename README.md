@@ -9,12 +9,18 @@ TUOXIN Pay 是面向自有业务的轻量支付中台。它不是 MPAY 的改皮
 - 金额全程以整数“分”保存，不使用浮点数结算。
 - 支付状态机：`CREATED → PROCESSING → SUCCESS / FAILED / UNKNOWN / CLOSED`，支持终态后的可信晚到成功。
 - 支付宝官方 API：当面付预创建、主动查单、关闭、退款、RSA2 回调验签。
+- 支付宝账单收款：个人收款码承接、备注/金额预约、Watcher 标准流水入口、数据库租约去重和有效期匹配。
 - Mock 通道：不接真实资金即可跑通本地闭环。
 - ePay V1：`submit.php`、`mapi.php`、`api.php` 查询与退款，可供 NewAPI 等现有系统接入。
 - 退款：独立退款单、外部退款单号幂等、累计金额上限校验、部分/全额退款状态。
+- 异常恢复：支付与退款自动查单，MySQL 持久化调度、指数退避、并发认领和人工接管。
+- 订单过期：先查单、再关闭活跃支付、最后锁定订单；失败持久化退避重试，晚到成功仍可恢复。
+- 支付宝日账单对账：后台上传 CSV，统一标准 Receipt、指纹去重、支付/退款自动匹配、金额差错阻断和人工重跑。
 - 可靠 Webhook：支付事务内写 Outbox；Worker 通过 Redis 调度，但以 MySQL 为事实来源，支持租约恢复、指数退避、手动重试。
 - Event Timeline：订单、支付、退款、通知都写入可检索业务事件。
-- Next.js 管理后台与收银台。
+- Payment Exception：晚到重复支付、流水多候选与状态冲突形成独立处置单；重复 Payment 退款不会误改业务订单。
+- Next.js 管理后台与收银台：管理员登录、订单详情、事件时间线、渠道状态检查和应用默认渠道切换。
+- 管理审计：后台变更操作记录动作、资源、结果、来源 IP、User-Agent 与 Request ID，不保存请求正文和密钥。
 - Prisma/MySQL 迁移、Docker Compose、OpenResty 反向代理示例。
 
 ## 架构
@@ -32,7 +38,7 @@ TUOXIN Matrix / Studio / Chat / NewAPI
         │ State / Idempotency│
         └─────────┬─────────┘
                   │
-         Alipay / Mock Adapter
+   Alipay / Alipay Bill / Mock Adapter
                   │
       MySQL Outbox ── Redis ── Worker
                   │
@@ -49,7 +55,10 @@ TUOXIN Matrix / Studio / Chat / NewAPI
 cp .env.example .env
 openssl rand -hex 32       # 写入 SECRETS_ENCRYPTION_KEY
 openssl rand -base64 36    # 写入 ADMIN_TOKEN
+openssl rand -base64 24    # 写入 ADMIN_PASSWORD
+openssl rand -base64 36    # 写入 ADMIN_SESSION_SECRET
 openssl rand -base64 24    # 写入 MOCK_CHANNEL_TOKEN
+openssl rand -base64 36    # 写入 ALIPAY_BILL_WATCHER_TOKEN
 docker compose up -d --build
 ```
 
@@ -57,11 +66,64 @@ docker compose up -d --build
 
 启动后：
 
-- 管理后台：`http://localhost:3000`
+- 管理后台：`http://localhost:3000`，使用 `.env` 中的 `ADMIN_PASSWORD` 登录
 - API 健康检查：`http://localhost:3001/health`
 - MySQL 与 Redis 默认不暴露到公网。
 
 首次可以在“应用”页面创建 `TUOXIN Matrix`。API Key、Webhook Secret、ePay Key 只显示一次，请立即保存。
+
+管理端使用 12 小时有效的签名 HttpOnly 会话 Cookie。`ADMIN_TOKEN` 只用于 Web 服务访问内部管理 API，不会下发到浏览器；请勿将 `ADMIN_PASSWORD`、`ADMIN_SESSION_SECRET` 和 `ADMIN_TOKEN` 设置为相同内容。
+
+## 自动异常恢复
+
+支付宝支付或退款遇到网络超时、响应无法确认时会进入 `UNKNOWN`，Worker 随后依据 MySQL 中的 `nextQueryAt` 自动向支付宝查单。查询从 15 秒开始指数退避，最长间隔 15 分钟，最多自动尝试 20 次。
+
+达到上限后系统不会擅自标记失败，而是保留原状态、停止自动查询并在后台显示“需要人工处理”。管理员仍可在订单详情或退款页面手动查单。Mock 通道不会进入自动轮询。
+
+订单到达 `expiresAt` 后，Worker 会先查询支付宝确认是否已经支付，再关闭仍活跃的支付尝试，最后把订单置为 `CLOSED`。关闭请求失败时不会强行关单，而是从 30 秒开始指数退避，最长间隔 1 小时。后台订单详情会显示失败原因和下次重试时间。
+
+## 管理操作审计
+
+管理端所有 POST 变更都会写入 `admin_audit_logs`，可在“操作审计”页面查看。审计包含操作类型、资源、成功/失败、HTTP 状态、错误码、Request ID、来源地址和 User-Agent，不记录 API Key、账单内容或其他请求正文。
+
+## 支付宝账单对账
+
+在管理后台“对账”页面选择账单日期并上传支付宝交易明细 CSV。浏览器支持读取 UTF-8、GBK/GB18030 与 UTF-16LE 文件，服务端会：
+
+1. 将支付宝字段标准化为收入或退款 `Receipt`。
+2. 通过稳定指纹抵御重复上传。
+3. 同时核对商户单号、支付宝流水号和整数分金额。
+4. 仅通过 `markPaymentSucceeded()` 或退款服务推进状态，并在同一流程生成事件与业务 Webhook。
+5. 把找不到本地单据的流水标为“未匹配”，把金额或标识冲突标为“存在差错”，绝不自动入账。
+
+当前版本由管理员手动下载并上传账单；自动调用支付宝账单下载 API 属于下一步部署增强。重复上传同一日账单是安全的。
+
+## 支付宝账单收款 Watcher
+
+这条链路与上面的“官方日账单对账”不同：`ALIPAY_BILL` 用个人收款码承接付款，由外部 Watcher 查询到账流水后实时投递。
+
+在 `.env` 配置：
+
+```dotenv
+ALIPAY_BILL_ENABLED=true
+ALIPAY_BILL_QR_CONTENT=支付宝收款二维码解析出的内容
+ALIPAY_BILL_MATCH_MODE=REMARK
+ALIPAY_BILL_VALID_SECONDS=300
+ALIPAY_BILL_WATCHER_TOKEN=至少24字符的独立随机令牌
+```
+
+Watcher 调用：
+
+```bash
+curl -X POST https://pay.example.com/api/v1/channels/alipay-bill/flows \
+  -H 'Content-Type: application/json' \
+  -H 'X-Watcher-Token: your-watcher-token' \
+  -d '{"record":{"order_no":"支付宝流水号","price":"19.99","paid_at":"2026-09-16 12:00:00","remark":"TXA1B2C3D4E5"}}'
+```
+
+原生格式也可使用 `providerTradeNo`、整数分 `amount`、`paidAt`、`remark`，并通过 `{records:[...]}` 一次提交最多 100 条。Watcher 必须重试网络失败，并对响应中仍为 `PROCESSING` 的流水再次投递；终态为 `MATCHED`、`MISMATCH` 或 `IGNORED`。同一支付宝流水号重复提交是幂等的；即使 API 在处理中崩溃，Worker 也会在数据库租约到期后自动恢复。
+
+匹配严格按交易号、备注码、有效期内金额进行。备注或金额只负责定位候选，系统仍会校验精确实收金额和支付时间窗。出现多候选时不会猜单，而会进入“支付异常”后台。建议优先使用 `REMARK`；只有付款端无法填写备注时才使用 `AMOUNT`。
 
 ## 本地 Mock 全链路
 
@@ -173,10 +235,9 @@ npm run app:create -- --name "TUOXIN Matrix" --webhook "https://example.com/pay/
 v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守的大额生产资金。正式上线前至少要完成：
 
 1. 支付宝沙箱与小额生产回归，覆盖超时、重复回调、关闭后晚到成功和部分退款。
-2. 增加自动支付查单任务，使 `UNKNOWN` 无需管理员手动查询。
-3. 增加退款主动查询与日终账单对账。
-4. 为管理端接入正式身份系统、限流、审计告警和备份策略。
-5. 设置真实 HTTPS 域名，并保持 `ALLOW_PRIVATE_WEBHOOKS=false`、`MOCK_CHANNEL_ENABLED=false`。
-6. 对 `SECRETS_ENCRYPTION_KEY` 做离线备份；丢失后已加密的 ePay/Webhook 密钥无法恢复。
+2. 接入支付宝日终账单自动下载，并用真实沙箱/生产导出文件回归当前逐笔匹配规则；账单收款模式还需接入并长期运行实际 Watcher。
+3. 为管理员登录增加反向代理限流与审计告警；如果需要多人协作，再接入正式身份系统和 RBAC。
+4. 设置真实 HTTPS 域名，并保持 `ALLOW_PRIVATE_WEBHOOKS=false`、`MOCK_CHANNEL_ENABLED=false`。
+5. 对 `SECRETS_ENCRYPTION_KEY` 做离线备份；丢失后已加密的 ePay/Webhook 密钥无法恢复。
 
 这份边界是刻意保留的：v0.1 先把正确的支付核心跑通，不伪装成已经完成全部生产验证的成熟支付平台。

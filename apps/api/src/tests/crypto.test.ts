@@ -1,6 +1,6 @@
 import { createSign, generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { alipayCanonical, extractTopLevelObject, verifyAlipaySignature } from "../channels/alipay.js";
+import { alipayCanonical, extractTopLevelObject, mapRefundQueryStatus, verifyAlipaySignature } from "../channels/alipay.js";
 import { epayCanonical, epaySign, openSealed, seal, verifyEpaySign, webhookSignature } from "../lib/crypto.js";
 
 describe("secret handling and signatures", () => {
@@ -36,5 +36,11 @@ describe("secret handling and signatures", () => {
   it("extracts the exact signed response object without reserializing it", () => {
     const body = '{"alipay_trade_query_response" : {"code":"10000","nested":{"text":"a}b"}},"sign":"x"}';
     expect(extractTopLevelObject(body, "alipay_trade_query_response")).toBe('{"code":"10000","nested":{"text":"a}b"}}');
+  });
+
+  it("maps Alipay refund query amounts without treating an absent refund as success", () => {
+    expect(mapRefundQueryStatus("19.99")).toBe("SUCCESS");
+    expect(mapRefundQueryStatus("0.00")).toBe("PROCESSING");
+    expect(mapRefundQueryStatus(undefined)).toBe("PROCESSING");
   });
 });

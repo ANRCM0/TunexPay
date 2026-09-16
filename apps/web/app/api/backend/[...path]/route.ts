@@ -19,7 +19,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
   if (contentType) headers.set("content-type", contentType);
   const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer();
   try {
-    const response = await fetch(target, { method: request.method, headers, body, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const isBillImport = path.join("/") === "reconciliation/alipay/import";
+    const response = await fetch(target, { method: request.method, headers, body, cache: "no-store", signal: AbortSignal.timeout(isBillImport ? 120_000 : 15_000) });
     return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") || "application/json" } });
   } catch {
     return NextResponse.json({ error: { code: "API_UNAVAILABLE", message: "支付 API 暂时不可用" } }, { status: 502 });
