@@ -18,7 +18,7 @@ const fields = {
   pollSeconds: z.number().int().min(3).max(3600),
   lookbackSeconds: z.number().int().min(300).max(86400),
   overlapSeconds: z.number().int().min(60).max(3600),
-  lagSeconds: z.number().int().min(5).max(300),
+  lagSeconds: z.number().int().min(2).max(300),
 };
 const storedSchema = z.object({ ...fields, privateKey: z.string(), publicKey: z.string(), watcherToken: z.string() }).strict();
 export type BillSettings = z.infer<typeof storedSchema>;
