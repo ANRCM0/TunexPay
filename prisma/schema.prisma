@@ -361,6 +361,26 @@ model ReconciliationRun {
   @@map("reconciliation_runs")
 }
 
+model BillCollectorState {
+  id                String   @id @db.VarChar(80)
+  binding           String   @db.Char(64)
+  cursorAt          DateTime
+  windowStart       DateTime?
+  windowEnd         DateTime?
+  nextPage          Int      @default(1)
+  leaseOwner        String?  @db.VarChar(64)
+  lockedUntil       DateTime?
+  nextRunAt         DateTime @default(now())
+  heartbeatAt       DateTime?
+  lastSuccessAt     DateTime?
+  lastError         String?  @db.VarChar(500)
+  consecutiveErrors Int      @default(0)
+  processedRecords  Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  @@map("bill_collector_states")
+}
+
 model ReceiptAccount {
   id        String   @id @db.VarChar(80)
   name      String   @db.VarChar(120)

@@ -14,6 +14,7 @@ type Application = { id: string; appId: string; name: string; status: string; de
 
 export function Channels() {
   const { data, loading, error } = useApi<ChannelStatus>("/channels");
+  const { data: collector, error: collectorError, reload: reloadCollector } = useApi<{ enabled: boolean; status: string; cursorAt?: string; lastSuccessAt?: string; lastError?: string; nextPage?: number }>("/channels/alipay-bill/collector", 10_000);
   const { data: applications, loading: appsLoading, error: appsError, reload } = useApi<Application[]>("/applications");
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState("");
@@ -56,8 +57,10 @@ export function Channels() {
 
         <section className="card channel-card">
           <div className="channel-head"><div><div className="channel-icon alipay">账</div><div><h2>{data.alipayBill.name}</h2><span>Watcher 流水识别 · {data.alipayBill.matchMode}</span></div></div><Status value={data.alipayBill.ready ? "ACTIVE" : "DISABLED"} /></div>
-          <div className="check-list"><Check ok={data.alipayBill.enabled} label="账单收款开关" /><Check ok={data.alipayBill.qrContent} label="收款二维码内容" /><Check ok={data.alipayBill.watcherToken} label="Watcher 专用令牌" /></div>
+          <div className="check-list"><Check ok={data.alipayBill.enabled} label="账单收款开关" /><Check ok={data.alipayBill.qrContent} label="收款二维码内容" /><Check ok={Boolean(collector?.enabled) || data.alipayBill.watcherToken} label={collector?.enabled ? "内置采集已启用" : "外部 Watcher 专用令牌"} /></div>
           <div className="channel-meta"><span>识别有效期</span><code>{data.alipayBill.validSeconds} 秒</code><span>流水入口</span><code>{data.alipayBill.watcherUrl}</code></div>
+          <div className="channel-meta"><span>独立采集器</span><code>{collectorError || collector?.status || "加载中"}</code><span>最后成功查询</span><code>{collector?.lastSuccessAt ? new Date(collector.lastSuccessAt).toLocaleString() : "尚未查询成功"}</code><span>采集断点 / 页码</span><code>{collector?.cursorAt ? new Date(collector.cursorAt).toLocaleString() : "—"} / {collector?.nextPage ?? "—"}</code><span>错误</span><code>{collector?.lastError || "—"}</code></div>
+          <button className="button" onClick={() => void reloadCollector()}><RefreshCw size={14} />刷新采集状态</button>
           <div className="channel-safety"><ShieldCheck size={18} /><span>流水先标准化并锁定，再通过支付核心统一成功入口推进；多候选不会自动猜单。</span></div>
         </section>
 

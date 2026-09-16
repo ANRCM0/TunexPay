@@ -21,9 +21,9 @@ function pem(value: string): string {
 }
 
 function timestamp(): string {
-  const date = new Date();
+  const date = new Date(Date.now() + 8 * 3_600_000);
   const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
 }
 
 export function alipayCanonical(params: Record<string, string>): string {
@@ -44,7 +44,7 @@ function signParams(params: Record<string, string>): string {
 export function verifyAlipaySignature(payload: Record<string, string>, publicKey = config().ALIPAY_PUBLIC_KEY): boolean {
   if (!payload.sign || !publicKey) return false;
   const verifier = createVerify("RSA-SHA256");
-  verifier.update(alipayCanonical(payload), "utf8");
+  verifier.update(alipayCanonical(Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "sign_type"))), "utf8");
   verifier.end();
   return verifier.verify(pem(publicKey), payload.sign, "base64");
 }
@@ -61,6 +61,10 @@ export function mapRefundQueryStatus(refundAmount: unknown): "SUCCESS" | "PROCES
 
 export class AlipayChannel implements PaymentChannel {
   readonly code = "ALIPAY" as const;
+
+  async queryAccountLogs(bizContent: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.call("alipay.data.bill.accountlog.query", bizContent);
+  }
 
   async create(input: ChannelCreateInput): Promise<ChannelCreateResult> {
     const response = await this.call("alipay.trade.precreate", {

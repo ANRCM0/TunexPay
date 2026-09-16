@@ -27,7 +27,7 @@ describe("secret handling and signatures", () => {
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const payload: Record<string, string> = { app_id: "20260001", out_trade_no: "pay_1", total_amount: "19.99", trade_status: "TRADE_SUCCESS", sign_type: "RSA2" };
     const signer = createSign("RSA-SHA256");
-    signer.update(alipayCanonical(payload)); signer.end();
+    signer.update(alipayCanonical(Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "sign_type")))); signer.end();
     payload.sign = signer.sign(privateKey, "base64");
     expect(verifyAlipaySignature(payload, publicKey.export({ type: "spki", format: "pem" }).toString())).toBe(true);
     expect(verifyAlipaySignature({ ...payload, total_amount: "29.99" }, publicKey.export({ type: "spki", format: "pem" }).toString())).toBe(false);
