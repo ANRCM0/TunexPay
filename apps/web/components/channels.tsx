@@ -1,22 +1,22 @@
 "use client";
 
-import { CheckCircle2, CircleX, RefreshCw, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, CircleX, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { LoadingState, PageHead, Section, Status } from "./common";
-import { BillSettingsPanel } from "./bill-settings";
-import { OwnerNotificationsPanel } from "./owner-notifications";
 
 type ChannelStatus = {
   alipay: { code: string; name: string; ready: boolean; environment: string; gateway: string; webhookUrl: string; checks: { appId: boolean; privateKey: boolean; publicKey: boolean } };
   alipayBill: { code: string; name: string; ready: boolean; enabled: boolean; qrContent: boolean; watcherToken: boolean; matchMode: string; validSeconds: number; watcherUrl: string };
   mock: { code: string; name: string; ready: boolean; enabled: boolean; token: boolean };
 };
+type Collector = { enabled: boolean; status: string; cursorAt?: string; lastSuccessAt?: string; lastError?: string; nextPage?: number };
 type Application = { id: string; appId: string; name: string; status: string; defaultChannel: string };
 
 export function Channels() {
-  const { data, loading, error, reload: reloadChannels } = useApi<ChannelStatus>("/channels");
-  const { data: collector, error: collectorError, reload: reloadCollector } = useApi<{ enabled: boolean; status: string; cursorAt?: string; lastSuccessAt?: string; lastError?: string; nextPage?: number }>("/channels/alipay-bill/collector", 10_000);
+  const { data, loading, error } = useApi<ChannelStatus>("/channels");
+  const { data: collector, error: collectorError } = useApi<Collector>("/channels/alipay-bill/collector", 10_000);
   const { data: applications, loading: appsLoading, error: appsError, reload } = useApi<Application[]>("/applications");
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState("");
@@ -60,9 +60,8 @@ export function Channels() {
         <section className="card channel-card">
           <div className="channel-head"><div><div className="channel-icon alipay">账</div><div><h2>{data.alipayBill.name}</h2><span>Watcher 流水识别 · {data.alipayBill.matchMode}</span></div></div><Status value={data.alipayBill.ready ? "ACTIVE" : "DISABLED"} /></div>
           <div className="check-list"><Check ok={data.alipayBill.enabled} label="账单收款开关" /><Check ok={data.alipayBill.qrContent} label="收款二维码内容" /><Check ok={Boolean(collector?.enabled) || data.alipayBill.watcherToken} label={collector?.enabled ? "内置采集已启用" : "外部 Watcher 专用令牌"} /></div>
-          <div className="channel-meta"><span>识别有效期</span><code>{data.alipayBill.validSeconds} 秒</code><span>流水入口</span><code>{data.alipayBill.watcherUrl}</code></div>
-          <div className="channel-meta"><span>独立采集器</span><code>{collectorError || collector?.status || "加载中"}</code><span>最后成功查询</span><code>{collector?.lastSuccessAt ? new Date(collector.lastSuccessAt).toLocaleString() : "尚未查询成功"}</code><span>采集断点 / 页码</span><code>{collector?.cursorAt ? new Date(collector.cursorAt).toLocaleString() : "—"} / {collector?.nextPage ?? "—"}</code><span>错误</span><code>{collector?.lastError || "—"}</code></div>
-          <button className="button" onClick={() => void reloadCollector()}><RefreshCw size={14} />刷新采集状态</button>
+          <div className="channel-meta"><span>识别有效期</span><code>{data.alipayBill.validSeconds} 秒</code><span>流水入口</span><code>{data.alipayBill.watcherUrl}</code><span>采集器</span><code>{collectorError || collector?.status || "加载中"}</code></div>
+          <Link className="button secondary channel-config-link" href="/channels/alipay-bill"><Settings2 size={14} />配置账单收款</Link>
           <div className="channel-safety"><ShieldCheck size={18} /><span>流水先标准化并锁定，再通过支付核心统一成功入口推进；多候选不会自动猜单。</span></div>
         </section>
 
@@ -74,8 +73,6 @@ export function Channels() {
       </div>}
     </LoadingState>
 
-    <BillSettingsPanel onSaved={async () => { await reloadChannels(); await reloadCollector(); }} />
-    <OwnerNotificationsPanel />
     <Section title="应用默认通道" action={<span className="muted">切换后仅影响新创建的支付</span>} className="detail-section">
       <LoadingState loading={appsLoading} error={appsError} empty={!applications?.length}>
         <div className="table-wrap"><table><thead><tr><th>应用</th><th>App ID</th><th>状态</th><th>默认支付渠道</th></tr></thead><tbody>

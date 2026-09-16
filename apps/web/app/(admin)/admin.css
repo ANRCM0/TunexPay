@@ -102,6 +102,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .channel-meta { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px 10px; margin-bottom: 18px; color: var(--muted); font-size: 11px; }
 .channel-meta code { color: var(--ink); word-break: break-all; }
 .channel-card > .button { display: inline-flex; align-items: center; gap: 7px; }
+.channel-config-link { margin-bottom: 18px; }
 .channel-safety { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border-radius: 9px; background: #fff8e8; color: #8b5b11; font-size: 11px; line-height: 1.5; }
 
 .reconciliation-upload { padding: 22px; display: grid; gap: 20px; }
