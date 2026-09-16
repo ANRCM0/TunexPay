@@ -34,7 +34,8 @@ export function normalizeReceiptFlow(record: Record<string, unknown>): Normalize
 }
 
 export function extractReceiptReference(remark: string | null): string | null {
-  return remark?.match(/(?:^|[^A-Z0-9])(TX[A-Z0-9]{10})(?:$|[^A-Z0-9])/i)?.[1]?.toUpperCase() ?? null;
+  const references = [...(remark ?? "").matchAll(/(?:^|[^A-Z0-9])(TX[A-Z0-9]{10})(?=$|[^A-Z0-9])/gi)].map(match => match[1]!.toUpperCase());
+  return references.length === 1 ? references[0]! : null;
 }
 
 export function isWithinReceiptWindow(paidAt: Date, from: Date | null, until: Date | null): boolean {

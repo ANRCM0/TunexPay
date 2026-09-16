@@ -12,6 +12,7 @@ import { createPaymentSucceededDelivery } from "./outbox-service.js";
 import { openLateDuplicateException } from "./payment-exception-service.js";
 import { prepareReceiptPayment } from "./receipt-reservation-service.js";
 import { billRuntimeConfig } from "./bill-settings-service.js";
+import { cashierAccess, safeReturnUrl } from "../lib/cashier-security.js";
 
 export const createPaymentSchema = z.object({
   channel: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).optional(),
@@ -274,6 +275,7 @@ export async function mockSucceed(paymentNo: string): Promise<Payment> {
 export async function publicPayment(paymentNo: string) {
   const payment = await db.payment.findUnique({ where: { paymentNo }, include: { order: true } });
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
+  const access = cashierAccess(payment);
   return {
     paymentNo: payment.paymentNo,
     status: payment.status,
@@ -283,8 +285,10 @@ export async function publicPayment(paymentNo: string) {
     businessAmount: payment.amount,
     currency: payment.order.currency,
     subject: payment.order.subject,
-    clientPayload: payment.clientPayload,
-    returnUrl: payment.order.returnUrl,
+    clientPayload: access.payable ? payment.clientPayload : null,
+    payable: access.payable,
+    validUntil: access.validUntil,
+    returnUrl: safeReturnUrl(payment.order.returnUrl),
     paidAt: payment.paidAt,
   };
 }

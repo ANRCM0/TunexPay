@@ -40,5 +40,8 @@ channelRoutes.post("/mock/:paymentNo/succeed", async (c) => {
 });
 
 channelRoutes.get("/public/payments/:paymentNo", async (c) => {
+  c.header("Cache-Control", "no-store, private");
+  c.header("Referrer-Policy", "no-referrer");
+  c.header("X-Robots-Tag", "noindex, nofollow");
   return c.json({ data: await publicPayment(c.req.param("paymentNo")) });
 });

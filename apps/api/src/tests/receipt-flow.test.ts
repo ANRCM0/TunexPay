@@ -38,6 +38,9 @@ describe("receipt watcher flow normalization", () => {
   it("extracts only a complete TUOXIN remark reference", () => {
     expect(extractReceiptReference("请备注 TXA1B2C3D4E5 谢谢")).toBe("TXA1B2C3D4E5");
     expect(extractReceiptReference("TX123")).toBeNull();
+    expect(extractReceiptReference("TXA1B2C3D4E5 TX1111111111")).toBeNull();
+    expect(extractReceiptReference("TXA1B2C3D4E5 TXA1B2C3D4E5")).toBeNull();
+    expect(extractReceiptReference("TXA1B2C3D4E5extra")).toBeNull();
   });
 
   it("uses an inclusive payment window", () => {

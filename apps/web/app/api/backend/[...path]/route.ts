@@ -4,7 +4,7 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
-  if (request.method === "POST" && path.join("/") === "channels/alipay-bill/settings") {
+  if (request.method === "POST" && (path.join("/") === "channels/alipay-bill/settings" || path[0] === "owner-notifications")) {
     const trustedOrigin = new URL(process.env.WEB_PUBLIC_URL || request.url).origin;
     if (request.headers.get("origin") !== trustedOrigin) return NextResponse.json({ error: { code: "ORIGIN_REJECTED", message: "配置保存请求来源不合法" } }, { status: 403 });
   }
@@ -25,7 +25,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   try {
     const isBillImport = path.join("/") === "reconciliation/alipay/import";
     const response = await fetch(target, { method: request.method, headers, body, cache: "no-store", signal: AbortSignal.timeout(isBillImport ? 120_000 : 15_000) });
-    return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") || "application/json" } });
+    return new NextResponse(response.body, { status: response.status, headers: { "content-type": response.headers.get("content-type") || "application/json", "cache-control": "no-store, private", "referrer-policy": "no-referrer" } });
   } catch {
     return NextResponse.json({ error: { code: "API_UNAVAILABLE", message: "支付 API 暂时不可用" } }, { status: 502 });
   }

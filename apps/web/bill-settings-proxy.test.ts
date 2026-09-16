@@ -4,6 +4,12 @@ import { POST } from "./app/api/backend/[...path]/route";
 const previous = process.env.WEB_PUBLIC_URL;
 afterEach(() => { process.env.WEB_PUBLIC_URL = previous; vi.unstubAllGlobals(); });
 describe("bill configuration origin protection", () => {
+  it("rejects cross-site owner notification tests before forwarding credentials", async () => {
+    process.env.WEB_PUBLIC_URL = "https://pay.example.com";
+    const fetch = vi.fn(); vi.stubGlobal("fetch",fetch);
+    const response = await POST(new NextRequest("https://pay.example.com/api/backend/owner-notifications/test", {method:"POST",headers:{origin:"https://evil.example"}}), {params:Promise.resolve({path:["owner-notifications","test"]})});
+    expect(response.status).toBe(403); expect(fetch).not.toHaveBeenCalled();
+  });
   it("rejects cross-site writes before forwarding any credentials", async () => {
     process.env.WEB_PUBLIC_URL = "https://pay.example.com";
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);

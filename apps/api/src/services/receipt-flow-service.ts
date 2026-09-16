@@ -116,6 +116,9 @@ async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow): Promise<Receip
       return outcome(updated, duplicate);
     }
     const payment = choice.payment;
+    if (payment.receiptMatchMode === "REMARK" && extractReceiptReference(flow.remark) !== payment.receiptMatchReference) {
+      return outcome(await markMismatch(receipt.id, "备注模式必须填写唯一且正确的付款备注，拒绝按金额或其他标识替代", payment), duplicate);
+    }
     if (payment.channelAmount !== flow.amount) {
       return outcome(await markMismatch(
         receipt.id,
@@ -230,6 +233,9 @@ async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> 
   if (direct[0] || byTrade) return { kind: "MATCH", payment: direct[0] ?? byTrade!, mode: "DIRECT" };
 
   const reference = extractReceiptReference(flow.remark);
+  if (!reference && /(?:^|[^A-Z0-9])TX[A-Z0-9]{10}(?=$|[^A-Z0-9])/i.test(flow.remark ?? "")) {
+    return { kind: "MISMATCH", reason: "付款备注包含多个识别码，拒绝自动匹配" };
+  }
   if (reference) {
     const referenced = await db.payment.findMany({
       where: { channel: "ALIPAY_BILL", receiptMatchReference: reference },
@@ -251,6 +257,7 @@ async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> 
     where: {
       channel: "ALIPAY_BILL",
       channelAmount: flow.amount,
+      receiptMatchMode: "AMOUNT",
       receiptValidFrom: { lte: flow.paidAt },
       receiptValidUntil: { gte: flow.paidAt },
     },
