@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
-import { Drawer, LoadingState, PageHead, Section, Status, time } from "./common";
+import { LoadingState, PageHead, Section, Status, Modal, time } from "./common";
 import { ChannelEditor } from "./channel-editor";
 
 export type Channel = {
@@ -19,6 +19,7 @@ export function Channels() {
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
   const applications = useApi<Application[]>("/applications");
   const [editor, setEditor] = useState<Channel | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   async function operate(channel: Channel, action: "check" | "test-payment") {
@@ -54,7 +55,7 @@ export function Channels() {
   return <>
     <PageHead eyebrow="Channels" title="支付通道" copy="独立收款账号的通道实例；修改配置后需重新检测，验证通过才能分配给应用。" action={<button className="button secondary" onClick={() => void channels.reload()}><RefreshCw size={14} />刷新状态</button>} />
     {notice && <div role="status" className={`operation-notice ${notice.ok ? "ok" : "error"}`}>{notice.text}</div>}
-    <Section title="通道列表" action={<span className="muted">创建通道请前往「支付插件」</span>}>
+    <Section title="通道列表" action={<span className="muted">创建通道请前往「支付插件」 · <button className="link-button" onClick={() => setAssignOpen(true)}>通道分配</button></span>}>
       <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>
           {channels.data?.map(channel => <tr key={channel.id}>
@@ -72,8 +73,8 @@ export function Channels() {
         </tbody></table></div>
       </LoadingState>
     </Section>
-    {editor && <Drawer title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} plugin={editor.plugin} channel={editor} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} /></Drawer>}
-    <Section title="应用通道分配" className="detail-section">
+    {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} plugin={editor.plugin} channel={editor} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} /></Modal>}
+    {assignOpen && <Modal title="应用通道分配" onClose={() => setAssignOpen(false)}>
       <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款通道</th></tr></thead><tbody>{applications.data?.map(app => {
           const current = app.defaultChannelId || `${app.defaultChannel.toLowerCase().replaceAll("_", "-")}-default`;
@@ -83,6 +84,6 @@ export function Channels() {
           </select></td></tr>;
         })}</tbody></table></div>
       </LoadingState>
-    </Section>
+    </Modal>}
   </>;
 }

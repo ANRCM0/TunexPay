@@ -2,7 +2,7 @@
 
 import { Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { Drawer, LoadingState, PageHead, Section } from "./common";
+import { Modal, LoadingState, PageHead, Section } from "./common";
 import { ChannelEditor } from "./channel-editor";
 import { useApi } from "../lib/api";
 
@@ -27,6 +27,6 @@ export function Plugins() {
         </table></div>
       </LoadingState>
     </Section>
-    {editor && <Drawer title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor} onClose={() => setEditor(null)} onSaved={async () => setEditor(null)} /></Drawer>}
+    {editor && <Modal title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor} onClose={() => setEditor(null)} onSaved={async () => setEditor(null)} /></Modal>}
   </>;
 }
