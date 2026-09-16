@@ -11,35 +11,38 @@ export function collectorWindow(cursor: Date, now: Date, overlapSeconds: number,
 }
 
 export function accountLogPage(response: Record<string, unknown>, pageNo: number, pageSize: number) {
-  if (!Array.isArray(response.account_log_list)) throw new Error("ALIPAY_BILL_INVALID_PAGE: account_log_list missing");
   const total = Number(response.total_size);
-  if (!Number.isSafeInteger(total) || total < 0 || response.account_log_list.length > pageSize) throw new Error("ALIPAY_BILL_INVALID_PAGE: invalid total_size or page length");
+  if (!Number.isSafeInteger(total) || total < 0) throw new Error("ALIPAY_BILL_INVALID_PAGE: invalid total_size");
+  // Real gateway responses carry detail_list and omit the list entirely on empty windows.
+  const list = response.detail_list ?? response.account_log_list ?? (total === 0 ? [] : undefined);
+  if (!Array.isArray(list)) throw new Error("ALIPAY_BILL_INVALID_PAGE: detail_list missing");
+  if (list.length > pageSize) throw new Error("ALIPAY_BILL_INVALID_PAGE: page length exceeds page_size");
   const expected = Math.min(pageSize, Math.max(0, total - (pageNo - 1) * pageSize));
-  if (response.account_log_list.length !== expected) throw new Error("ALIPAY_BILL_INVALID_PAGE: page length conflicts with total_size");
-  return { records: response.account_log_list as unknown[], complete: pageNo * pageSize >= total };
+  if (list.length !== expected) throw new Error("ALIPAY_BILL_INVALID_PAGE: page length conflicts with total_size");
+  return { records: list as unknown[], complete: pageNo * pageSize >= total };
 }
 
 // accountlog is a ledger, not a list of exclusively successful payment trades.
 // Never convert withdrawals, fees, or unidentified credits into payment success.
+// Real gateway shape: { direction: "收入"|"支出", trans_amount: "1.00"|"-1.00", trans_dt, alipay_order_no,
+// merchant_order_no?, type?, account_log_id, ... } — income/outcome/trans_memo do not exist there.
 export function paymentFlowFromAccountLog(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ALIPAY_BILL_INVALID_RECORD");
   const record = value as Record<string, unknown>;
-  const income = String(record.income ?? "");
-  const outcome = String(record.outcome ?? "");
-  const money = (text: string) => {
-    if (!/^\d+(\.\d{1,2})?$/.test(text)) throw new Error("ALIPAY_BILL_INVALID_RECORD: income/outcome missing or malformed");
-    return text === "0" || /^0\.0{1,2}$/.test(text) ? 0 : yuanToCents(text);
-  };
-  const incoming = money(income), outgoing = money(outcome);
-  if (incoming === 0 || outgoing > 0) return null;
+  const amountText = String(record.trans_amount ?? "").trim();
+  if (!/^-?\d+(\.\d{1,2})?$/.test(amountText)) throw new Error("ALIPAY_BILL_INVALID_RECORD: trans_amount missing or malformed");
+  const direction = String(record.direction ?? "").trim();
+  if (!direction) throw new Error("ALIPAY_BILL_INVALID_RECORD: direction missing");
+  if (direction !== "收入" || amountText.startsWith("-")) return null;
+  if (/^0(\.0{1,2})?$/.test(amountText)) return null;
   const tradeNo = typeof record.alipay_order_no === "string" ? record.alipay_order_no.trim() : "";
   if (!tradeNo) return null;
   // Explicit refund/reversal ledger entries are not incoming customer payments.
-  if (/退款|退回|撤销|冲正/.test(String(record.trans_memo ?? ""))) return null;
+  if (/退款|退回|撤销|冲正/.test(String(record.trans_memo ?? "")) || /退款|退回|撤销|冲正/.test(String(record.type ?? ""))) return null;
   const flow = {
     providerTradeNo: tradeNo,
     merchantOrderNo: record.merchant_order_no,
-    amount: incoming,
+    amount: yuanToCents(amountText),
     paidAt: record.trans_dt,
     remark: record.trans_memo,
     payType: "alipay",

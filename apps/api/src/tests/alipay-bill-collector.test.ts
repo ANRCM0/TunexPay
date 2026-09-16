@@ -32,7 +32,7 @@ function matches(where: Record<string, any>): boolean {
     return state[key] === value;
   });
 }
-const row = { income: "0.01", outcome: "0.00", alipay_order_no: "trade-1", trans_dt: "2026-09-16 11:20:00", trans_memo: "TXA1B2C3D4E5" };
+const row = { direction: "收入", trans_amount: "0.01", alipay_order_no: "trade-1", trans_dt: "2026-09-16 11:20:00", trans_memo: "TXA1B2C3D4E5", type: "交易" };
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-16T04:00:00Z")); vi.clearAllMocks();
   mocks.cfg.ALIPAY_BILL_COLLECTOR_ENABLED = true; mocks.cfg.ALIPAY_BILL_QR_CONTENT = "qr";
@@ -46,7 +46,7 @@ beforeEach(() => {
   mocks.update.mockImplementation(async ({ data }) => { apply(data); return structuredClone(state); });
   mocks.updateMany.mockImplementation(async ({ where, data }) => { if (!matches(where)) return { count: 0 }; apply(data); return { count: 1 }; });
   mocks.ingest.mockResolvedValue([{ status: "MATCHED" }]);
-  mocks.query.mockResolvedValue({ total_size: 1, account_log_list: [row] });
+  mocks.query.mockResolvedValue({ total_size: 1, detail_list: [row] });
 });
 afterEach(() => vi.useRealTimers());
 
@@ -64,7 +64,7 @@ describe("independent Alipay collector", () => {
   it("wakes for new demand and skips idle history without replaying empty hours", async () => {
     mocks.demand.mockResolvedValue(null); await runAlipayBillCollector();
     mocks.demand.mockResolvedValue({ receiptValidFrom: new Date("2026-09-16T03:50:00Z") });
-    mocks.query.mockResolvedValue({ total_size: 0, account_log_list: [] });
+    mocks.query.mockResolvedValue({ total_size: 0, detail_list: [] });
     await runAlipayBillCollector();
     expect(mocks.query).toHaveBeenCalledWith(expect.objectContaining({ start_time: "2026-09-16 11:45:00", end_time: "2026-09-16 11:59:45" }));
     mocks.query.mockClear(); mocks.demand.mockResolvedValue(null);
@@ -111,7 +111,7 @@ describe("independent Alipay collector", () => {
     expect((await alipayBillCollectorStatus()).status).toBe("ERROR");
   });
   it("continues a fixed window at page six after the five-page budget", async () => {
-    mocks.query.mockImplementation(async ({ page_no }) => ({ total_size: 501, account_log_list: page_no <= 5 ? Array(100).fill({ ...row, income: "0.00", outcome: "0.01" }) : [row] }));
+    mocks.query.mockImplementation(async ({ page_no }) => ({ total_size: 501, detail_list: page_no <= 5 ? Array(100).fill({ ...row, direction: "支出", trans_amount: "-0.01" }) : [row] }));
     await runAlipayBillCollector();
     expect(state.nextPage).toBe(6); expect(state.windowEnd).not.toBeNull();
     vi.advanceTimersByTime(11000); await runAlipayBillCollector();
