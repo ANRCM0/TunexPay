@@ -4,7 +4,7 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
-  if (request.method === "POST" && (path.join("/") === "channels/alipay-bill/settings" || path[0] === "owner-notifications")) {
+  if (request.method === "POST" && (path.join("/") === "channels/alipay-bill/settings" || path[0] === "owner-notifications" || path[0] === "channel-instances" || path[0] === "applications")) {
     const trustedOrigin = new URL(process.env.WEB_PUBLIC_URL || request.url).origin;
     if (request.headers.get("origin") !== trustedOrigin) return NextResponse.json({ error: { code: "ORIGIN_REJECTED", message: "配置保存请求来源不合法" } }, { status: 403 });
   }

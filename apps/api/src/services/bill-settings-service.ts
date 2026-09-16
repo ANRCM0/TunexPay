@@ -29,23 +29,23 @@ export const billSettingsInputSchema = z.object({
   watcherToken: z.string().max(200).nullable().optional(),
 }).strict();
 
-function initialSettings(): BillSettings {
+export function initialBillSettings(inherit = true): BillSettings {
   const c = config();
   return {
-    enabled: c.ALIPAY_BILL_ENABLED, collectorEnabled: c.ALIPAY_BILL_COLLECTOR_ENABLED,
-    appId: c.ALIPAY_APP_ID, userId: c.ALIPAY_BILL_USER_ID, gateway: c.ALIPAY_GATEWAY,
-    privateKey: c.ALIPAY_PRIVATE_KEY, publicKey: c.ALIPAY_PUBLIC_KEY,
-    qrContent: c.ALIPAY_BILL_QR_CONTENT, watcherToken: c.ALIPAY_BILL_WATCHER_TOKEN,
+    enabled: inherit && c.ALIPAY_BILL_ENABLED, collectorEnabled: inherit && c.ALIPAY_BILL_COLLECTOR_ENABLED,
+    appId: inherit ? c.ALIPAY_APP_ID : "", userId: inherit ? c.ALIPAY_BILL_USER_ID : "", gateway: c.ALIPAY_GATEWAY,
+    privateKey: inherit ? c.ALIPAY_PRIVATE_KEY : "", publicKey: inherit ? c.ALIPAY_PUBLIC_KEY : "",
+    qrContent: inherit ? c.ALIPAY_BILL_QR_CONTENT : "", watcherToken: inherit ? c.ALIPAY_BILL_WATCHER_TOKEN : "",
     matchMode: c.ALIPAY_BILL_MATCH_MODE, validSeconds: c.ALIPAY_BILL_VALID_SECONDS,
     amountOffsetMax: c.ALIPAY_BILL_AMOUNT_OFFSET_MAX, pollSeconds: c.ALIPAY_BILL_POLL_SECONDS,
     lookbackSeconds: c.ALIPAY_BILL_LOOKBACK_SECONDS, overlapSeconds: c.ALIPAY_BILL_OVERLAP_SECONDS, lagSeconds: c.ALIPAY_BILL_LAG_SECONDS,
   };
 }
 
-export async function loadBillSettings(client: Client = db, lock = false) {
-  await client.billChannelSettings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, payloadEncrypted: seal(JSON.stringify(initialSettings())) }, update: {} });
-  if (lock) await client.$queryRaw`SELECT id FROM bill_channel_settings WHERE id = ${SETTINGS_ID} FOR UPDATE`;
-  const row = await client.billChannelSettings.findUniqueOrThrow({ where: { id: SETTINGS_ID } });
+export async function loadBillSettings(client: Client = db, lock = false, id = SETTINGS_ID) {
+  if (id === SETTINGS_ID) await client.billChannelSettings.upsert({ where: { id }, create: { id, payloadEncrypted: seal(JSON.stringify(initialBillSettings())) }, update: {} });
+  if (lock) await client.$queryRaw`SELECT id FROM bill_channel_settings WHERE id = ${id} FOR UPDATE`;
+  const row = await client.billChannelSettings.findUniqueOrThrow({ where: { id } });
   try {
     return { revision: row.revision, updatedAt: row.updatedAt, settings: storedSchema.parse(JSON.parse(openSealed(row.payloadEncrypted))) };
   } catch {
@@ -67,7 +67,7 @@ export function billIdentity(value: BillSettings): string {
   return JSON.stringify([value.appId, value.userId, value.gateway, value.qrContent]);
 }
 
-function keyValue(value: string | null | undefined, previous: string, kind: "PRIVATE KEY" | "PUBLIC KEY"): string {
+export function keyValue(value: string | null | undefined, previous: string, kind: "PRIVATE KEY" | "PUBLIC KEY"): string {
   if (value === null) return "";
   if (!value?.trim()) return previous;
   const plain = value.trim().replace(/\\n/g, "\n");
@@ -123,8 +123,8 @@ export async function saveBillSettings(raw: unknown) {
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
 
-export async function billRuntimeConfig(client: Client = db, lock = false): Promise<Config & { billRevision: number }> {
-  const { settings: s, revision } = await loadBillSettings(client, lock);
+export async function billRuntimeConfig(client: Client = db, lock = false, id = SETTINGS_ID): Promise<Config & { billRevision: number }> {
+  const { settings: s, revision } = await loadBillSettings(client, lock, id);
   return { ...config(), billRevision: revision,
     ALIPAY_APP_ID: s.appId, ALIPAY_PRIVATE_KEY: s.privateKey, ALIPAY_PUBLIC_KEY: s.publicKey, ALIPAY_GATEWAY: s.gateway,
     ALIPAY_BILL_ENABLED: s.enabled, ALIPAY_BILL_COLLECTOR_ENABLED: s.collectorEnabled, ALIPAY_BILL_USER_ID: s.userId,

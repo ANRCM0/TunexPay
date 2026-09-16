@@ -94,9 +94,9 @@ async function collectOwnerEvents() {
       const message = [`事件：${event.type}`, `应用：${event.order?.application.name ?? "—"}`, `订单：${event.order?.orderNo ?? "—"}`, `支付单：${event.payment?.paymentNo ?? "—"}`, `金额：${((event.payment?.receivedAmount ?? event.payment?.amount ?? event.order?.amount ?? 0) / 100).toFixed(2)} 元`, `时间：${event.createdAt.toISOString()}`, "请登录后台核对。此提醒不替代业务回调或对账。"].join("\n");
       await enqueue(tx, value, `event:${event.id}`, title, message);
     }
-    const state = await tx.billCollectorState.findUnique({ where: { id: "alipay-bill-default" } });
-    if (value.collectorFailure && state?.lastError && state.consecutiveErrors >= 3 && state.heartbeatAt && Date.now() - state.heartbeatAt.getTime() < 90_000) {
-      await enqueue(tx, value, `collector:${Math.floor(Date.now() / 900_000)}`, "TUOXIN Pay 账单采集连续失败", "账单采集连续失败，请登录支付渠道面板查看错误码与权限。相同故障每 15 分钟最多提醒一次。");
+    const failures = value.collectorFailure ? await tx.billCollectorState.findMany({ where: { lastError: { not: null }, consecutiveErrors: { gte: 3 }, heartbeatAt: { gt: new Date(Date.now() - 90_000) } }, take: 100 }) : [];
+    for (const state of failures) {
+      await enqueue(tx, value, `collector:${state.id}:${Math.floor(Date.now() / 900_000)}`, "TUOXIN Pay 账单采集连续失败", `通道 ${state.id} 账单采集连续失败，请登录插件与通道面板查看错误码与权限。每个通道每 15 分钟最多提醒一次。`);
     }
   });
 }

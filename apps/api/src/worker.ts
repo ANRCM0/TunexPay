@@ -7,7 +7,7 @@ import { deliverWebhook, listDueDeliveryIds, recoverExpiredDeliveries } from "./
 import { runDuePaymentRecoveries, runDueRefundRecoveries } from "./services/recovery-service.js";
 import { runDueOrderExpirations } from "./services/expiration-service.js";
 import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
-import { runAlipayBillCollector } from "./services/alipay-bill-collector-service.js";
+import { runAllBillCollectors } from "./services/alipay-bill-collector-service.js";
 import { runOwnerNotifications } from "./services/owner-notification-service.js";
 import { WORKER_HEARTBEAT_KEY } from "./lib/system-status.js";
 
@@ -53,7 +53,7 @@ function tick(): void {
   void connection.set(WORKER_HEARTBEAT_KEY, new Date().toISOString()).catch((error: unknown) => log("warn", "worker.heartbeat_failed", { error: error instanceof Error ? error.message : String(error) }));
   if (!ownerTask) ownerTask = runOwnerNotifications().catch(() => log("error", "owner_notification.worker_failed", { code: "NOTIFICATION_WORKER_ERROR" })).finally(() => { ownerTask = null; });
   if (!pollTask) pollTask = poll().finally(() => { pollTask = null; });
-  if (!collectorTask) collectorTask = runAlipayBillCollector().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
+  if (!collectorTask) collectorTask = runAllBillCollectors().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
 }
 const interval = setInterval(tick, 3_000);
 tick();

@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ upsert: vi.fn(), update: vi.fn(), events: vi.f
 vi.mock("nodemailer",()=>({default:{createTransport:mocks.transport}}));
 vi.mock("node:dns/promises",()=>({lookup:mocks.lookup}));
 vi.mock("../db.js",()=>{
-  const tx = { ownerNotificationSettings: { upsert: mocks.upsert,update:mocks.update }, $queryRaw:vi.fn(), paymentEvent:{findMany:mocks.events},billCollectorState:{findUnique:async()=>null},ownerNotificationDelivery:{findMany:mocks.due,updateMany:mocks.deliveryUpdate},ownerNotificationSeen:{findUnique:async()=>null,create:async()=>({})} };
+  const tx = { ownerNotificationSettings: { upsert: mocks.upsert,update:mocks.update }, $queryRaw:vi.fn(), paymentEvent:{findMany:mocks.events},billCollectorState:{findMany:async()=>[]},ownerNotificationDelivery:{findMany:mocks.due,updateMany:mocks.deliveryUpdate},ownerNotificationSeen:{findUnique:async()=>null,create:async()=>({})} };
   return {db:{...tx,$transaction:async(cb:(tx:any)=>Promise<unknown>)=>cb(tx)}};
 });
 import { feishuSignature, maskedOwnerSettings, mergeOwnerSettings, publicSmtpAddress, runOwnerNotifications, saveOwnerSettings, selectedOwnerEvent, sendOwnerNotification, validateFeishuWebhook, type OwnerSettings } from "../services/owner-notification-service.js";

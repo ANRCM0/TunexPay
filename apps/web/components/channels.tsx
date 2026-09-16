@@ -1,92 +1,89 @@
 "use client";
-
-import Link from "next/link";
-import { CheckCircle2, CircleX, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { Plus, RefreshCw, Settings2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Section, Status } from "./common";
+import { LoadingState, PageHead, Section, Status, time } from "./common";
+import { ChannelEditor } from "./channel-editor";
 
-type ChannelStatus = {
-  alipay: { code: string; name: string; ready: boolean; environment: string; gateway: string; webhookUrl: string; checks: { appId: boolean; privateKey: boolean; publicKey: boolean } };
-  alipayBill: { code: string; name: string; ready: boolean; enabled: boolean; qrContent: boolean; watcherToken: boolean; matchMode: string; validSeconds: number; watcherUrl: string };
-  mock: { code: string; name: string; ready: boolean; enabled: boolean; token: boolean };
+export type Channel = {
+  id: string; name: string; plugin: string; enabled: boolean; revision: number;
+  settings: Record<string, string | number | boolean>; checkStatus: string; checkMessage: string | null; checkedAt: string | null;
+  watcherUrl: string; webhookUrl: string;
+  testPayment: { paymentNo: string; status: string; currentRevision: boolean; cashierUrl: string } | null;
 };
-type Collector = { enabled: boolean; status: string; cursorAt?: string; lastSuccessAt?: string; lastError?: string; nextPage?: number };
-type Application = { id: string; appId: string; name: string; status: string; defaultChannel: string };
+type Plugin = { code: string; name: string; description: string; capabilities: string[] };
+type Application = { id: string; name: string; defaultChannel: string; defaultChannelId: string | null };
+export const checkLabels: Record<string, string> = { UNCHECKED: "待检测", API_VERIFIED: "接口已验证", PAYMENT_VERIFIED: "实付已验证", SIMULATED: "模拟配置通过", NEEDS_PAYMENT: "待实付验证", FAILED: "检测失败" };
+export const assignable = (channel: Channel) => channel.enabled && ["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(channel.checkStatus);
 
 export function Channels() {
-  const { data, loading, error } = useApi<ChannelStatus>("/channels");
-  const { data: collector, error: collectorError } = useApi<Collector>("/channels/alipay-bill/collector", 10_000);
-  const { data: applications, loading: appsLoading, error: appsError, reload } = useApi<Application[]>("/applications");
-  const [checking, setChecking] = useState(false);
-  const [saving, setSaving] = useState("");
-  const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
-
-  async function checkAlipay() {
-    setChecking(true); setNotice(null);
+  const channels = useApi<Channel[]>("/channel-instances", 10_000);
+  const plugins = useApi<Plugin[]>("/plugins");
+  const applications = useApi<Application[]>("/applications");
+  const [editor, setEditor] = useState<{ plugin: string; channel?: Channel } | null>(null);
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  async function operate(channel: Channel, action: "check" | "test-payment") {
+    setBusy(channel.id); setNotice(null);
     try {
-      await api("/channels/alipay/check", { method: "POST" });
-      setNotice({ type: "ok", text: "支付宝连接正常：请求签名、网关访问和响应验签均已通过。" });
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "支付宝连接检查失败" }); }
-    finally { setChecking(false); }
+      const result = await api<{ data: Channel | { cashierUrl: string } }>(`/channel-instances/${channel.id}/${action}`, { method: "POST", body: JSON.stringify({ revision: channel.revision }) });
+      if (action === "check") {
+        const checked = result.data as Channel;
+        setNotice({ ok: checked.checkStatus !== "FAILED", text: checked.checkMessage || checkLabels[checked.checkStatus] || "检测完成" });
+      } else setNotice({ ok: true, text: "测试订单已创建。请打开收银台付款，到账后刷新结果。金额模式以收银台金额为准；测试款不会自动退款。" });
+      await channels.reload();
+    } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "操作失败" }); }
+    finally { setBusy(""); }
   }
-
-  async function changeDefault(application: Application, channel: string) {
-    setSaving(application.id); setNotice(null);
+  async function assign(app: Application, channelId: string) {
+    setBusy(app.id); setNotice(null);
     try {
-      await api(`/applications/${application.id}/default-channel`, { method: "POST", body: JSON.stringify({ channel }) });
-      setNotice({ type: "ok", text: `${application.name} 的默认通道已切换为 ${channel}。` });
-      await reload();
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "通道切换失败" }); }
-    finally { setSaving(""); }
+      await api(`/applications/${app.id}/channel-instance`, { method: "POST", body: JSON.stringify({ channelId }) });
+      await applications.reload(); setNotice({ ok: true, text: `${app.name} 已分配通道，新支付使用该通道。` });
+    } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "分配失败" }); }
+    finally { setBusy(""); }
   }
-
   return <>
-    <PageHead eyebrow="Payment Channels" title="支付渠道" copy="检查通道是否具备收款条件，并为每个业务应用选择默认支付方式。" />
-    {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
-    <LoadingState loading={loading} error={error}>
-      {data && <div className="channel-grid">
-        <section className="card channel-card">
-          <div className="channel-head"><div><div className="channel-icon alipay">支</div><div><h2>{data.alipay.name}</h2><span>{data.alipay.environment}</span></div></div><Status value={data.alipay.ready ? "ACTIVE" : "DISABLED"} /></div>
-          <div className="check-list">
-            <Check ok={data.alipay.checks.appId} label="支付宝 App ID" />
-            <Check ok={data.alipay.checks.privateKey} label="应用 RSA2 私钥" />
-            <Check ok={data.alipay.checks.publicKey} label="支付宝 RSA2 公钥" />
-          </div>
-          <div className="channel-meta"><span>网关</span><code>{data.alipay.gateway}</code><span>异步通知</span><code>{data.alipay.webhookUrl}</code></div>
-          <button className="button" disabled={!data.alipay.ready || checking} onClick={() => void checkAlipay()}><RefreshCw size={14} />{checking ? "检查中…" : "测试支付宝连接"}</button>
-        </section>
-
-        <section className="card channel-card">
-          <div className="channel-head"><div><div className="channel-icon alipay">账</div><div><h2>{data.alipayBill.name}</h2><span>Watcher 流水识别 · {data.alipayBill.matchMode}</span></div></div><Status value={data.alipayBill.ready ? "ACTIVE" : "DISABLED"} /></div>
-          <div className="check-list"><Check ok={data.alipayBill.enabled} label="账单收款开关" /><Check ok={data.alipayBill.qrContent} label="收款二维码内容" /><Check ok={Boolean(collector?.enabled) || data.alipayBill.watcherToken} label={collector?.enabled ? "内置采集已启用" : "外部 Watcher 专用令牌"} /></div>
-          <div className="channel-meta"><span>识别有效期</span><code>{data.alipayBill.validSeconds} 秒</code><span>流水入口</span><code>{data.alipayBill.watcherUrl}</code><span>采集器</span><code>{collectorError || collector?.status || "加载中"}</code></div>
-          <Link className="button secondary channel-config-link" href="/channels/alipay-bill"><Settings2 size={14} />配置账单收款</Link>
-          <div className="channel-safety"><ShieldCheck size={18} /><span>流水先标准化并锁定，再通过支付核心统一成功入口推进；多候选不会自动猜单。</span></div>
-        </section>
-
-        <section className="card channel-card">
-          <div className="channel-head"><div><div className="channel-icon mock">M</div><div><h2>{data.mock.name}</h2><span>仅用于开发与验收</span></div></div><Status value={data.mock.ready ? "ACTIVE" : "DISABLED"} /></div>
-          <div className="check-list"><Check ok={data.mock.enabled} label="Mock 通道开关" /><Check ok={data.mock.token} label="内部操作令牌" /></div>
-          <div className="channel-safety"><ShieldCheck size={18} /><span>生产环境应关闭 Mock；API 仍会二次校验专用令牌。</span></div>
-        </section>
-      </div>}
+    <PageHead eyebrow="Plugins & Channels" title="插件与通道" copy="选择支付插件，配置独立收款账号，验证后分配给业务应用。" action={<button className="button secondary" onClick={() => void channels.reload()}><RefreshCw size={14} />刷新状态</button>} />
+    {notice && <div role="status" className={`operation-notice ${notice.ok ? "ok" : "error"}`}>{notice.text}</div>}
+    <LoadingState loading={plugins.loading} error={plugins.error}>
+      <div className="channel-grid">{plugins.data?.map(plugin => <section className="card channel-card" key={plugin.code}>
+        <div className="eyebrow">支付插件 · {plugin.code}</div><h2>{plugin.name}</h2><p className="muted">{plugin.description}</p>
+        <div className="plugin-capabilities">{plugin.capabilities.map(item => <span key={item}>{item}</span>)}</div>
+        <button className="button secondary" onClick={() => setEditor({ plugin: plugin.code })}><Plus size={14} />创建通道</button>
+      </section>)}</div>
     </LoadingState>
-
-    <Section title="应用默认通道" action={<span className="muted">切换后仅影响新创建的支付</span>} className="detail-section">
-      <LoadingState loading={appsLoading} error={appsError} empty={!applications?.length}>
-        <div className="table-wrap"><table><thead><tr><th>应用</th><th>App ID</th><th>状态</th><th>默认支付渠道</th></tr></thead><tbody>
-          {applications?.map(application => <tr key={application.id}><td><strong>{application.name}</strong></td><td className="mono">{application.appId}</td><td><Status value={application.status} /></td><td>
-            <select value={application.defaultChannel} disabled={saving === application.id} onChange={event => void changeDefault(application, event.target.value)} aria-label={`${application.name} 默认支付渠道`}>
-              <option value="MOCK" disabled={!data?.mock.ready}>Mock（开发）</option><option value="ALIPAY" disabled={!data?.alipay.ready}>支付宝当面付</option><option value="ALIPAY_BILL" disabled={!data?.alipayBill.ready}>支付宝账单收款</option>
-            </select>
-          </td></tr>)}
+    {editor && <ChannelEditor key={editor.channel?.id || editor.plugin} plugin={editor.plugin} channel={editor.channel} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} />}
+    <Section title="已配置通道" action={<span className="muted">修改配置后需重新检测</span>} className="detail-section">
+      <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length}>
+        <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>
+          {channels.data?.map(channel => <tr key={channel.id}>
+            <td><strong>{channel.name}</strong><div className="muted">{channel.plugin}</div><code>{channel.id}</code></td>
+            <td><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
+            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span><p className="channel-check-detail">{channel.checkMessage}</p>
+              {channel.testPayment && <div className="muted">实付订单：<Status value={channel.testPayment.status} />{!channel.testPayment.currentRevision && "（旧配置）"}</div>}
+            </td><td>{time(channel.checkedAt)}</td>
+            <td><div className="channel-actions">
+              <button className="button secondary" disabled={!!busy} onClick={() => setEditor({ plugin: channel.plugin, channel })}><Settings2 size={14} />配置</button>
+              <button className="button secondary" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "真实接口检测"}</button>
+              <button className="button secondary" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "创建 ¥0.01 实付单"}</button>
+              {channel.testPayment?.currentRevision && <a className="button secondary" href={channel.testPayment.cashierUrl} target="_blank" rel="noreferrer">打开测试收银台</a>}
+            </div></td>
+          </tr>)}
         </tbody></table></div>
+        <p className="muted">接口检测验证账号与上游通信。实付验收还会验证下单、到账和支付状态更新；业务系统 Webhook 需单独验收。账单金额模式可能增加最多 ¥0.99，请按收银台显示金额付款。</p>
+      </LoadingState>
+    </Section>
+    <Section title="应用通道分配" className="detail-section">
+      <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length}>
+        <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款通道</th></tr></thead><tbody>{applications.data?.map(app => {
+          const current = app.defaultChannelId || `${app.defaultChannel.toLowerCase().replaceAll("_", "-")}-default`;
+          return <tr key={app.id}><td><strong>{app.name}</strong></td><td><select aria-label={`${app.name} 收款通道`} value={current} disabled={!!busy} onChange={event => void assign(app, event.target.value)}>
+            {!channels.data?.some(channel => channel.id === current) && <option value={current}>原默认通道（待加载）</option>}
+            {channels.data?.map(channel => <option key={channel.id} value={channel.id} disabled={!assignable(channel)}>{channel.name} · {checkLabels[channel.checkStatus]}{!channel.enabled ? " · 已停用" : ""}</option>)}
+          </select></td></tr>;
+        })}</tbody></table></div>
       </LoadingState>
     </Section>
   </>;
-}
-
-function Check({ ok, label }: { ok: boolean; label: string }) {
-  return <div className={ok ? "check ok" : "check missing"}>{ok ? <CheckCircle2 size={17} /> : <CircleX size={17} />}<span>{label}</span><strong>{ok ? "已配置" : "缺失"}</strong></div>;
 }

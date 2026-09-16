@@ -1,9 +1,8 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../types.js";
-import { channelFor } from "../channels/registry.js";
 import { config } from "../config.js";
-import { billRuntimeConfig, getPublicBillSettings, saveBillSettings } from "../services/bill-settings-service.js";
+import { billRuntimeConfig, getPublicBillSettings } from "../services/bill-settings-service.js";
 import { getOwnerSettings, saveOwnerSettings, testOwnerNotification } from "../services/owner-notification-service.js";
 import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
@@ -17,10 +16,14 @@ import { updatePaymentException } from "../services/payment-exception-service.js
 import { queryRefund } from "../services/refund-service.js";
 import { importAlipayBill, matchReceipt } from "../services/reconciliation-service.js";
 import { collectSystemStatus } from "../lib/system-status.js";
+import { channelInstanceRoutes } from "./channel-instances.js";
+import { assignChannel, ensureLegacyChannels, saveChannel, loadChannel, checkChannel } from "../services/channel-instance-service.js";
+import { legacyChannelId } from "../lib/channel-scope.js";
 
 export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
 adminRoutes.use("*", adminAudit);
+adminRoutes.route("/", channelInstanceRoutes);
 
 adminRoutes.get("/owner-notifications/settings", async c => c.json({ data: await getOwnerSettings() }));
 adminRoutes.post("/owner-notifications/settings", async c => c.json({ data: await saveOwnerSettings(await c.req.json()) }));
@@ -77,8 +80,8 @@ adminRoutes.get("/dashboard", async (c) => {
 adminRoutes.get("/system", async c => c.json({ data: jsonSafe(await collectSystemStatus()) }));
 
 adminRoutes.get("/applications", async (c) => {
-  const applications = await db.application.findMany({ orderBy: { createdAt: "desc" }, select: {
-    id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, createdAt: true, updatedAt: true,
+  const applications = await db.application.findMany({ where: { appId: { not: "channel-diagnostics" } }, orderBy: { createdAt: "desc" }, select: {
+    id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true, createdAt: true, updatedAt: true,
   } });
   return c.json({ data: applications });
 });
@@ -103,6 +106,7 @@ adminRoutes.post("/applications", async (c) => {
     name: z.string().trim().min(1).max(120),
     webhookUrl: z.string().url().max(500).optional().or(z.literal("")),
     defaultChannel: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).default("MOCK"),
+    defaultChannelId: z.string().min(1).max(80).optional(),
   }).parse(await c.req.json());
   const result = await createApplication({ ...input, webhookUrl: input.webhookUrl || null });
   return c.json({ data: result }, 201);
@@ -114,28 +118,30 @@ adminRoutes.post("/applications/:id/rotate-api-key", async (c) => {
 
 adminRoutes.post("/applications/:id/default-channel", async (c) => {
   const channel = z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).parse((await c.req.json()).channel);
-  const status = await channelStatus();
-  if (channel === "ALIPAY" && !status.alipay.ready) throw new AppError("ALIPAY_NOT_CONFIGURED", "请先完整配置支付宝通道", 409);
-  if (channel === "ALIPAY_BILL" && !status.alipayBill.ready) throw new AppError("ALIPAY_BILL_NOT_CONFIGURED", "请先完整配置支付宝账单收款通道", 409);
-  if (channel === "MOCK" && !status.mock.ready) throw new AppError("MOCK_NOT_CONFIGURED", "Mock 通道当前未启用或缺少访问令牌", 409);
-  const application = await db.application.findUnique({ where: { id: c.req.param("id") } });
-  if (!application) throw new AppError("APPLICATION_NOT_FOUND", "应用不存在", 404);
-  return c.json({ data: await db.application.update({ where: { id: application.id }, data: { defaultChannel: channel } }) });
+  await ensureLegacyChannels();
+  return c.json({ data: await assignChannel(c.req.param("id"), legacyChannelId(channel)) });
 });
 
 adminRoutes.get("/channels", async (c) => c.json({ data: await channelStatus() }));
 adminRoutes.get("/channels/alipay-bill/settings", async (c) => c.json({ data: await getPublicBillSettings() }));
-adminRoutes.post("/channels/alipay-bill/settings", async (c) => c.json({ data: await saveBillSettings(await c.req.json()) }));
+adminRoutes.post("/channels/alipay-bill/settings", async c => {
+  await ensureLegacyChannels();
+  const input = await c.req.json();
+  const row = await loadChannel("alipay-bill-default");
+  const bill = await getPublicBillSettings();
+  if (input.revision !== bill.revision) throw new AppError("BILL_SETTINGS_CONFLICT", "???????????", 409);
+  await saveChannel({ name: row.name, plugin: row.plugin, enabled: input.enabled, revision: row.revision, settings: input }, row.id);
+  return c.json({ data: await getPublicBillSettings() });
+});
 adminRoutes.get("/channels/alipay-bill/collector", async (c) => {
   const { alipayBillCollectorStatus } = await import("../services/alipay-bill-collector-service.js");
   return c.json({ data: await alipayBillCollectorStatus() });
 });
 
 adminRoutes.post("/channels/alipay/check", async (c) => {
-  const status = await channelStatus();
-  if (!status.alipay.ready) throw new AppError("ALIPAY_NOT_CONFIGURED", "支付宝 App ID、应用私钥或支付宝公钥尚未完整配置", 409);
-  const result = await channelFor("ALIPAY").query(`txp_check_${Date.now()}`);
-  return c.json({ data: { ok: true, channel: "ALIPAY", gatewayStatus: result.status, checkedAt: new Date().toISOString() } });
+  await ensureLegacyChannels();
+  const row = await loadChannel("alipay-default");
+  return c.json({ data: await checkChannel(row.id, row.revision) });
 });
 
 adminRoutes.get("/orders", async (c) => {

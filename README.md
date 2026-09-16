@@ -4,6 +4,8 @@ TUOXIN Pay 是面向自有业务的轻量支付中台。它不是 MPAY 的改皮
 
 ## v0.1 已实现
 
+- 插件与多通道：同一插件可配置多个独立账号，按业务应用分配；真实接口检测、版本化检测结果和小额实付验收。历史支付绑定原通道，账单流水与采集进度按通道隔离。[使用与升级说明](docs/plugin-channels.md)。
+
 - 本人通知：面板配置邮箱 SMTP 和飞书机器人、测试发送、独立持久化任务、失败重试、投递记录和采集失败提醒限频；[配置说明](docs/owner-notifications.md)。
 
 - Application：独立 API Key、Webhook Secret、ePay PID/Key；敏感密钥使用 AES-256-GCM 加密保存。

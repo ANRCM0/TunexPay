@@ -1,6 +1,6 @@
 import { Prisma, type Application, type Refund, type RefundStatus } from "@prisma/client";
 import { z } from "zod";
-import { channelFor } from "../channels/registry.js";
+import { adapterForPayment } from "./channel-instance-service.js";
 import { db } from "../db.js";
 import { generateId, sha256, stableJson } from "../lib/crypto.js";
 import { AppError, ChannelDefinitiveError, ChannelUncertainError, errorMessage } from "../lib/errors.js";
@@ -72,7 +72,7 @@ export async function createRefund(application: Application, input: CreateRefund
 
   try {
     const payment = await db.payment.findUniqueOrThrow({ where: { id: refund.paymentId } });
-    const result = await channelFor(payment.channel).refund({
+    const result = await (await adapterForPayment(payment)).refund({
       paymentNo: payment.paymentNo, refundNo: refund.refundNo, channelTradeNo: payment.channelTradeNo,
       amount: refund.amount, reason: refund.reason,
     });
@@ -145,7 +145,7 @@ export async function queryRefund(applicationId: string | null, refundNo: string
     include: { payment: true },
   });
   if (!refund) throw new AppError("REFUND_NOT_FOUND", "退款单不存在", 404);
-  const result = await channelFor(refund.payment.channel).queryRefund({
+  const result = await (await adapterForPayment(refund.payment)).queryRefund({
     paymentNo: refund.payment.paymentNo,
     refundNo: refund.refundNo,
     channelTradeNo: refund.payment.channelTradeNo,

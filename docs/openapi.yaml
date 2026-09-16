@@ -49,6 +49,7 @@ paths:
                 channel:
                   type: string
                   enum: [ALIPAY, ALIPAY_BILL, MOCK]
+                  description: 插件类型；已分配通道实例的应用必须与该实例插件一致，省略时使用应用默认实例。具体实例由管理员分配，客户端不能任意选择。
                 method:
                   type: string
                   default: alipay
