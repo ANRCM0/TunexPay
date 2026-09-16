@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { channelFor } from "../channels/registry.js";
 import { config } from "../config.js";
+import { billRuntimeConfig, getPublicBillSettings, saveBillSettings } from "../services/bill-settings-service.js";
 import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
 import { AppError } from "../lib/errors.js";
@@ -97,7 +98,7 @@ adminRoutes.post("/applications/:id/rotate-api-key", async (c) => {
 
 adminRoutes.post("/applications/:id/default-channel", async (c) => {
   const channel = z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).parse((await c.req.json()).channel);
-  const status = channelStatus();
+  const status = await channelStatus();
   if (channel === "ALIPAY" && !status.alipay.ready) throw new AppError("ALIPAY_NOT_CONFIGURED", "请先完整配置支付宝通道", 409);
   if (channel === "ALIPAY_BILL" && !status.alipayBill.ready) throw new AppError("ALIPAY_BILL_NOT_CONFIGURED", "请先完整配置支付宝账单收款通道", 409);
   if (channel === "MOCK" && !status.mock.ready) throw new AppError("MOCK_NOT_CONFIGURED", "Mock 通道当前未启用或缺少访问令牌", 409);
@@ -106,14 +107,16 @@ adminRoutes.post("/applications/:id/default-channel", async (c) => {
   return c.json({ data: await db.application.update({ where: { id: application.id }, data: { defaultChannel: channel } }) });
 });
 
-adminRoutes.get("/channels", (c) => c.json({ data: channelStatus() }));
+adminRoutes.get("/channels", async (c) => c.json({ data: await channelStatus() }));
+adminRoutes.get("/channels/alipay-bill/settings", async (c) => c.json({ data: await getPublicBillSettings() }));
+adminRoutes.post("/channels/alipay-bill/settings", async (c) => c.json({ data: await saveBillSettings(await c.req.json()) }));
 adminRoutes.get("/channels/alipay-bill/collector", async (c) => {
   const { alipayBillCollectorStatus } = await import("../services/alipay-bill-collector-service.js");
   return c.json({ data: await alipayBillCollectorStatus() });
 });
 
 adminRoutes.post("/channels/alipay/check", async (c) => {
-  const status = channelStatus();
+  const status = await channelStatus();
   if (!status.alipay.ready) throw new AppError("ALIPAY_NOT_CONFIGURED", "支付宝 App ID、应用私钥或支付宝公钥尚未完整配置", 409);
   const result = await channelFor("ALIPAY").query(`txp_check_${Date.now()}`);
   return c.json({ data: { ok: true, channel: "ALIPAY", gatewayStatus: result.status, checkedAt: new Date().toISOString() } });
@@ -247,8 +250,9 @@ adminRoutes.post("/webhooks/:id/retry", async (c) => {
   return c.json({ data: delivery });
 });
 
-function channelStatus() {
+async function channelStatus() {
   const cfg = config();
+  const bill = await billRuntimeConfig();
   const alipay = {
     appId: Boolean(cfg.ALIPAY_APP_ID),
     privateKey: Boolean(cfg.ALIPAY_PRIVATE_KEY),
@@ -267,12 +271,12 @@ function channelStatus() {
     alipayBill: {
       code: "ALIPAY_BILL",
       name: "支付宝账单收款",
-      ready: cfg.ALIPAY_BILL_ENABLED && Boolean(cfg.ALIPAY_BILL_QR_CONTENT) && (cfg.ALIPAY_BILL_COLLECTOR_ENABLED || cfg.ALIPAY_BILL_WATCHER_TOKEN.length >= 24),
-      enabled: cfg.ALIPAY_BILL_ENABLED,
-      qrContent: Boolean(cfg.ALIPAY_BILL_QR_CONTENT),
-      watcherToken: cfg.ALIPAY_BILL_WATCHER_TOKEN.length >= 24,
-      matchMode: cfg.ALIPAY_BILL_MATCH_MODE,
-      validSeconds: cfg.ALIPAY_BILL_VALID_SECONDS,
+      ready: bill.ALIPAY_BILL_ENABLED && Boolean(bill.ALIPAY_BILL_QR_CONTENT) && ((bill.ALIPAY_BILL_COLLECTOR_ENABLED && Boolean(bill.ALIPAY_APP_ID && bill.ALIPAY_PRIVATE_KEY && bill.ALIPAY_PUBLIC_KEY && /^2088\d{12}$/.test(bill.ALIPAY_BILL_USER_ID))) || bill.ALIPAY_BILL_WATCHER_TOKEN.length >= 24),
+      enabled: bill.ALIPAY_BILL_ENABLED,
+      qrContent: Boolean(bill.ALIPAY_BILL_QR_CONTENT),
+      watcherToken: bill.ALIPAY_BILL_WATCHER_TOKEN.length >= 24,
+      matchMode: bill.ALIPAY_BILL_MATCH_MODE,
+      validSeconds: bill.ALIPAY_BILL_VALID_SECONDS,
       watcherUrl: `${cfg.API_PUBLIC_URL}/api/v1/channels/alipay-bill/flows`,
     },
     mock: {

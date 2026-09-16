@@ -280,7 +280,7 @@ model WebhookDelivery {
   orderId        String
   eventType      String              @db.VarChar(80)
   protocol       IntegrationProtocol
-  url            String              @db.VarChar(300)
+  url            String              @db.VarChar(500)
   payload        Json
   status         WebhookStatus       @default(PENDING)
   attempts       Int                 @default(0) @db.UnsignedSmallInt
@@ -359,6 +359,15 @@ model ReconciliationRun {
   @@unique([provider, statementDate])
   @@index([status, statementDate])
   @@map("reconciliation_runs")
+}
+
+model BillChannelSettings {
+  id               String   @id @db.VarChar(80)
+  revision         Int      @default(1)
+  payloadEncrypted String   @db.LongText
+  updatedAt        DateTime @updatedAt
+
+  @@map("bill_channel_settings")
 }
 
 model BillCollectorState {

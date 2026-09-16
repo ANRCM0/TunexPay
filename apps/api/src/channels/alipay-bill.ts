@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { billRuntimeConfig } from "../services/bill-settings-service.js";
 import { ChannelDefinitiveError } from "../lib/errors.js";
 import { centsToYuan } from "../lib/money.js";
 import type { ChannelCreateInput, ChannelCreateResult, ChannelQueryResult, ChannelRefundInput, ChannelRefundQueryInput, ChannelRefundResult, ChannelWebhookResult, PaymentChannel } from "./types.js";
@@ -7,7 +7,7 @@ export class AlipayBillChannel implements PaymentChannel {
   readonly code = "ALIPAY_BILL" as const;
 
   async create(input: ChannelCreateInput): Promise<ChannelCreateResult> {
-    const cfg = config();
+    const cfg = await billRuntimeConfig();
     if (!cfg.ALIPAY_BILL_ENABLED || !cfg.ALIPAY_BILL_QR_CONTENT) {
       throw new ChannelDefinitiveError("ALIPAY_BILL_NOT_CONFIGURED", "支付宝账单收款通道尚未配置");
     }

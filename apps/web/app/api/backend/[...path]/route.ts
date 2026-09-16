@@ -4,6 +4,10 @@ type RouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
+  if (request.method === "POST" && path.join("/") === "channels/alipay-bill/settings") {
+    const trustedOrigin = new URL(process.env.WEB_PUBLIC_URL || request.url).origin;
+    if (request.headers.get("origin") !== trustedOrigin) return NextResponse.json({ error: { code: "ORIGIN_REJECTED", message: "配置保存请求来源不合法" } }, { status: 403 });
+  }
   const internal = process.env.INTERNAL_API_URL ?? "http://localhost:3001";
   const isPublic = path[0] === "public";
   const isMock = path[0] === "mock";

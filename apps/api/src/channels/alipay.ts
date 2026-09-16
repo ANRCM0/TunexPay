@@ -1,6 +1,6 @@
 import { createSign, createVerify } from "node:crypto";
 import type { PaymentStatus } from "@prisma/client";
-import { config } from "../config.js";
+import { config, type Config } from "../config.js";
 import { ChannelDefinitiveError, ChannelUncertainError } from "../lib/errors.js";
 import { centsToYuan, yuanToCents } from "../lib/money.js";
 import type {
@@ -34,11 +34,11 @@ export function alipayCanonical(params: Record<string, string>): string {
     .join("&");
 }
 
-function signParams(params: Record<string, string>): string {
+function signParams(params: Record<string, string>, privateKey = config().ALIPAY_PRIVATE_KEY): string {
   const signer = createSign("RSA-SHA256");
   signer.update(alipayCanonical(params), "utf8");
   signer.end();
-  return signer.sign(pem(config().ALIPAY_PRIVATE_KEY), "base64");
+  return signer.sign(pem(privateKey), "base64");
 }
 
 export function verifyAlipaySignature(payload: Record<string, string>, publicKey = config().ALIPAY_PUBLIC_KEY): boolean {
@@ -61,6 +61,7 @@ export function mapRefundQueryStatus(refundAmount: unknown): "SUCCESS" | "PROCES
 
 export class AlipayChannel implements PaymentChannel {
   readonly code = "ALIPAY" as const;
+  constructor(private readonly gatewaySettings?: Pick<Config, "ALIPAY_APP_ID" | "ALIPAY_PRIVATE_KEY" | "ALIPAY_PUBLIC_KEY" | "ALIPAY_GATEWAY" | "ALIPAY_SIGN_TYPE">) {}
 
   async queryAccountLogs(bizContent: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.call("alipay.data.bill.accountlog.query", bizContent);
@@ -157,7 +158,7 @@ export class AlipayChannel implements PaymentChannel {
   }
 
   private async call(method: string, bizContent: Record<string, unknown>, notifyUrl?: string): Promise<AlipayEnvelope> {
-    const cfg = config();
+    const cfg = this.gatewaySettings ?? config();
     if (!cfg.ALIPAY_APP_ID || !cfg.ALIPAY_PRIVATE_KEY || !cfg.ALIPAY_PUBLIC_KEY) {
       throw new ChannelDefinitiveError("ALIPAY_NOT_CONFIGURED", "支付宝通道尚未配置");
     }
@@ -172,7 +173,7 @@ export class AlipayChannel implements PaymentChannel {
       biz_content: JSON.stringify(bizContent),
     };
     if (notifyUrl) params.notify_url = notifyUrl;
-    params.sign = signParams(params);
+    params.sign = signParams(params, cfg.ALIPAY_PRIVATE_KEY);
 
     let response: Response;
     try {

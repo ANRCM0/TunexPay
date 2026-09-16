@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AlipayChannel } from "../channels/alipay.js";
-import { config } from "../config.js";
+import { billRuntimeConfig } from "./bill-settings-service.js";
 import { db } from "../db.js";
 import { sha256 } from "../lib/crypto.js";
 import { alipayTime, accountLogPage, collectorWindow, paymentFlowFromAccountLog } from "../lib/alipay-account-log.js";
@@ -13,26 +13,30 @@ const LEASE_MS = 60_000;
 const PAGE_SIZE = 100;
 
 export async function runAlipayBillCollector(): Promise<void> {
-  const cfg = config();
-  if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return;
-  const now = new Date();
-  const binding = sha256(JSON.stringify([cfg.ALIPAY_APP_ID, cfg.ALIPAY_BILL_USER_ID, cfg.ALIPAY_GATEWAY, cfg.ALIPAY_BILL_QR_CONTENT]));
-  const state = await db.billCollectorState.upsert({
-    where: { id: ALIPAY_BILL_ACCOUNT_ID },
-    create: { id: ALIPAY_BILL_ACCOUNT_ID, binding, cursorAt: new Date(now.getTime() - cfg.ALIPAY_BILL_LOOKBACK_SECONDS * 1000) },
-    update: {},
+  const result = await db.$transaction(async (tx) => {
+    const cfg = await billRuntimeConfig(tx, true);
+    if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return null;
+    const now = new Date();
+    const binding = sha256(JSON.stringify([cfg.ALIPAY_APP_ID, cfg.ALIPAY_BILL_USER_ID, cfg.ALIPAY_GATEWAY, cfg.ALIPAY_BILL_QR_CONTENT]));
+    const state = await tx.billCollectorState.upsert({
+      where: { id: ALIPAY_BILL_ACCOUNT_ID },
+      create: { id: ALIPAY_BILL_ACCOUNT_ID, binding, cursorAt: new Date(now.getTime() - cfg.ALIPAY_BILL_LOOKBACK_SECONDS * 1000) },
+      update: {},
+    });
+    if (state.binding !== binding) {
+      await tx.billCollectorState.update({ where: { id: state.id }, data: { heartbeatAt: now, lastError: "ACCOUNT_BINDING_CHANGED: 账号/网关/收款码已变更，需人工核对历史订单后迁移账号", consecutiveErrors: 1 } });
+      return null;
+    }
+    const owner = randomUUID();
+    await tx.billCollectorState.update({ where: { id: state.id }, data: { heartbeatAt: now } });
+    const claimed = await tx.billCollectorState.updateMany({
+      where: { id: state.id, nextRunAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] },
+      data: { leaseOwner: owner, lockedUntil: new Date(now.getTime() + LEASE_MS), heartbeatAt: now },
+    });
+    return claimed.count ? { cfg, state, owner, now } : null;
   });
-  if (state.binding !== binding) {
-    await db.billCollectorState.update({ where: { id: state.id }, data: { heartbeatAt: now, lastError: "ACCOUNT_BINDING_CHANGED: 账号/网关/收款码已变更，需人工核对历史订单后迁移账号", consecutiveErrors: 1 } });
-    return;
-  }
-  const owner = randomUUID();
-  await db.billCollectorState.update({ where: { id: state.id }, data: { heartbeatAt: now } });
-  const claimed = await db.billCollectorState.updateMany({
-    where: { id: state.id, nextRunAt: { lte: now }, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] },
-    data: { leaseOwner: owner, lockedUntil: new Date(now.getTime() + LEASE_MS), heartbeatAt: now },
-  });
-  if (!claimed.count) return;
+  if (!result) return;
+  const { cfg, state, owner, now } = result;
   const owned = { id: state.id, leaseOwner: owner };
   try {
     let current = await db.billCollectorState.findUniqueOrThrow({ where: { id: state.id } });
@@ -42,7 +46,7 @@ export async function runAlipayBillCollector(): Promise<void> {
       await db.billCollectorState.updateMany({ where: owned, data: { windowStart: window.start, windowEnd: window.end, nextPage: 1 } });
       current = await db.billCollectorState.findUniqueOrThrow({ where: { id: state.id } });
     }
-    const channel = new AlipayChannel();
+    const channel = new AlipayChannel(cfg);
     for (let step = 0; step < 5; step++) {
       const renewed = await db.billCollectorState.updateMany({ where: { ...owned, lockedUntil: { gt: new Date() } }, data: { lockedUntil: new Date(Date.now() + LEASE_MS), heartbeatAt: new Date() } });
       if (!renewed.count) throw new Error("ALIPAY_BILL_LEASE_LOST");
@@ -73,6 +77,7 @@ export async function runAlipayBillCollector(): Promise<void> {
       });
       if (!committed.count) throw new Error("ALIPAY_BILL_LEASE_LOST");
       if (page.complete) break;
+      if ((await billRuntimeConfig()).billRevision !== cfg.billRevision) break;
       current = await db.billCollectorState.findUniqueOrThrow({ where: { id: state.id } });
     }
   } catch (error) {
@@ -89,7 +94,7 @@ export async function runAlipayBillCollector(): Promise<void> {
 }
 
 export async function alipayBillCollectorStatus() {
-  const cfg = config();
+  const cfg = await billRuntimeConfig();
   if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return { enabled: false, status: "DISABLED" };
   const state = await db.billCollectorState.findUnique({ where: { id: ALIPAY_BILL_ACCOUNT_ID } });
   const stale = !state?.heartbeatAt || Date.now() - state.heartbeatAt.getTime() > Math.max(90, cfg.ALIPAY_BILL_POLL_SECONDS * 3) * 1000;
