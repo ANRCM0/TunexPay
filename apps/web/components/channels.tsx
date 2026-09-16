@@ -22,13 +22,19 @@ export function Channels() {
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   async function operate(channel: Channel, action: "check" | "test-payment") {
+    let amount: string | undefined;
+    if (action === "test-payment") {
+      const input = window.prompt("验收金额（元）。账单金额模式会在此基础上增加最多 ¥0.99，以收银台显示金额为准。", "0.01");
+      if (input === null) return;
+      amount = input.trim() || "0.01";
+    }
     setBusy(channel.id); setNotice(null);
     try {
-      const result = await api<{ data: Channel | { cashierUrl: string } }>(`/channel-instances/${channel.id}/${action}`, { method: "POST", body: JSON.stringify({ revision: channel.revision }) });
+      const result = await api<{ data: Channel | { cashierUrl: string } }>(`/channel-instances/${channel.id}/${action}`, { method: "POST", body: JSON.stringify({ revision: channel.revision, ...(amount ? { amount } : {}) }) });
       if (action === "check") {
         const checked = result.data as Channel;
         setNotice({ ok: checked.checkStatus !== "FAILED", text: checked.checkMessage || checkLabels[checked.checkStatus] || "检测完成" });
-      } else setNotice({ ok: true, text: "测试订单已创建。请打开收银台付款，到账后刷新结果。金额模式以收银台金额为准；测试款不会自动退款。" });
+      } else setNotice({ ok: true, text: `测试订单已创建（¥${amount}）。请打开收银台付款，到账后刷新结果；测试款不会自动退款。` });
       await channels.reload();
     } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "操作失败" }); }
     finally { setBusy(""); }
@@ -56,7 +62,7 @@ export function Channels() {
             <td><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
               <button className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
-              <button className="link-button" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "实付 ¥0.01"}</button>
+              <button className="link-button" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
               {channel.testPayment?.currentRevision && <a className="link-button" href={channel.testPayment.cashierUrl} target="_blank" rel="noreferrer">收银台</a>}
             </div></td>
           </tr>)}
