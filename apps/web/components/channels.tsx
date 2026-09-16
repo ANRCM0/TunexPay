@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { LoadingState, PageHead, Status } from "./common";
 import { BillSettingsPanel } from "./bill-settings";
+import { OwnerNotificationsPanel } from "./owner-notifications";
 
 type ChannelStatus = {
   alipay: { code: string; name: string; ready: boolean; environment: string; gateway: string; webhookUrl: string; checks: { appId: boolean; privateKey: boolean; publicKey: boolean } };
@@ -74,6 +75,7 @@ export function Channels() {
     </LoadingState>
 
     <BillSettingsPanel onSaved={async () => { await reloadChannels(); await reloadCollector(); }} />
+    <OwnerNotificationsPanel />
     <section className="card section detail-section">
       <div className="section-title"><h2>应用默认通道</h2><span className="muted">切换后仅影响新创建的支付</span></div>
       <LoadingState loading={appsLoading} error={appsError} empty={!applications?.length}>

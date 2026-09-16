@@ -4,6 +4,7 @@ import type { AppEnv } from "../types.js";
 import { channelFor } from "../channels/registry.js";
 import { config } from "../config.js";
 import { billRuntimeConfig, getPublicBillSettings, saveBillSettings } from "../services/bill-settings-service.js";
+import { getOwnerSettings, saveOwnerSettings, testOwnerNotification } from "../services/owner-notification-service.js";
 import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
 import { AppError } from "../lib/errors.js";
@@ -19,6 +20,18 @@ import { importAlipayBill, matchReceipt } from "../services/reconciliation-servi
 export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
 adminRoutes.use("*", adminAudit);
+
+adminRoutes.get("/owner-notifications/settings", async c => c.json({ data: await getOwnerSettings() }));
+adminRoutes.post("/owner-notifications/settings", async c => c.json({ data: await saveOwnerSettings(await c.req.json()) }));
+adminRoutes.post("/owner-notifications/test", async c => {
+  const { channel } = z.object({ channel: z.enum(["EMAIL", "FEISHU"]) }).parse(await c.req.json());
+  const task = await testOwnerNotification(channel);
+  return c.json({ data: { id: task.id, status: task.status } }, 202);
+});
+adminRoutes.get("/owner-notifications/deliveries", async c => {
+  const rows = await db.ownerNotificationDelivery.findMany({ orderBy: { createdAt: "desc" }, take: 50, select: { id: true, channel: true, title: true, status: true, attempts: true, lastError: true, createdAt: true } });
+  return c.json({ data: rows });
+});
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
