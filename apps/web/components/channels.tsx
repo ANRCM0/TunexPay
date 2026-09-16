@@ -34,7 +34,11 @@ export function Channels() {
       if (action === "check") {
         const checked = result.data as Channel;
         setNotice({ ok: checked.checkStatus !== "FAILED", text: checked.checkMessage || checkLabels[checked.checkStatus] || "检测完成" });
-      } else setNotice({ ok: true, text: `测试订单已创建（¥${amount}）。请打开收银台付款，到账后刷新结果；测试款不会自动退款。` });
+      } else {
+        const cashierUrl = (result.data as { cashierUrl: string }).cashierUrl;
+        if (cashierUrl) window.open(cashierUrl, "_blank", "noopener");
+        setNotice({ ok: true, text: `测试订单已创建（¥${amount}），已在新窗口打开收银台；测试款不会自动退款。` });
+      }
       await channels.reload();
     } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "操作失败" }); }
     finally { setBusy(""); }
@@ -56,18 +60,16 @@ export function Channels() {
           {channels.data?.map(channel => <tr key={channel.id}>
             <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="mono muted">{channel.plugin} · {channel.id}</div></div></div></td>
             <td><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
-            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg clamp-2" title={channel.checkMessage}>{channel.checkMessage}</div>}
+            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg ellipsis" title={channel.checkMessage}>{channel.checkMessage}</div>}
               {channel.testPayment && <div className="muted check-msg">实付订单 <Status value={channel.testPayment.status} />{!channel.testPayment.currentRevision && "（旧配置）"}</div>}
             </td><td>{time(channel.checkedAt)}</td>
             <td><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
               <button className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
               <button className="link-button" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
-              {channel.testPayment?.currentRevision && <a className="link-button" href={channel.testPayment.cashierUrl} target="_blank" rel="noreferrer">收银台</a>}
             </div></td>
           </tr>)}
         </tbody></table></div>
-        <p className="muted">接口检测验证账号与上游通信。实付验收还会验证下单、到账和支付状态更新；业务系统 Webhook 需单独验收。账单金额模式可能增加最多 ¥0.99，请按收银台显示金额付款。</p>
       </LoadingState>
     </Section>
     {editor && <Drawer title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} plugin={editor.plugin} channel={editor} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} /></Drawer>}

@@ -63,20 +63,8 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
         </div>}
         {actionError && <div className="operation-notice error" aria-live="polite">{actionError}</div>}
         {data.channel === "ALIPAY_BILL" && canPay && <p className="muted cashier-note">请勿保存、转发收款码或在其他订单复用。款项直接进入支付宝收款账号；备注错误、金额不符或超时付款可能需要人工核对。</p>}
+        <div className="cashier-foot"><span className="mono muted">{data.paymentNo}</span><span className="muted">{statusText(data.status)}</span></div>
       </section>
-
-      <aside className="card cashier-side">
-        <h2>订单信息</h2>
-        <div className="cashier-side-rows">
-          <div><span>订单标题</span><strong>{data.subject}</strong></div>
-          <div><span>支付金额</span><strong>{money(data.amount)}</strong></div>
-          <div><span>支付单号</span><strong className="mono">{data.paymentNo}</strong></div>
-          <div><span>支付方式</span><strong>{data.channel}</strong></div>
-          <div><span>当前状态</span><strong>{statusText(data.status)}</strong></div>
-          <div><span>过期时间</span><strong>{data.validUntil ? new Date(data.validUntil).toLocaleString("zh-CN", { hour12: false }) : "—"}</strong></div>
-        </div>
-        <button className="button secondary cashier-refresh" onClick={() => void reload()}>刷新订单</button>
-      </aside>
     </div>}
   </div>;
 }

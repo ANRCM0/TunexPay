@@ -7,13 +7,14 @@
 .cashier-brand span { color: var(--muted); font-size: 13px; }
 .cashier-loading { max-width: 720px; margin: 40px auto; }
 
-.cashier-layout { max-width: 980px; margin: 26px auto 0; padding: 0 18px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 18px; align-items: start; animation: cashier-in .25s ease; }
+.cashier-layout { max-width: 560px; margin: 26px auto 0; padding: 0 18px; display: grid; gap: 18px; animation: cashier-in .25s ease; }
 @keyframes cashier-in { from { opacity: 0; transform: translateY(8px); } }
 .cashier-main { padding: 26px; }
 .cashier-main-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
 .cashier-main-head h1 { font-size: 19px; margin-top: 8px; }
 .cashier-paybox { text-align: center; display: grid; justify-items: center; gap: 8px; }
 .amount { font-weight: 800; font-size: 34px; margin: 6px 0; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cashier-foot { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
 .qr { width: 210px; height: 210px; margin: 8px auto; border: 10px solid white; box-shadow: 0 4px 22px rgba(0,0,0,.08); border-radius: 4px; }
 .cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: 9px; display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; animation: notice-in .2s ease; }
 .cashier-state strong { font-size: 16px; }
@@ -29,14 +30,10 @@
 .cashier-countdown { color: var(--primary); }
 .cashier-note { margin-top: 16px; font-size: 11px; line-height: 1.6; }
 
-.cashier-side { padding: 20px; }
-.cashier-side h2 { margin: 0 0 14px; font-size: 14px; }
-.cashier-side-rows { display: grid; }
-.cashier-side-rows > div { display: grid; gap: 4px; padding: 9px 0; border-bottom: 1px solid #eef1f6; }
-.cashier-side-rows > div:last-child { border-bottom: 0; }
-.cashier-side-rows span { color: var(--muted); font-size: 11px; }
-.cashier-side-rows strong { font-size: 13px; font-weight: 650; word-break: break-all; }
-.cashier-refresh { width: 100%; margin-top: 16px; }
+@media (max-width: 560px) {
+  .cashier-duo { grid-template-columns: 1fr; }
+  .cashier-foot { flex-direction: column; }
+}
 
 .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #dbe7fd 0, var(--paper) 48%); }
 .login-card { width: min(420px, 100%); padding: 36px; text-align: center; animation: cashier-in .25s ease; }
@@ -46,10 +43,7 @@
 .login-form .operation-notice { margin: 0; }
 .login-note { margin: 20px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
-@media (max-width: 860px) {
-  .cashier-layout { grid-template-columns: 1fr; }
-}
-
 @media (max-width: 560px) {
   .cashier-duo { grid-template-columns: 1fr; }
+  .cashier-foot { flex-direction: column; }
 }
