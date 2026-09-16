@@ -113,7 +113,7 @@ docker compose up -d --build
 ```dotenv
 ALIPAY_BILL_ENABLED=true
 ALIPAY_BILL_QR_CONTENT=支付宝收款二维码解析出的内容
-ALIPAY_BILL_MATCH_MODE=REMARK
+ALIPAY_BILL_MATCH_MODE=AMOUNT
 ALIPAY_BILL_VALID_SECONDS=300
 ALIPAY_BILL_WATCHER_TOKEN=至少24字符的独立随机令牌
 ```
@@ -129,7 +129,7 @@ curl -X POST https://pay.example.com/api/v1/channels/alipay-bill/flows \
 
 原生格式也可使用 `providerTradeNo`、整数分 `amount`、`paidAt`、`remark`，并通过 `{records:[...]}` 一次提交最多 100 条。Watcher 必须重试网络失败，并对响应中仍为 `PROCESSING` 的流水再次投递；终态为 `MATCHED`、`MISMATCH` 或 `IGNORED`。同一支付宝流水号重复提交是幂等的；即使 API 在处理中崩溃，Worker 也会在数据库租约到期后自动恢复。
 
-匹配严格按交易号、备注码、有效期内金额进行。备注或金额只负责定位候选，系统仍会校验精确实收金额和支付时间窗。出现多候选时不会猜单，而会进入“支付异常”后台。建议优先使用 `REMARK`；只有付款端无法填写备注时才使用 `AMOUNT`。
+匹配严格按交易号、备注码、有效期内金额进行。备注或金额只负责定位候选，系统仍会校验精确实收金额和支付时间窗。出现多候选时不会猜单，而会进入“支付异常”后台。注意：官方账务明细接口不下发付款备注，内置采集器只能用 `AMOUNT` 金额匹配；`REMARK` 仅对能抓到备注的外部 Watcher 有效。
 
 ## 本地 Mock 全链路
 

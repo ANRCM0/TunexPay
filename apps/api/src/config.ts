@@ -22,7 +22,7 @@ const envSchema = z.object({
   ALIPAY_BILL_OVERLAP_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
   ALIPAY_BILL_LAG_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   ALIPAY_BILL_QR_CONTENT: z.string().default(""),
-  ALIPAY_BILL_MATCH_MODE: z.enum(["REMARK", "AMOUNT"]).default("REMARK"),
+  ALIPAY_BILL_MATCH_MODE: z.enum(["REMARK", "AMOUNT"]).default("AMOUNT"),
   ALIPAY_BILL_VALID_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
   ALIPAY_BILL_AMOUNT_OFFSET_MAX: z.coerce.number().int().min(0).max(99).default(99),
   ALIPAY_BILL_WATCHER_TOKEN: z.string().default(""),
