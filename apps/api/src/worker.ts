@@ -9,6 +9,7 @@ import { runDueOrderExpirations } from "./services/expiration-service.js";
 import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
 import { runAlipayBillCollector } from "./services/alipay-bill-collector-service.js";
 import { runOwnerNotifications } from "./services/owner-notification-service.js";
+import { WORKER_HEARTBEAT_KEY } from "./lib/system-status.js";
 
 const connection = new Redis(config().REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue("tuoxin-pay-webhooks", { connection });
@@ -49,6 +50,7 @@ let pollTask: Promise<void> | null = null;
 let collectorTask: Promise<void> | null = null;
 let ownerTask: Promise<void> | null = null;
 function tick(): void {
+  void connection.set(WORKER_HEARTBEAT_KEY, new Date().toISOString()).catch((error: unknown) => log("warn", "worker.heartbeat_failed", { error: error instanceof Error ? error.message : String(error) }));
   if (!ownerTask) ownerTask = runOwnerNotifications().catch(() => log("error", "owner_notification.worker_failed", { code: "NOTIFICATION_WORKER_ERROR" })).finally(() => { ownerTask = null; });
   if (!pollTask) pollTask = poll().finally(() => { pollTask = null; });
   if (!collectorTask) collectorTask = runAlipayBillCollector().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
@@ -59,6 +61,7 @@ log("info", "worker.started", { queue: "tuoxin-pay-webhooks" });
 
 async function shutdown(): Promise<void> {
   clearInterval(interval);
+  await connection.del(WORKER_HEARTBEAT_KEY).catch(() => undefined);
   await Promise.allSettled([pollTask, collectorTask, ownerTask].filter((task): task is Promise<void> => Boolean(task)));
   await worker.close();
   await queue.close();

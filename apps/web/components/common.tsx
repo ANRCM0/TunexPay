@@ -23,15 +23,18 @@ const STATUS_TONE: Record<string, Tone> = {
   ACTIVE: "success",
   SUCCESS: "success",
   MATCHED: "success",
+  ONLINE: "success",
   PENDING: "warning",
   PROCESSING: "warning",
   UNKNOWN: "warning",
   UNMATCHED: "warning",
+  STALE: "warning",
   FAILED: "danger",
   DEAD: "danger",
   DISABLED: "danger",
   MISMATCH: "danger",
   OPEN: "danger",
+  OFFLINE: "danger",
   CREATED: "neutral",
   CLOSED: "neutral",
   PARTIALLY_REFUNDED: "neutral",
@@ -74,6 +77,9 @@ const statusLabels: Record<string, string> = {
   IGNORED: "已忽略",
   OPEN: "待处理",
   RESOLVED: "已解决",
+  ONLINE: "在线",
+  STALE: "心跳延迟",
+  OFFLINE: "离线",
 };
 
 export function statusText(value: string) { return statusLabels[value] ?? value; }
