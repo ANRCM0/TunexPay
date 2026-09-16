@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { config } from "../config.js";
 import { safeEqual } from "../lib/crypto.js";
@@ -57,5 +58,11 @@ channelRoutes.get("/public/payments/:paymentNo", async (c) => {
   c.header("Cache-Control", "no-store, private");
   c.header("Referrer-Policy", "no-referrer");
   c.header("X-Robots-Tag", "noindex, nofollow");
-  return c.json({ data: await publicPayment(c.req.param("paymentNo")) });
+  const waitSeconds = z.coerce.number().min(0).max(20).default(0).parse(c.req.query("wait"));
+  const deadline = Date.now() + waitSeconds * 1000;
+  for (;;) {
+    const view = await publicPayment(c.req.param("paymentNo"));
+    if (!waitSeconds || ["SUCCESS", "FAILED", "CLOSED"].includes(view.status) || Date.now() >= deadline) return c.json({ data: view });
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
 });
