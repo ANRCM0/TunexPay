@@ -17,7 +17,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
     void (async () => {
       for (;;) {
         try {
-          const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=15`, { signal: controller.signal });
+          const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=12`, { signal: controller.signal });
           if (controller.signal.aborted) return;
           setData(result.data); setError(""); setLoading(false);
           if (["SUCCESS", "FAILED", "CLOSED"].includes(result.data.status)) return;

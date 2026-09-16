@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { api, useApi } from "../lib/api";
-import { Section, Toggle } from "./common";
+import { Toggle } from "./common";
 import type { Channel } from "./channels";
 
 const defaults: Record<string, string | number | boolean> = { appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "", collectorEnabled: false, matchMode: "AMOUNT", validSeconds: 300, amountOffsetMax: 99, pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15 };
@@ -24,7 +24,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
     } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); }
     finally { setSaving(false); }
   }
-  return <Section title={`${channel ? "配置" : "创建"}通道 · ${plugin}`} className="detail-section">
+  return <div>
     {channel && plugin === "ALIPAY_BILL" && <CollectorStatus id={channel.id} />}
     <form onSubmit={event => void submit(event)}><fieldset className="bill-settings-fields" disabled={saving}>
       {error && <div role="alert" className="error">{error}</div>}
@@ -51,7 +51,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
       <p className="muted">保存后请重新检测。已有交易的通道不能更换账号或网关；可创建新通道再分配。停用新订单后，已有交易仍可查单、收取回调和退款。</p>
       <div className="bill-settings-actions"><button className="button" type="submit">{saving ? "保存中…" : "保存通道"}</button><button className="button secondary" type="button" onClick={onClose}>取消</button></div>
     </fieldset></form>
-  </Section>;
+  </div>;
 }
 
 function CollectorStatus({ id }: { id: string }) {
