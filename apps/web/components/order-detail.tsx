@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Section, Stat, Status, money, time } from "./common";
+import { ChannelTag, LoadingState, Section, Stat, Status, Tabs, money, time } from "./common";
 
 type Refund = { refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string };
 type Payment = {
@@ -22,8 +21,11 @@ type Order = {
   application: { name: string; appId: string }; payments: Payment[]; events: Event[]; webhookDeliveries: Delivery[]; paymentExceptions: PaymentException[];
 };
 
-export function OrderDetail({ orderNo }: { orderNo: string }) {
+const DETAIL_TABS = ["概览", "事件时间线", "退款与通知"] as const;
+
+export function OrderDetailBody({ orderNo }: { orderNo: string }) {
   const { data, loading, error, reload } = useApi<Order>(`/orders/${encodeURIComponent(orderNo)}`, 8_000);
+  const [tab, setTab] = useState<string>(DETAIL_TABS[0]);
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
@@ -42,49 +44,40 @@ export function OrderDetail({ orderNo }: { orderNo: string }) {
     }
   }
 
-  return <>
-    <PageHead eyebrow="Order Detail" title={data?.subject ?? "订单详情"} copy={data ? `${data.application.name} · ${data.externalOrderNo}` : "查看支付尝试、退款、通知与完整业务事件。"} action={<Link className="button secondary" href="/orders">返回订单</Link>} />
-    <LoadingState loading={loading} error={error}>
-      {data && <>
-        {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
-        {data.paymentExceptions.some(item => ["OPEN", "PROCESSING"].includes(item.status)) && <div className="operation-notice error">这张订单存在待处理的资金异常，请前往“支付异常”核实，勿直接修改订单状态。</div>}
-        {data.expirationError && <div className="operation-notice error">订单过期关闭暂未完成：{data.expirationError}。系统将在 {time(data.expirationNextAttemptAt)} 重试。</div>}
+  return <LoadingState loading={loading} error={error}>
+    {data && <>
+      {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
+      {data.paymentExceptions.some(item => ["OPEN", "PROCESSING"].includes(item.status)) && <div className="operation-notice error">这张订单存在待处理的资金异常，请前往“支付异常”核实，勿直接修改订单状态。</div>}
+      {data.expirationError && <div className="operation-notice error">订单过期关闭暂未完成：{data.expirationError}。系统将在 {time(data.expirationNextAttemptAt)} 重试。</div>}
+      <Tabs items={DETAIL_TABS} active={tab} onChange={setTab} />
+
+      {tab === "概览" && <>
         <div className="grid stats">
-          <Stat detail label="订单金额" value={money(data.amount)} note={data.currency} />
-          <Stat detail label="订单状态" value={<Status value={data.status} />} note={data.paidAt ? `支付于 ${time(data.paidAt)}` : "尚未完成支付"} />
-          <Stat detail label="支付尝试" value={String(data.payments.length)} note={`${data.payments.filter(item => item.status === "SUCCESS").length} 笔成功`} />
-          <Stat detail label="通知任务" value={String(data.webhookDeliveries.length)} note={`${data.webhookDeliveries.filter(item => item.status === "SUCCESS").length} 次送达`} />
+          <Stat detail tone="blue" label="订单金额" value={money(data.amount)} note={data.currency} />
+          <Stat detail tone={data.status === "SUCCESS" ? "green" : "orange"} label="订单状态" value={<Status value={data.status} />} note={data.paidAt ? `支付于 ${time(data.paidAt)}` : "尚未完成支付"} />
+          <Stat detail tone="blue" label="支付尝试" value={String(data.payments.length)} note={`${data.payments.filter(item => item.status === "SUCCESS").length} 笔成功`} />
+          <Stat detail tone="blue" label="通知任务" value={String(data.webhookDeliveries.length)} note={`${data.webhookDeliveries.filter(item => item.status === "SUCCESS").length} 次送达`} />
         </div>
 
-        <div className="detail-columns">
-          <Section title="订单信息" action={<span className="mono muted">{data.orderNo}</span>}>
-            <div className="detail-list">
-              <Detail label="应用" value={`${data.application.name} (${data.application.appId})`} mono />
-              <Detail label="业务订单号" value={data.externalOrderNo} mono />
-              <Detail label="接入协议" value={data.protocol} />
-              <Detail label="创建时间" value={time(data.createdAt)} />
-              <Detail label="订单到期" value={time(data.expiresAt)} />
-              <Detail label="过期处理" value={data.expirationAttempts ? `${data.expirationAttempts} 次` : "尚未触发"} />
-              <Detail label="商品说明" value={data.description || "—"} />
-              <Detail label="通知地址" value={data.notifyUrl || "—"} mono />
-              <Detail label="返回地址" value={data.returnUrl || "—"} mono />
-            </div>
-          </Section>
-
-          <Section title="事件时间线" action={<span className="muted">{data.events.length} 条</span>}>
-            {data.events.length ? <div className="timeline">{data.events.map(event => <div className="timeline-item" key={event.id}>
-              <div className="timeline-type">{event.type}</div>
-              <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {event.source} · {time(event.createdAt)}</div>
-              {hasPayload(event.payload) && <details className="event-payload"><summary>查看事件数据</summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>}
-            </div>)}</div> : <div className="empty compact">暂无事件</div>}
-          </Section>
-        </div>
+        <Section title="订单信息" action={<span className="mono muted">{data.orderNo}</span>}>
+          <div className="detail-list">
+            <Detail label="应用" value={`${data.application.name} (${data.application.appId})`} mono />
+            <Detail label="业务订单号" value={data.externalOrderNo} mono />
+            <Detail label="接入协议" value={data.protocol} />
+            <Detail label="创建时间" value={time(data.createdAt)} />
+            <Detail label="订单到期" value={time(data.expiresAt)} />
+            <Detail label="过期处理" value={data.expirationAttempts ? `${data.expirationAttempts} 次` : "尚未触发"} />
+            <Detail label="商品说明" value={data.description || "—"} />
+            <Detail label="通知地址" value={data.notifyUrl || "—"} mono />
+            <Detail label="返回地址" value={data.returnUrl || "—"} mono />
+          </div>
+        </Section>
 
         <Section title="支付尝试" action={<span className="muted">可信晚到成功会保留记录</span>} className="detail-section">
           {data.payments.length ? <div className="table-wrap"><table><thead><tr><th>尝试</th><th>渠道 / 支付单号</th><th>状态</th><th>金额</th><th>渠道交易号</th><th>创建 / 支付时间</th><th>操作</th></tr></thead>
             <tbody>{data.payments.map(payment => <tr key={payment.id}>
               <td>#{payment.attemptNo}</td>
-              <td><strong>{payment.channel} · {payment.method}</strong><div className="mono muted">{payment.paymentNo}</div>{payment.errorMessage && <div className="row-error">{payment.errorCode}: {payment.errorMessage}</div>}</td>
+              <td><ChannelTag code={payment.channel} /><div className="mono muted">{payment.method} · {payment.paymentNo}</div>{payment.errorMessage && <div className="row-error">{payment.errorCode}: {payment.errorMessage}</div>}</td>
               <td><Status value={payment.status} /></td><td>{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
               <td className="mono">{payment.channelTradeNo || payment.channelOrderNo || "—"}</td>
               <td>{time(payment.createdAt)}<div className="muted">{payment.paidAt ? time(payment.paidAt) : "未支付"}</div></td>
@@ -96,23 +89,31 @@ export function OrderDetail({ orderNo }: { orderNo: string }) {
           </table></div> : <div className="empty compact">尚未发起支付</div>}
         </Section>
 
-        {data.paymentExceptions.length > 0 && <Section title="支付异常" action={<Link className="data-link" href="/exceptions">进入处置队列</Link>} className="detail-section">
+        {data.paymentExceptions.length > 0 && <Section title="支付异常" action={<span className="muted">处置请前往“支付异常”队列</span>} className="detail-section">
           {data.paymentExceptions.map(item => <div className="record" key={item.id}><div><strong>{item.summary}</strong> <Status value={item.status} /></div><div className="mono muted">{item.exceptionNo} · {item.type} · {item.severity}</div><div className="muted">{item.resolution || "尚未填写处置结果"} · {time(item.detectedAt)}</div></div>)}
         </Section>}
-
-        <Section title="退款与通知" className="detail-section">
-          <div className="detail-columns nested">
-            <div><h3>退款记录</h3>{data.payments.flatMap(payment => payment.refunds.map(refund => ({ ...refund, paymentNo: payment.paymentNo }))).map(refund => <div className="record" key={refund.refundNo}>
-              <div><strong>{money(refund.amount)}</strong> <Status value={refund.status} /></div><div className="mono muted">{refund.refundNo} · {refund.paymentNo}</div><div className="muted">{refund.reason || "未填写原因"} · {time(refund.createdAt)}</div>
-            </div>)}{data.payments.every(payment => payment.refunds.length === 0) && <div className="empty compact">暂无退款</div>}</div>
-            <div><h3>Webhook 投递</h3>{data.webhookDeliveries.map(delivery => <div className="record" key={delivery.id}>
-              <div><strong>{delivery.eventType}</strong> <Status value={delivery.status} /></div><div className="mono muted break-all">{delivery.url}</div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>{delivery.lastError && <div className="row-error">{delivery.lastError}</div>}
-            </div>)}{!data.webhookDeliveries.length && <div className="empty compact">暂无通知任务</div>}</div>
-          </div>
-        </Section>
       </>}
-    </LoadingState>
-  </>;
+
+      {tab === "事件时间线" && <Section title="事件时间线" action={<span className="muted">{data.events.length} 条</span>}>
+        {data.events.length ? <div className="timeline">{data.events.map(event => <div className="timeline-item" key={event.id}>
+          <div className="timeline-type">{event.type}</div>
+          <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {event.source} · {time(event.createdAt)}</div>
+          {hasPayload(event.payload) && <details className="event-payload"><summary>查看事件数据</summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>}
+        </div>)}</div> : <div className="empty compact">暂无事件</div>}
+      </Section>}
+
+      {tab === "退款与通知" && <Section title="退款与通知">
+        <div className="detail-columns nested">
+          <div><h3>退款记录</h3>{data.payments.flatMap(payment => payment.refunds.map(refund => ({ ...refund, paymentNo: payment.paymentNo }))).map(refund => <div className="record" key={refund.refundNo}>
+            <div><strong>{money(refund.amount)}</strong> <Status value={refund.status} /></div><div className="mono muted">{refund.refundNo} · {refund.paymentNo}</div><div className="muted">{refund.reason || "未填写原因"} · {time(refund.createdAt)}</div>
+          </div>)}{data.payments.every(payment => payment.refunds.length === 0) && <div className="empty compact">暂无退款</div>}</div>
+          <div><h3>Webhook 投递</h3>{data.webhookDeliveries.map(delivery => <div className="record" key={delivery.id}>
+            <div><strong>{delivery.eventType}</strong> <Status value={delivery.status} /></div><div className="mono muted break-all">{delivery.url}</div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>{delivery.lastError && <div className="row-error">{delivery.lastError}</div>}
+          </div>)}{!data.webhookDeliveries.length && <div className="empty compact">暂无通知任务</div>}</div>
+        </div>
+      </Section>}
+    </>}
+  </LoadingState>;
 }
 
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

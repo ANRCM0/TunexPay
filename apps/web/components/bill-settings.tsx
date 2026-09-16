@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Section } from "./common";
+import { LoadingState, Section, Toggle } from "./common";
 
 type Draft = {
   revision: number; enabled: boolean; collectorEnabled: boolean; appId: string; userId: string;
@@ -48,8 +48,8 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
       {draft && data && <form onSubmit={event => void save(event)}>
         <fieldset className="bill-settings-fields" disabled={saving}>
           <div className="bill-settings-switches">
-            <label><input type="checkbox" checked={draft.enabled} onChange={event => update("enabled", event.target.checked)} />启用账单收款（接收新订单）</label>
-            <label><input type="checkbox" checked={draft.collectorEnabled} onChange={event => update("collectorEnabled", event.target.checked)} />启用自动账单采集</label>
+            <Toggle checked={draft.enabled} onChange={value => update("enabled", value)} label="启用账单收款（接收新订单）" />
+            <Toggle checked={draft.collectorEnabled} onChange={value => update("collectorEnabled", value)} label="启用自动账单采集" />
           </div>
           <p className="muted">暂停新订单时可保留采集，用于确认已有订单。停止采集不会撤销已接收流水，也无法停用支付宝静态收款码。</p>
           <div className="bill-settings-grid">

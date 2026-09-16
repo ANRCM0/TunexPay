@@ -10,3 +10,4 @@ coverage/
 *.zip
 .DS_Store
 apps/api/collector-probe.mts
+mpay/

@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { api, useApi } from "../lib/api";
-import { Section } from "./common";
+import { Section, Toggle } from "./common";
 import type { Channel } from "./channels";
 
 const defaults: Record<string, string | number | boolean> = { appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "", collectorEnabled: false, matchMode: "AMOUNT", validSeconds: 300, amountOffsetMax: 99, pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15 };
@@ -29,7 +29,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
     <form onSubmit={event => void submit(event)}><fieldset className="bill-settings-fields" disabled={saving}>
       {error && <div role="alert" className="error">{error}</div>}
       <div className="bill-settings-grid"><label>通道名称<input value={name} onChange={event => setName(event.target.value)} required maxLength={120} placeholder="例如：支付宝 · 工作室" /></label>
-        <label className="channel-enable"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />启用新订单</label>
+        <div><Toggle checked={enabled} onChange={setEnabled} label="启用新订单" /></div>
         {plugin !== "MOCK" && <>
           <label>支付宝 App ID<input value={String(settings.appId)} onChange={event => update("appId", event.target.value)} autoComplete="off" maxLength={40} /></label>
           <label>官方网关<select value={String(settings.gateway)} onChange={event => update("gateway", event.target.value)}><option value="https://openapi.alipay.com/gateway.do">生产环境</option><option value="https://openapi-sandbox.dl.alipaydev.com/gateway.do">沙箱环境</option><option value="https://openapi.alipaydev.com/gateway.do">旧版沙箱</option></select></label>
@@ -37,7 +37,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
         </>}
         {plugin === "ALIPAY_BILL" && <>
           <label>收款用户 ID<input value={String(settings.userId)} maxLength={32} placeholder="2088 开头的 16 位 ID" onChange={event => update("userId", event.target.value)} /></label>
-          <label className="channel-enable"><input type="checkbox" checked={Boolean(settings.collectorEnabled)} onChange={event => update("collectorEnabled", event.target.checked)} />启用该通道的自动账单采集</label>
+          <div><Toggle checked={Boolean(settings.collectorEnabled)} onChange={value => update("collectorEnabled", value)} label="启用该通道的自动账单采集" /></div>
           <label className="bill-settings-wide">收款码内容<textarea rows={3} maxLength={4000} value={String(settings.qrContent)} onChange={event => update("qrContent", event.target.value)} placeholder="二维码解析后的完整内容" /></label>
           <label>匹配方式<select value={String(settings.matchMode)} onChange={event => update("matchMode", event.target.value)}><option value="AMOUNT">金额偏移（内置采集推荐）</option><option value="REMARK">付款备注（仅外部 Watcher）</option></select></label>
           <p className="muted bill-settings-wide">官方账务接口不下发付款备注，内置采集器只能用金额匹配；备注匹配需要接入能抓到备注的外部 Watcher。</p>
