@@ -42,6 +42,15 @@ export function Drawer({ title, onClose, wide = false, children }: { title: stri
   </div>;
 }
 
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return <div className="drawer-mask modal-mask" onClick={onClose}>
+    <div className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-label={title}>
+      <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="drawer-body">{children}</div>
+    </div>
+  </div>;
+}
+
 export function Tabs({ items, active, onChange }: { items: readonly string[]; active: string; onChange: (item: string) => void }) {
   return <div className="tabs">{items.map(item => <button key={item} type="button" className={item === active ? "tabs-item active" : "tabs-item"} onClick={() => onChange(item)}>{item}</button>)}</div>;
 }
