@@ -16,6 +16,7 @@ import { closePayment, queryPayment } from "../services/payment-service.js";
 import { updatePaymentException } from "../services/payment-exception-service.js";
 import { queryRefund } from "../services/refund-service.js";
 import { importAlipayBill, matchReceipt } from "../services/reconciliation-service.js";
+import { collectSystemStatus } from "../lib/system-status.js";
 
 export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
@@ -72,6 +73,8 @@ adminRoutes.get("/dashboard", async (c) => {
     openPaymentExceptions, expirationFailures, failedAdminActionsToday, recentEvents,
   }) });
 });
+
+adminRoutes.get("/system", async c => c.json({ data: jsonSafe(await collectSystemStatus()) }));
 
 adminRoutes.get("/applications", async (c) => {
   const applications = await db.application.findMany({ orderBy: { createdAt: "desc" }, select: {
