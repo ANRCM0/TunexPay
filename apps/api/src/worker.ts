@@ -7,6 +7,7 @@ import { deliverWebhook, listDueDeliveryIds, recoverExpiredDeliveries } from "./
 import { runDuePaymentRecoveries, runDueRefundRecoveries } from "./services/recovery-service.js";
 import { runDueOrderExpirations } from "./services/expiration-service.js";
 import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
+import { runAlipayBillCollector } from "./services/alipay-bill-collector-service.js";
 
 const connection = new Redis(config().REDIS_URL, { maxRetriesPerRequest: null });
 const queue = new Queue("tuoxin-pay-webhooks", { connection });
@@ -43,12 +44,19 @@ async function poll(): Promise<void> {
   }
 }
 
-const interval = setInterval(() => void poll(), 3_000);
-void poll();
+let pollTask: Promise<void> | null = null;
+let collectorTask: Promise<void> | null = null;
+function tick(): void {
+  if (!pollTask) pollTask = poll().finally(() => { pollTask = null; });
+  if (!collectorTask) collectorTask = runAlipayBillCollector().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
+}
+const interval = setInterval(tick, 3_000);
+tick();
 log("info", "worker.started", { queue: "tuoxin-pay-webhooks" });
 
 async function shutdown(): Promise<void> {
   clearInterval(interval);
+  await Promise.allSettled([pollTask, collectorTask].filter((task): task is Promise<void> => Boolean(task)));
   await worker.close();
   await queue.close();
   await connection.quit();

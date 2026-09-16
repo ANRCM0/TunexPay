@@ -10,6 +10,7 @@ TUOXIN Pay 是面向自有业务的轻量支付中台。它不是 MPAY 的改皮
 - 支付状态机：`CREATED → PROCESSING → SUCCESS / FAILED / UNKNOWN / CLOSED`，支持终态后的可信晚到成功。
 - 支付宝官方 API：当面付预创建、主动查单、关闭、退款、RSA2 回调验签。
 - 支付宝账单收款：个人收款码承接、备注/金额预约、Watcher 标准流水入口、数据库租约去重和有效期匹配。
+- 支付宝独立账单采集器：账务明细接口、RSA2 响应验签、分页断点、重叠补拉、失败退避和后台状态；[升级与验收说明](docs/alipay-bill-collector.md)。真实账号验收仍需执行。
 - Mock 通道：不接真实资金即可跑通本地闭环。
 - ePay V1：`submit.php`、`mapi.php`、`api.php` 查询与退款，可供 NewAPI 等现有系统接入。
 - 退款：独立退款单、外部退款单号幂等、累计金额上限校验、部分/全额退款状态。
@@ -235,7 +236,7 @@ npm run app:create -- --name "TUOXIN Matrix" --webhook "https://example.com/pay/
 v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守的大额生产资金。正式上线前至少要完成：
 
 1. 支付宝沙箱与小额生产回归，覆盖超时、重复回调、关闭后晚到成功和部分退款。
-2. 接入支付宝日终账单自动下载，并用真实沙箱/生产导出文件回归当前逐笔匹配规则；账单收款模式还需接入并长期运行实际 Watcher。
+2. 接入支付宝日终账单自动下载，并用真实沙箱/生产导出文件回归逐笔匹配；账单收款需配置并验收新增的内置采集器，或接入可用的外部 Watcher。
 3. 为管理员登录增加反向代理限流与审计告警；如果需要多人协作，再接入正式身份系统和 RBAC。
 4. 设置真实 HTTPS 域名，并保持 `ALLOW_PRIVATE_WEBHOOKS=false`、`MOCK_CHANNEL_ENABLED=false`。
 5. 对 `SECRETS_ENCRYPTION_KEY` 做离线备份；丢失后已加密的 ePay/Webhook 密钥无法恢复。

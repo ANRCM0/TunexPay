@@ -107,6 +107,10 @@ adminRoutes.post("/applications/:id/default-channel", async (c) => {
 });
 
 adminRoutes.get("/channels", (c) => c.json({ data: channelStatus() }));
+adminRoutes.get("/channels/alipay-bill/collector", async (c) => {
+  const { alipayBillCollectorStatus } = await import("../services/alipay-bill-collector-service.js");
+  return c.json({ data: await alipayBillCollectorStatus() });
+});
 
 adminRoutes.post("/channels/alipay/check", async (c) => {
   const status = channelStatus();
@@ -263,7 +267,7 @@ function channelStatus() {
     alipayBill: {
       code: "ALIPAY_BILL",
       name: "支付宝账单收款",
-      ready: cfg.ALIPAY_BILL_ENABLED && Boolean(cfg.ALIPAY_BILL_QR_CONTENT) && cfg.ALIPAY_BILL_WATCHER_TOKEN.length >= 24,
+      ready: cfg.ALIPAY_BILL_ENABLED && Boolean(cfg.ALIPAY_BILL_QR_CONTENT) && (cfg.ALIPAY_BILL_COLLECTOR_ENABLED || cfg.ALIPAY_BILL_WATCHER_TOKEN.length >= 24),
       enabled: cfg.ALIPAY_BILL_ENABLED,
       qrContent: Boolean(cfg.ALIPAY_BILL_QR_CONTENT),
       watcherToken: cfg.ALIPAY_BILL_WATCHER_TOKEN.length >= 24,

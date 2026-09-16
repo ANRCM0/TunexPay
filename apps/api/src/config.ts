@@ -15,6 +15,12 @@ const envSchema = z.object({
   ALIPAY_GATEWAY: z.string().url().default("https://openapi.alipay.com/gateway.do"),
   ALIPAY_SIGN_TYPE: z.literal("RSA2").default("RSA2"),
   ALIPAY_BILL_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  ALIPAY_BILL_COLLECTOR_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  ALIPAY_BILL_USER_ID: z.string().default(""),
+  ALIPAY_BILL_POLL_SECONDS: z.coerce.number().int().min(3).max(3600).default(10),
+  ALIPAY_BILL_LOOKBACK_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+  ALIPAY_BILL_OVERLAP_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
+  ALIPAY_BILL_LAG_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   ALIPAY_BILL_QR_CONTENT: z.string().default(""),
   ALIPAY_BILL_MATCH_MODE: z.enum(["REMARK", "AMOUNT"]).default("REMARK"),
   ALIPAY_BILL_VALID_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
@@ -35,13 +41,16 @@ export function config(): Config {
     const encodedKey = parsed.SECRETS_ENCRYPTION_KEY;
     const decodedKey = /^[a-f\d]{64}$/i.test(encodedKey) ? Buffer.from(encodedKey, "hex") : Buffer.from(encodedKey, "base64");
     if (decodedKey.length !== 32) throw new Error("SECRETS_ENCRYPTION_KEY must encode exactly 32 bytes");
+    if (parsed.ALIPAY_BILL_COLLECTOR_ENABLED && (!parsed.ALIPAY_BILL_ENABLED || !/^2088\d{12}$/.test(parsed.ALIPAY_BILL_USER_ID) || !parsed.ALIPAY_APP_ID || !parsed.ALIPAY_PRIVATE_KEY || !parsed.ALIPAY_PUBLIC_KEY)) {
+      throw new Error("Alipay bill collector requires bill channel, 2088 user ID and Alipay app/private/public keys");
+    }
     if (parsed.NODE_ENV === "production") {
       if (parsed.ADMIN_TOKEN === "development-admin-token-change-me" || parsed.ADMIN_TOKEN.startsWith("replace-with")) throw new Error("ADMIN_TOKEN must be changed in production");
       if (/^0{64}$/.test(encodedKey) || encodedKey.startsWith("replace-with")) throw new Error("SECRETS_ENCRYPTION_KEY must be changed in production");
       if (parsed.MOCK_CHANNEL_ENABLED && !parsed.MOCK_CHANNEL_TOKEN) throw new Error("MOCK_CHANNEL_TOKEN is required when the mock channel is enabled");
       if (parsed.MOCK_CHANNEL_ENABLED && parsed.MOCK_CHANNEL_TOKEN === "local-development-only") throw new Error("MOCK_CHANNEL_TOKEN must be changed in production");
       if (parsed.ALIPAY_BILL_ENABLED && !parsed.ALIPAY_BILL_QR_CONTENT) throw new Error("ALIPAY_BILL_QR_CONTENT is required when the bill channel is enabled");
-      if (parsed.ALIPAY_BILL_ENABLED && parsed.ALIPAY_BILL_WATCHER_TOKEN.length < 24) throw new Error("ALIPAY_BILL_WATCHER_TOKEN must contain at least 24 characters");
+      if (parsed.ALIPAY_BILL_ENABLED && !parsed.ALIPAY_BILL_COLLECTOR_ENABLED && parsed.ALIPAY_BILL_WATCHER_TOKEN.length < 24) throw new Error("ALIPAY_BILL_WATCHER_TOKEN must contain at least 24 characters with an external watcher");
     }
     cached = parsed;
   }
