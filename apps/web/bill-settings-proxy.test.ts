@@ -4,6 +4,12 @@ import { POST } from "./app/api/backend/[...path]/route";
 const previous = process.env.WEB_PUBLIC_URL;
 afterEach(() => { process.env.WEB_PUBLIC_URL = previous; vi.unstubAllGlobals(); });
 describe("bill configuration origin protection", () => {
+  it.each([["channel-instances"], ["channel-instances", "chn-a", "check"], ["channel-instances", "chn-a", "test-payment"], ["applications", "app-a", "channel-instance"]])("protects plugin-channel mutation %j", async (...path: string[]) => {
+    process.env.WEB_PUBLIC_URL = "https://pay.example.com";
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    const response = await POST(new NextRequest(`https://pay.example.com/api/backend/${path.join("/")}`, { method: "POST", headers: { origin: "https://evil.example" } }), { params: Promise.resolve({ path }) });
+    expect(response.status).toBe(403); expect(fetch).not.toHaveBeenCalled();
+  });
   it("rejects cross-site owner notification tests before forwarding credentials", async () => {
     process.env.WEB_PUBLIC_URL = "https://pay.example.com";
     const fetch = vi.fn(); vi.stubGlobal("fetch",fetch);

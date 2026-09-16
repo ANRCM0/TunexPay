@@ -6,8 +6,22 @@ import { AppError } from "../lib/errors.js";
 import { handleAlipayWebhook, mockSucceed, publicPayment } from "../services/payment-service.js";
 import { ingestAlipayBillFlows } from "../services/receipt-flow-service.js";
 import { billRuntimeConfig } from "../services/bill-settings-service.js";
+import { loadChannel } from "../services/channel-instance-service.js";
 
 export const channelRoutes = new Hono<AppEnv>();
+
+channelRoutes.post("/alipay-bill/:id/flows", async c => {
+  const row = await loadChannel(c.req.param("id"));
+  if (row.plugin !== "ALIPAY_BILL") throw new AppError("NOT_FOUND", "接口不存在", 404);
+  const cfg = await billRuntimeConfig(undefined, false, row.id);
+  const token = c.req.header("x-watcher-token") || "";
+  if (!token || !cfg.ALIPAY_BILL_WATCHER_TOKEN || !safeEqual(token, cfg.ALIPAY_BILL_WATCHER_TOKEN)) throw new AppError("UNAUTHORIZED", "Watcher 令牌无效", 401);
+  const body = await c.req.text();
+  if (Buffer.byteLength(body) > 1_000_000) throw new AppError("RECEIPT_FLOW_PAYLOAD_TOO_LARGE", "流水请求体不能超过 1 MB", 413);
+  let input: unknown;
+  try { input = JSON.parse(body); } catch { throw new AppError("INVALID_JSON", "请求体不是有效 JSON", 422); }
+  return c.json({ data: await ingestAlipayBillFlows(input, row.id) });
+});
 
 channelRoutes.post("/alipay/webhook", async (c) => {
   const body = await c.req.parseBody({ all: true });

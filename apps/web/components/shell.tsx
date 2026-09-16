@@ -8,7 +8,7 @@ const navigation = [
   { label: "", items: [["/", "总览", LayoutDashboard]] },
   { label: "交易", items: [["/orders", "订单", ReceiptText], ["/refunds", "退款", RotateCcw], ["/exceptions", "支付异常", AlertTriangle]] },
   { label: "资金", items: [["/reconciliation", "对账", FileCheck2], ["/webhooks", "Webhook", Webhook]] },
-  { label: "系统", items: [["/system", "系统监控", Gauge], ["/applications", "应用", AppWindow], ["/channels", "支付渠道", CreditCard], ["/notifications", "通知设置", Bell], ["/audits", "操作审计", ListChecks]] },
+  { label: "系统", items: [["/system", "系统监控", Gauge], ["/applications", "应用", AppWindow], ["/channels", "插件与通道", CreditCard], ["/notifications", "通知设置", Bell], ["/audits", "操作审计", ListChecks]] },
 ] as const;
 
 export function Shell({ children }: { children: React.ReactNode }) {

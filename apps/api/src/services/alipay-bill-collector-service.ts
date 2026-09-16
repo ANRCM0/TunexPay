@@ -9,14 +9,16 @@ import { normalizeReceiptFlow } from "../lib/receipt-flow.js";
 import { ingestAlipayBillFlows } from "./receipt-flow-service.js";
 import { ALIPAY_BILL_ACCOUNT_ID } from "./receipt-reservation-service.js";
 
+import { paymentChannelScope } from "../lib/channel-scope.js";
+
 const LEASE_MS = 60_000;
 const PAGE_SIZE = 100;
 
 // Keep a bounded tail for ledger entries delayed beyond QR expiry.
-async function collectionDemand(client: Pick<typeof db, "payment">, now: Date, overlap: number, lag: number) {
+async function collectionDemand(client: Pick<typeof db, "payment">, now: Date, overlap: number, lag: number, accountId: string) {
   return client.payment.findFirst({
     where: {
-      channel: "ALIPAY_BILL", status: { not: "SUCCESS" },
+      ...paymentChannelScope(accountId, "ALIPAY_BILL"), status: { not: "SUCCESS" },
       receiptValidFrom: { lte: now },
       receiptValidUntil: { gte: new Date(now.getTime() - Math.max(300, overlap + lag) * 1000) },
     },
@@ -24,20 +26,20 @@ async function collectionDemand(client: Pick<typeof db, "payment">, now: Date, o
   });
 }
 
-export async function runAlipayBillCollector(): Promise<void> {
+export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID): Promise<void> {
   const result = await db.$transaction(async (tx) => {
-    const cfg = await billRuntimeConfig(tx, true);
+    const cfg = await billRuntimeConfig(tx, true, accountId);
     if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return null;
     const now = new Date();
-    const demand = await collectionDemand(tx, now, cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS);
+    const demand = await collectionDemand(tx, now, cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS, accountId);
     if (!demand) {
-      await tx.billCollectorState.updateMany({ where: { id: ALIPAY_BILL_ACCOUNT_ID }, data: { heartbeatAt: now } });
+      await tx.billCollectorState.updateMany({ where: { id: accountId }, data: { heartbeatAt: now } });
       return null;
     }
     const binding = sha256(JSON.stringify([cfg.ALIPAY_APP_ID, cfg.ALIPAY_BILL_USER_ID, cfg.ALIPAY_GATEWAY, cfg.ALIPAY_BILL_QR_CONTENT]));
     const state = await tx.billCollectorState.upsert({
-      where: { id: ALIPAY_BILL_ACCOUNT_ID },
-      create: { id: ALIPAY_BILL_ACCOUNT_ID, binding, cursorAt: demand.receiptValidFrom! },
+      where: { id: accountId },
+      create: { id: accountId, binding, cursorAt: demand.receiptValidFrom! },
       update: {},
     });
     if (state.binding !== binding) {
@@ -84,7 +86,7 @@ export async function runAlipayBillCollector(): Promise<void> {
         if (flow) {
           const paidAt = normalizeReceiptFlow(flow).paidAt;
           if (paidAt < current.windowStart! || paidAt >= current.windowEnd!) throw new Error("ALIPAY_BILL_OUTSIDE_QUERY_WINDOW");
-          await ingestAlipayBillFlows({ record: flow });
+          await ingestAlipayBillFlows({ record: flow }, accountId);
         }
       }
       // Receipts are durable before advancing the page. A crash replays this page;
@@ -99,8 +101,8 @@ export async function runAlipayBillCollector(): Promise<void> {
       });
       if (!committed.count) throw new Error("ALIPAY_BILL_LEASE_LOST");
       if (page.complete) break;
-      if ((await billRuntimeConfig()).billRevision !== cfg.billRevision) break;
-      if (!await collectionDemand(db, new Date(), cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS)) break;
+      if ((await billRuntimeConfig(db, false, accountId)).billRevision !== cfg.billRevision) break;
+      if (!await collectionDemand(db, new Date(), cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS, accountId)) break;
       current = await db.billCollectorState.findUniqueOrThrow({ where: { id: state.id } });
     }
   } catch (error) {
@@ -116,11 +118,17 @@ export async function runAlipayBillCollector(): Promise<void> {
   }
 }
 
-export async function alipayBillCollectorStatus() {
-  const cfg = await billRuntimeConfig();
+export async function alipayBillCollectorStatus(accountId = ALIPAY_BILL_ACCOUNT_ID) {
+  const cfg = await billRuntimeConfig(db, false, accountId);
   if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return { enabled: false, status: "DISABLED" };
-  const state = await db.billCollectorState.findUnique({ where: { id: ALIPAY_BILL_ACCOUNT_ID } });
-  const demand = await collectionDemand(db, new Date(), cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS);
+  const state = await db.billCollectorState.findUnique({ where: { id: accountId } });
+  const demand = await collectionDemand(db, new Date(), cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS, accountId);
   const stale = !state?.heartbeatAt || Date.now() - state.heartbeatAt.getTime() > Math.max(90, cfg.ALIPAY_BILL_POLL_SECONDS * 3) * 1000;
   return { enabled: true, status: !demand ? "IDLE" : stale ? "OFFLINE" : state?.lastError ? "ERROR" : state?.lastSuccessAt ? "RUNNING" : "STARTING", cursorAt: state?.cursorAt, nextPage: state?.nextPage, heartbeatAt: state?.heartbeatAt, lastSuccessAt: state?.lastSuccessAt, lastError: state?.lastError, nextRunAt: state?.nextRunAt, consecutiveErrors: state?.consecutiveErrors, processedRecords: state?.processedRecords };
+}
+
+export async function runAllBillCollectors(): Promise<void> {
+  const rows = await db.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL" }, select: { id: true } });
+  const ids = new Set([ALIPAY_BILL_ACCOUNT_ID, ...rows.map(row => row.id)]);
+  await Promise.allSettled([...ids].map(async id => { try { await runAlipayBillCollector(id); } catch { log("error", "alipay_bill.collector_failed", { channelId: id }); } }));
 }

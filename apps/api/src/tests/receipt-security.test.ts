@@ -21,6 +21,13 @@ function ingest(remark: string | null, merchantOrderNo?: string) {
   return ingestAlipayBillFlows({ record: { providerTradeNo: "trade", amount: 1000, paidAt: "2026-09-16 12:00:00", remark, merchantOrderNo } });
 }
 describe("strict receipt matching", () => {
+  it.each([null, "TXA1B2C3D4E5"])("scopes amount and remark matching to the receiving channel: %s", async remark => {
+    mocks.findMany.mockImplementation(async ({ where }) => where.channelId === "account-a" ? [payment] : []);
+    const result = await ingestAlipayBillFlows({ record: { providerTradeNo: "other-trade", amount: 1000, paidAt: "2026-09-16 12:00:00", remark } }, "account-b");
+    expect(result[0]?.status).not.toBe("MATCHED");
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ channelId: "account-b" }) }));
+    expect(mocks.succeed).not.toHaveBeenCalled();
+  });
   it("restricts amount fallback to payments explicitly created in AMOUNT mode", async () => {
     expect((await ingest(null))[0]?.status).toBe("UNMATCHED");
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ receiptMatchMode: "AMOUNT" }) }));

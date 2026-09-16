@@ -111,6 +111,7 @@ model Application {
   epayPid                String             @unique @db.VarChar(32)
   epayKeyEncrypted       String             @db.Text
   defaultChannel         PaymentChannelCode @default(MOCK)
+  defaultChannelId       String?            @db.VarChar(80)
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   orders                 Order[]
@@ -168,6 +169,7 @@ model Payment {
   attemptNo      Int                @db.UnsignedSmallInt
   idempotencyKey String?            @db.VarChar(120)
   channel        PaymentChannelCode
+  channelId      String?            @db.VarChar(80)
   method         String             @db.VarChar(32)
   status         PaymentStatus      @default(CREATED)
   amount         Int                @db.UnsignedInt
@@ -202,8 +204,31 @@ model Payment {
   @@index([status, updatedAt])
   @@index([status, nextQueryAt, id])
   @@index([channel, receiptMatchReference])
+  @@index([channelId, status])
   @@index([channel, channelAmount, receiptValidUntil])
   @@map("payments")
+}
+
+model ChannelInstance {
+  id               String             @id @db.VarChar(80)
+  plugin           PaymentChannelCode
+  name             String             @db.VarChar(120)
+  enabled          Boolean            @default(false)
+  revision         Int                @default(1)
+  payloadEncrypted String             @db.LongText
+  checkStatus      String             @default("UNCHECKED") @db.VarChar(32)
+  checkMessage     String?            @db.VarChar(500)
+  checkedAt        DateTime?
+  checkRevision    Int?
+  checkLease       String?            @db.VarChar(40)
+  checkLockedUntil DateTime?
+  testPaymentNo    String?            @db.VarChar(40)
+  testRevision     Int?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([plugin, createdAt])
+  @@map("channel_instances")
 }
 
 model Refund {

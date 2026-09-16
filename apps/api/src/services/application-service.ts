@@ -2,11 +2,13 @@ import type { PaymentChannelCode } from "@prisma/client";
 import { db } from "../db.js";
 import { generateId, randomSecret, seal, sha256 } from "../lib/crypto.js";
 import { AppError } from "../lib/errors.js";
+import { loadChannel, assertChannelVerified } from "./channel-instance-service.js";
 
 export type CreateApplicationInput = {
   name: string;
   webhookUrl?: string | null;
   defaultChannel?: PaymentChannelCode;
+  defaultChannelId?: string;
 };
 
 function numericPid(): string {
@@ -15,21 +17,32 @@ function numericPid(): string {
 }
 
 export async function createApplication(input: CreateApplicationInput) {
+  const channel = input.defaultChannelId ? await loadChannel(input.defaultChannelId) : null;
+  if (channel) await assertChannelVerified(channel);
   const appId = generateId("app");
   const apiKey = `txp_${appId}_${randomSecret(24)}`;
   const webhookSecret = `whsec_${randomSecret(32)}`;
   const epayKey = randomSecret(24);
-  const application = await db.application.create({
+  const application = await db.$transaction(async tx => {
+    if (channel) {
+      await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channel.id} FOR UPDATE`;
+      const current = await tx.channelInstance.findUniqueOrThrow({ where: { id: channel.id } });
+      if (!current.enabled || current.revision !== channel.revision) throw new AppError("CHANNEL_CONFIG_CONFLICT", "通道配置已变更，请重新加载", 409);
+      await assertChannelVerified(current, tx);
+    }
+    return tx.application.create({
     data: {
       appId,
       name: input.name,
       webhookUrl: input.webhookUrl || null,
-      defaultChannel: input.defaultChannel ?? "MOCK",
+      defaultChannel: channel?.plugin ?? input.defaultChannel ?? "MOCK",
+      defaultChannelId: channel?.id,
       apiKeyHash: sha256(apiKey),
       webhookSecretEncrypted: seal(webhookSecret),
       epayPid: numericPid(),
       epayKeyEncrypted: seal(epayKey),
     },
+    });
   });
   return { application, credentials: { apiKey, webhookSecret, epayPid: application.epayPid, epayKey } };
 }

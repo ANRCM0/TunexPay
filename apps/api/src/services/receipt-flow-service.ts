@@ -14,6 +14,8 @@ import { markPaymentSucceeded } from "./payment-service.js";
 import { openPaymentException } from "./payment-exception-service.js";
 import { ALIPAY_BILL_ACCOUNT_ID } from "./receipt-reservation-service.js";
 
+import { paymentChannelScope } from "../lib/channel-scope.js";
+
 const FLOW_LOCK_MS = 60_000;
 
 type PaymentWithOrder = Prisma.PaymentGetPayload<{ include: { order: true } }>;
@@ -31,11 +33,11 @@ export type ReceiptFlowOutcome = {
   reason: string | null;
 };
 
-export async function ingestAlipayBillFlows(input: unknown): Promise<ReceiptFlowOutcome[]> {
+export async function ingestAlipayBillFlows(input: unknown, accountId = ALIPAY_BILL_ACCOUNT_ID): Promise<ReceiptFlowOutcome[]> {
   const records = receiptFlowRecords(input);
   if (records.length > 100) throw new AppError("TOO_MANY_RECEIPT_FLOWS", "单次最多提交 100 条流水", 422);
   const outcomes: ReceiptFlowOutcome[] = [];
-  for (const record of records) outcomes.push(await ingestAlipayBillFlow(normalizeReceiptFlow(record)));
+  for (const record of records) outcomes.push(await ingestAlipayBillFlow(normalizeReceiptFlow(record), accountId));
   return outcomes;
 }
 
@@ -44,7 +46,7 @@ export async function rematchAlipayBillReceipt(id: string): Promise<Receipt> {
   if (!receipt || receipt.provider !== "ALIPAY_BILL") throw new AppError("RECEIPT_NOT_FOUND", "账单收款流水不存在", 404);
   if (receipt.matchStatus === "MATCHED") return receipt;
   await db.receipt.update({ where: { id }, data: { matchStatus: "UNMATCHED", lockedUntil: null } });
-  await ingestAlipayBillFlow(normalizeReceiptFlow(receipt.rawPayload as Record<string, unknown>));
+  await ingestAlipayBillFlow(normalizeReceiptFlow(receipt.rawPayload as Record<string, unknown>), receipt.accountKey || ALIPAY_BILL_ACCOUNT_ID);
   return db.receipt.findUniqueOrThrow({ where: { id } });
 }
 
@@ -57,7 +59,7 @@ export async function recoverStaleAlipayBillFlows(limit = 20): Promise<{ found: 
   const summary = { found: stale.length, matched: 0, failed: 0 };
   for (const receipt of stale) {
     try {
-      const result = await ingestAlipayBillFlow(normalizeReceiptFlow(receipt.rawPayload as Record<string, unknown>));
+      const result = await ingestAlipayBillFlow(normalizeReceiptFlow(receipt.rawPayload as Record<string, unknown>), receipt.accountKey || ALIPAY_BILL_ACCOUNT_ID);
       if (result.status === "MATCHED") summary.matched += 1;
     } catch {
       summary.failed += 1;
@@ -66,10 +68,10 @@ export async function recoverStaleAlipayBillFlows(limit = 20): Promise<{ found: 
   return summary;
 }
 
-async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow): Promise<ReceiptFlowOutcome> {
+async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow, accountId: string): Promise<ReceiptFlowOutcome> {
   const fingerprint = sha256(stableJson({
     provider: "ALIPAY_BILL",
-    accountKey: ALIPAY_BILL_ACCOUNT_ID,
+    accountKey: accountId,
     providerTradeNo: flow.providerTradeNo,
   }));
   let receipt: Receipt;
@@ -84,7 +86,7 @@ async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow): Promise<Receip
       amount: flow.amount,
       occurredAt: flow.paidAt,
       fingerprint,
-      accountKey: ALIPAY_BILL_ACCOUNT_ID,
+      accountKey: accountId,
       remark: flow.remark,
       rawPayload: flow.raw as Prisma.InputJsonValue,
     } });
@@ -109,7 +111,7 @@ async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow): Promise<Receip
   if (claimed.count === 0) return outcome(await db.receipt.findUniqueOrThrow({ where: { id: receipt.id } }), duplicate);
 
   try {
-    const choice = await locatePayment(flow);
+    const choice = await locatePayment(flow, accountId);
     if (choice.kind === "UNMATCHED") return outcome(await markUnmatched(receipt.id, choice.reason), duplicate);
     if (choice.kind === "MISMATCH") {
       const updated = await markMismatch(receipt.id, choice.reason, choice.payment ?? null, choice.ambiguousPaymentNos, choice.stateConflict);
@@ -207,10 +209,10 @@ async function ingestAlipayBillFlow(flow: NormalizedReceiptFlow): Promise<Receip
   }
 }
 
-async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> {
+async function locatePayment(flow: NormalizedReceiptFlow, accountId: string): Promise<MatchChoice> {
   const [direct, byTrade] = await Promise.all([
     flow.merchantOrderNo ? db.payment.findMany({
-      where: { channel: "ALIPAY_BILL", OR: [{ paymentNo: flow.merchantOrderNo }, { channelOrderNo: flow.merchantOrderNo }] },
+      where: { ...paymentChannelScope(accountId, "ALIPAY_BILL"), OR: [{ paymentNo: flow.merchantOrderNo }, { channelOrderNo: flow.merchantOrderNo }] },
       include: { order: true },
       take: 3,
     }) : Promise.resolve([] as PaymentWithOrder[]),
@@ -218,7 +220,7 @@ async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> 
   ]);
   if (direct.length > 1) return ambiguous("商户订单号对应多笔账单支付单", direct);
   if (byTrade) {
-    if (byTrade.channel !== "ALIPAY_BILL") {
+    if (byTrade.channel !== "ALIPAY_BILL" || (byTrade.channelId || ALIPAY_BILL_ACCOUNT_ID) !== accountId) {
       return { kind: "MISMATCH", reason: `支付宝交易号已被 ${byTrade.channel} 支付单 ${byTrade.paymentNo} 占用`, payment: byTrade, stateConflict: true };
     }
     if (direct[0] && direct[0].id !== byTrade.id) {
@@ -238,7 +240,7 @@ async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> 
   }
   if (reference) {
     const referenced = await db.payment.findMany({
-      where: { channel: "ALIPAY_BILL", receiptMatchReference: reference },
+      where: { ...paymentChannelScope(accountId, "ALIPAY_BILL"), receiptMatchReference: reference },
       include: { order: true },
       take: 3,
     });
@@ -255,7 +257,7 @@ async function locatePayment(flow: NormalizedReceiptFlow): Promise<MatchChoice> 
 
   const byAmount = await db.payment.findMany({
     where: {
-      channel: "ALIPAY_BILL",
+      ...paymentChannelScope(accountId, "ALIPAY_BILL"),
       channelAmount: flow.amount,
       receiptMatchMode: "AMOUNT",
       receiptValidFrom: { lte: flow.paidAt },

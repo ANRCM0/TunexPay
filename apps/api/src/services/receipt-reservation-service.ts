@@ -10,17 +10,18 @@ export async function prepareReceiptPayment(
   orderExpiresAt: Date | null,
 ): Promise<Payment> {
   if (payment.channel !== "ALIPAY_BILL") return payment;
-  const cfg = await billRuntimeConfig(tx, true);
+  const accountId = payment.channelId || ALIPAY_BILL_ACCOUNT_ID;
+  const cfg = await billRuntimeConfig(tx, true, accountId);
   if (!cfg.ALIPAY_BILL_ENABLED) throw new AppError("ALIPAY_BILL_NOT_CONFIGURED", "支付宝账单收款通道尚未启用", 409);
 
   await tx.receiptAccount.upsert({
-    where: { id: ALIPAY_BILL_ACCOUNT_ID },
-    create: { id: ALIPAY_BILL_ACCOUNT_ID, name: "支付宝账单收款默认账号" },
+    where: { id: accountId },
+    create: { id: accountId, name: "支付宝账单收款默认账号" },
     update: {},
   });
-  await tx.$queryRaw`SELECT id FROM receipt_accounts WHERE id = ${ALIPAY_BILL_ACCOUNT_ID} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM receipt_accounts WHERE id = ${accountId} FOR UPDATE`;
   const now = new Date();
-  await tx.receiptMatchReservation.deleteMany({ where: { accountId: ALIPAY_BILL_ACCOUNT_ID, expiresAt: { lte: now } } });
+  await tx.receiptMatchReservation.deleteMany({ where: { accountId, expiresAt: { lte: now } } });
   const configuredUntil = new Date(now.getTime() + cfg.ALIPAY_BILL_VALID_SECONDS * 1_000);
   const validUntil = orderExpiresAt && orderExpiresAt < configuredUntil ? orderExpiresAt : configuredUntil;
   if (validUntil <= now) throw new AppError("ORDER_EXPIRED", "订单已过期", 409);
@@ -30,7 +31,7 @@ export async function prepareReceiptPayment(
   let value: string;
   if (mode === "AMOUNT") {
     const active = await tx.receiptMatchReservation.findMany({
-      where: { accountId: ALIPAY_BILL_ACCOUNT_ID, mode: "AMOUNT", expiresAt: { gt: now } },
+      where: { accountId, mode: "AMOUNT", expiresAt: { gt: now } },
       select: { value: true },
     });
     const used = new Set(active.map(item => item.value));
@@ -44,7 +45,7 @@ export async function prepareReceiptPayment(
   }
 
   await tx.receiptMatchReservation.create({ data: {
-    accountId: ALIPAY_BILL_ACCOUNT_ID,
+    accountId,
     mode,
     value,
     paymentId: payment.id,

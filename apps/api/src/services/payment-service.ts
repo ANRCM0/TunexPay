@@ -1,6 +1,7 @@
 import { Prisma, type Application, type Payment, type PaymentChannelCode, type PaymentStatus } from "@prisma/client";
 import { z } from "zod";
-import { channelFor } from "../channels/registry.js";
+import { adapterForPayment, ensureLegacyChannels, assertChannelVerified } from "./channel-instance-service.js";
+import { legacyChannelId } from "../lib/channel-scope.js";
 import type { ChannelWebhookResult } from "../channels/types.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
@@ -25,8 +26,15 @@ export async function createPayment(application: Application, orderNo: string, i
   const key = idempotencyKey?.trim() || null;
   if (key && key.length > 120) throw new AppError("INVALID_IDEMPOTENCY_KEY", "Idempotency-Key 不能超过 120 个字符");
   const channel = input.channel ?? application.defaultChannel;
+  if (application.defaultChannelId && channel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
+  const channelId = application.defaultChannelId || legacyChannelId(channel);
+  if (!application.defaultChannelId) await ensureLegacyChannels();
   const dispatch = await db.$transaction(async (tx) => {
-    if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true);
+    await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channelId} FOR UPDATE`;
+    const instance = await tx.channelInstance.findUniqueOrThrow({ where: { id: channelId } });
+    if (!instance.enabled || instance.plugin !== channel) throw new AppError("CHANNEL_DISABLED", "所选通道未启用或插件不匹配", 409);
+    if (application.defaultChannelId && application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
+    if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true, channelId);
     await tx.$queryRaw`SELECT id FROM orders WHERE orderNo = ${orderNo} FOR UPDATE`;
     const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id } });
     if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
@@ -44,6 +52,7 @@ export async function createPayment(application: Application, orderNo: string, i
         attemptNo: count + 1,
         idempotencyKey: key,
         channel,
+        channelId,
         method: input.method,
         amount: order.amount,
         channelAmount: order.amount,
@@ -72,7 +81,7 @@ export async function createPayment(application: Application, orderNo: string, i
   if (!dispatch.shouldDispatch) return presentPayment(payment);
   const order = await db.order.findUniqueOrThrow({ where: { id: payment.orderId } });
   try {
-    const result = await channelFor(channel).create({
+    const result = await (await adapterForPayment(payment)).create({
       paymentNo: payment.paymentNo,
       amount: payment.channelAmount,
       businessAmount: payment.amount,
@@ -100,8 +109,10 @@ export async function createPayment(application: Application, orderNo: string, i
 }
 
 async function updatePaymentObservation(payment: Payment, status: PaymentStatus, data: Record<string, unknown>, source = "CHANNEL"): Promise<Payment> {
-  assertPaymentTransition(payment.status, status);
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM payments WHERE id = ${payment.id} FOR UPDATE`;
+    const current = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    if (current.status === "SUCCESS" || !canPaymentTransition(current.status, status)) return current;
     const updated = await tx.payment.update({ where: { id: payment.id }, data: {
       status,
       ...data,
@@ -189,7 +200,7 @@ export async function markPaymentSucceeded(result: ChannelWebhookResult, source:
 export async function queryPayment(applicationId: string | null, paymentNo: string) {
   const payment = await db.payment.findFirst({ where: { paymentNo, ...(applicationId ? { order: { applicationId } } : {}) }, include: { order: true } });
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
-  const result = await channelFor(payment.channel).query(payment.paymentNo);
+  const result = await (await adapterForPayment(payment)).query(payment.paymentNo);
   if (result.status === "SUCCESS") {
     const succeeded = await markPaymentSucceeded({
       eventKey: `query:${payment.paymentNo}:${result.channelTradeNo ?? "success"}`,
@@ -222,7 +233,7 @@ export async function closePayment(applicationId: string | null, paymentNo: stri
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
   if (payment.status === "SUCCESS" || payment.status === "CLOSED") return presentPayment(payment);
   if (!["CREATED", "PROCESSING", "UNKNOWN"].includes(payment.status)) throw new AppError("PAYMENT_NOT_CLOSABLE", `支付状态 ${payment.status} 不允许关闭`, 409);
-  const result = await channelFor(payment.channel).close(payment.paymentNo);
+  const result = await (await adapterForPayment(payment)).close(payment.paymentNo);
   if (!result.closed) return presentPayment(payment);
   const updated = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM payments WHERE paymentNo = ${paymentNo} FOR UPDATE`;
@@ -240,7 +251,9 @@ export async function closePayment(applicationId: string | null, paymentNo: stri
 }
 
 export async function handleAlipayWebhook(payload: Record<string, string>): Promise<void> {
-  const result = await channelFor("ALIPAY").handleWebhook(payload);
+  const payment = await db.payment.findUnique({ where: { paymentNo: payload.out_trade_no || "" } });
+  if (!payment || payment.channel !== "ALIPAY") throw new AppError("PAYMENT_NOT_FOUND", "支付宝支付单不存在", 404);
+  const result = await (await adapterForPayment(payment)).handleWebhook(payload);
   let callback;
   try {
     callback = await db.channelCallback.create({ data: {

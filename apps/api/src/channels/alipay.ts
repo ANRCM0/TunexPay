@@ -141,8 +141,9 @@ export class AlipayChannel implements PaymentChannel {
   }
 
   async handleWebhook(payload: Record<string, string>): Promise<ChannelWebhookResult> {
-    if (!verifyAlipaySignature(payload)) throw new ChannelDefinitiveError("INVALID_ALIPAY_SIGNATURE", "支付宝回调验签失败");
-    if (payload.app_id !== config().ALIPAY_APP_ID) throw new ChannelDefinitiveError("INVALID_ALIPAY_APP", "支付宝回调 app_id 与当前配置不一致");
+    const cfg = this.gatewaySettings ?? config();
+    if (!verifyAlipaySignature(payload, cfg.ALIPAY_PUBLIC_KEY)) throw new ChannelDefinitiveError("INVALID_ALIPAY_SIGNATURE", "支付宝回调验签失败");
+    if (payload.app_id !== cfg.ALIPAY_APP_ID) throw new ChannelDefinitiveError("INVALID_ALIPAY_APP", "支付宝回调 app_id 与当前配置不一致");
     const paymentNo = payload.out_trade_no ?? "";
     const amount = yuanToCents(payload.total_amount ?? "0");
     if (!paymentNo) throw new ChannelDefinitiveError("INVALID_ALIPAY_CALLBACK", "支付宝回调缺少 out_trade_no");
@@ -181,6 +182,7 @@ export class AlipayChannel implements PaymentChannel {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8" },
         body: new URLSearchParams(params),
+        redirect: "error",
         signal: AbortSignal.timeout(12_000),
       });
     } catch (error) {

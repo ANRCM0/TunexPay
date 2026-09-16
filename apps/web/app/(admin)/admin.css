@@ -1,7 +1,7 @@
 /* 管理后台专属样式，仅由 app/(admin)/layout.tsx 引入 */
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 238px 1fr; }
-.sidebar { background: var(--navy); color: #fff; padding: 28px 20px; position: sticky; top: 0; height: 100vh; }
+.sidebar { min-width: 0; background: var(--navy); color: #fff; padding: 28px 20px; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 34px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: #2dd4bf; color: var(--navy); font-weight: 900; }
 .brand-title { font-size: 15px; font-weight: 800; letter-spacing: .06em; }
@@ -145,3 +145,10 @@ tbody tr:last-child td { border-bottom: 0; }
   .list-tools { grid-template-columns: 1fr; }
   .detail-row { grid-template-columns: 1fr; gap: 5px; }
 }
+
+.plugin-capabilities { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 20px; }
+.plugin-capabilities span { border: 1px solid var(--border, #e2e6ec); padding: 4px 8px; border-radius: 5px; font-size: 12px; }
+.channel-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 240px; }
+.channel-check-detail { max-width: 360px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.channel-enable { display: flex !important; align-items: center; gap: 8px; }
+.channel-enable input { width: auto !important; }
