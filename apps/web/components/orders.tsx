@@ -1,17 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useApi } from "../lib/api";
-import { LoadingState, PageHead, Status, money, time } from "./common";
+import { ChannelTag, Drawer, LoadingState, PageHead, Status, money, time } from "./common";
+import { OrderDetailBody } from "./order-detail";
 
 type Payment = { paymentNo: string; status: string; channel: string };
 type Order = { id: string; orderNo: string; externalOrderNo: string; subject: string; amount: number; status: string; createdAt: string; paidAt: string | null; expiresAt: string | null; expirationAttempts: number; expirationError: string | null; application: { name: string }; payments: Payment[] };
 
-export function Orders() {
+export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
   const { data, loading, error } = useApi<Order[]>("/orders?pageSize=100", 8_000);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [openOrderNo, setOpenOrderNo] = useState<string | null>(initialOrderNo ?? null);
   const rows = useMemo(() => data?.filter(item => {
     const matchesStatus = status === "ALL" || item.status === status;
     const needle = query.trim().toLowerCase();
@@ -19,6 +20,7 @@ export function Orders() {
       .some(value => value.toLowerCase().includes(needle));
     return matchesStatus && matchesQuery;
   }) ?? [], [data, query, status]);
+  const openOrder = data?.find(item => item.orderNo === openOrderNo);
   return <>
     <PageHead eyebrow="Transactions" title="支付订单" copy="业务订单与支付尝试分开记录；一张订单可以安全地发起多次支付。" />
     <LoadingState loading={loading} error={error} empty={!data?.length}>
@@ -32,13 +34,16 @@ export function Orders() {
         </div>
         {rows.length ? <div className="table-wrap"><table><thead><tr><th>订单</th><th>应用 / 业务单号</th><th>金额</th><th>最新支付</th><th>订单状态</th><th>时间</th></tr></thead>
         <tbody>{rows.map(item => { const payment = item.payments[0]; return <tr key={item.id}>
-          <td><Link className="data-link" href={`/orders/${item.orderNo}`}><strong>{item.subject}</strong></Link><div className="mono muted">{item.orderNo}</div>{item.expirationError && <div className="row-error">过期关闭：{item.expirationError}</div>}</td>
+          <td><button className="data-link row-open" onClick={() => setOpenOrderNo(item.orderNo)}><strong>{item.subject}</strong></button><div className="mono muted">{item.orderNo}</div>{item.expirationError && <div className="row-error">过期关闭：{item.expirationError}</div>}</td>
           <td>{item.application.name}<div className="mono muted">{item.externalOrderNo}</div></td>
           <td><strong>{money(item.amount)}</strong></td>
-          <td>{payment ? <><span>{payment.channel}</span><div className="mono muted">{payment.paymentNo}</div></> : "—"}</td>
+          <td>{payment ? <><ChannelTag code={payment.channel} /><div className="mono muted">{payment.paymentNo}</div></> : "—"}</td>
           <td><Status value={item.status} />{item.expirationAttempts > 0 && item.status !== "CLOSED" && <div className="recovery-note">过期处理 {item.expirationAttempts} 次</div>}</td><td>{time(item.paidAt || item.createdAt)}<div className="muted">到期 {time(item.expiresAt)}</div></td>
         </tr>; })}</tbody>
       </table></div> : <div className="empty compact">没有符合筛选条件的订单</div>}</section>
     </LoadingState>
+    {openOrderNo && <Drawer wide title={`订单详情 · ${openOrder?.subject ?? openOrderNo}`} onClose={() => setOpenOrderNo(null)}>
+      <OrderDetailBody orderNo={openOrderNo} />
+    </Drawer>}
   </>;
 }

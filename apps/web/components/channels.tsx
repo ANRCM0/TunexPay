@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Plus, RefreshCw, Settings2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Section, Status, time } from "./common";
+import { LoadingState, PageHead, Section, Status, Drawer, time } from "./common";
 import { ChannelEditor } from "./channel-editor";
 
 export type Channel = {
@@ -53,7 +53,7 @@ export function Channels() {
         <button className="button secondary" onClick={() => setEditor({ plugin: plugin.code })}><Plus size={14} />创建通道</button>
       </section>)}</div>
     </LoadingState>
-    {editor && <ChannelEditor key={editor.channel?.id || editor.plugin} plugin={editor.plugin} channel={editor.channel} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} />}
+    {editor && <Drawer title={editor.channel ? `配置通道 · ${editor.channel.name}` : "创建通道"} onClose={() => setEditor(null)}><ChannelEditor key={editor.channel?.id || editor.plugin} plugin={editor.plugin} channel={editor.channel} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); }} /></Drawer>}
     <Section title="已配置通道" action={<span className="muted">修改配置后需重新检测</span>} className="detail-section">
       <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>

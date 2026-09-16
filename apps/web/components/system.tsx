@@ -45,9 +45,9 @@ export function System() {
         <Section title="Webhook 队列" action={<span className="muted">BullMQ · tuoxin-pay-webhooks</span>} className="detail-section">
           {data.webhookQueue.ok ? <div className="grid stats">
             <Stat label="等待中" value={String(data.webhookQueue.waiting)} note="已进入队列待投递" />
-            <Stat label="投递中" value={String(data.webhookQueue.active)} note="正在向业务方发送" />
-            <Stat label="延迟重试" value={String(data.webhookQueue.delayed)} note="退避等待下次执行" />
-            <Stat label="失败滞留" value={String(data.webhookQueue.failed)} note="可在 Webhook 页面手动重试" />
+            <Stat tone="green" label="投递中" value={String(data.webhookQueue.active)} note="正在向业务方发送" />
+            <Stat tone="orange" label="延迟重试" value={String(data.webhookQueue.delayed)} note="退避等待下次执行" />
+            <Stat tone="red" label="失败滞留" value={String(data.webhookQueue.failed)} note="可在 Webhook 页面手动重试" />
           </div> : <div className="empty compact">队列数据不可用（Redis 连接失败）</div>}
         </Section>
 

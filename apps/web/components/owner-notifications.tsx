@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Section, Status, time } from "./common";
+import { LoadingState, Section, Status, Toggle, time } from "./common";
 
 type Draft = { revision: number; emailEnabled: boolean; feishuEnabled: boolean; smtpHost: string; smtpPort: 465 | 587; smtpUser: string; from: string; to: string; paymentSuccess: boolean; anomalies: boolean; webhookFailure: boolean; collectorFailure: boolean };
 type View = Draft & { smtpPasswordConfigured: boolean; feishuWebhookConfigured: boolean; feishuSecretConfigured: boolean };
@@ -57,8 +57,8 @@ export function OwnerNotificationsPanel() {
       <LoadingState loading={loading} error={error}>{draft && data && <form onSubmit={event => void save(event)}>
         <fieldset className="bill-settings-fields" disabled={busy}>
           <div className="bill-settings-grid">
-            <label><input type="checkbox" checked={draft.emailEnabled} onChange={event => update("emailEnabled", event.target.checked)} />启用邮箱通知</label>
-            <label><input type="checkbox" checked={draft.feishuEnabled} onChange={event => update("feishuEnabled", event.target.checked)} />启用飞书机器人通知</label>
+            <div><Toggle checked={draft.emailEnabled} onChange={value => update("emailEnabled", value)} label="启用邮箱通知" /></div>
+            <div><Toggle checked={draft.feishuEnabled} onChange={value => update("feishuEnabled", value)} label="启用飞书机器人通知" /></div>
             {([["smtpHost", "SMTP 主机"], ["smtpUser", "SMTP 登录账号"], ["from", "发件邮箱"], ["to", "收件邮箱"]] as const).map(([key, label]) => <label key={key}>{label}<input value={draft[key]} onChange={event => update(key, event.target.value)} autoComplete="off" /></label>)}
             <label>SMTP 加密方式<select value={draft.smtpPort} onChange={event => update("smtpPort", Number(event.target.value) as 465 | 587)}><option value={465}>465 · TLS</option><option value={587}>587 · 强制 STARTTLS</option></select></label>
             {([["smtpPassword", "SMTP 密码/授权码", data.smtpPasswordConfigured], ["feishuWebhook", "飞书 Webhook", data.feishuWebhookConfigured], ["feishuSecret", "飞书签名校验密钥（选填）", data.feishuSecretConfigured]] as const).map(([key, label, configured]) => <label key={key}>{label}（{configured ? "已配置，留空保留" : "未配置"}）<input type="password" value={secrets[key]} autoComplete="new-password" onChange={event => setSecrets(current => ({ ...current, [key]: event.target.value }))} /><span><input type="checkbox" checked={clear[key]} onChange={event => setClear(current => ({ ...current, [key]: event.target.checked }))} />明确清除</span></label>)}

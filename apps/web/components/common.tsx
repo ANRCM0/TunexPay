@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+
 export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
 }
@@ -9,12 +11,39 @@ export function Section({ title, action, className = "", style, children }: { ti
   </section>;
 }
 
-export function Stat({ label, value, note, detail = false }: { label: string; value: React.ReactNode; note: string; detail?: boolean }) {
-  return <div className="card stat">
+export type StatTone = "blue" | "green" | "red" | "orange";
+
+export function Stat({ label, value, note, detail = false, tone = "blue" }: { label: string; value: React.ReactNode; note: string; detail?: boolean; tone?: StatTone }) {
+  return <div className={`card stat stat-${tone}`}>
     <div className="stat-label">{label}</div>
     <div className={detail ? "stat-value detail-value" : "stat-value"}>{value}</div>
     <div className="stat-note">{note}</div>
   </div>;
+}
+
+export function Toggle({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (value: boolean) => void; label: string; disabled?: boolean }) {
+  return <button type="button" role="switch" aria-checked={checked} className={`toggle${checked ? " on" : ""}`} disabled={disabled} onClick={() => onChange(!checked)}>
+    <span className="toggle-knob" /><span className="toggle-label">{label}</span>
+  </button>;
+}
+
+const CHANNEL_TAG_STYLE: Record<string, string> = { ALIPAY: "tag-blue", ALIPAY_BILL: "tag-green", MOCK: "tag-gray" };
+
+export function ChannelTag({ code }: { code: string }) {
+  return <span className={`tag ${CHANNEL_TAG_STYLE[code] ?? "tag-gray"}`}>{code}</span>;
+}
+
+export function Drawer({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
+  return <div className="drawer-mask" onClick={onClose}>
+    <div className={wide ? "drawer drawer-wide" : "drawer"} onClick={event => event.stopPropagation()} role="dialog" aria-label={title}>
+      <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="drawer-body">{children}</div>
+    </div>
+  </div>;
+}
+
+export function Tabs({ items, active, onChange }: { items: readonly string[]; active: string; onChange: (item: string) => void }) {
+  return <div className="tabs">{items.map(item => <button key={item} type="button" className={item === active ? "tabs-item active" : "tabs-item"} onClick={() => onChange(item)}>{item}</button>)}</div>;
 }
 
 type Tone = "success" | "warning" | "danger" | "neutral";

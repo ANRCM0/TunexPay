@@ -1,26 +1,54 @@
 /* 公开界面专属样式（收银台 / 登录），仅由 app/(public)/layout.tsx 引入 */
 
-.cashier-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #eef3f2; }
-.cashier { width: min(430px, 100%); padding: 32px; text-align: center; }
-.cashier h1 { font-size: 22px; }
-.amount { font-family: Georgia, serif; font-size: 40px; margin: 20px 0; }
-.qr { width: 210px; height: 210px; margin: 16px auto; border: 10px solid white; box-shadow: 0 4px 22px rgba(0,0,0,.08); }
-.cashier-state { margin: 20px 0; padding: 15px; border-radius: 11px; display: grid; gap: 7px; font-size: 13px; }
-.cashier-state strong { font-size: 16px; }
-.cashier-state.success { background: var(--teal-soft); color: #08625e; }
-.cashier-state.warning { background: #fff1d8; color: #8b5b11; }
-.cashier-state.failure { background: #fde7e7; color: #982f2f; }
-.cashier-state.neutral { background: #edf1f3; color: #52616b; }
-.cashier-meta { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
+.cashier-shell { min-height: 100vh; background: #f5f7fb; padding: 0 0 48px; }
+.cashier-brand { display: flex; align-items: center; gap: 10px; background: #fff; border-bottom: 1px solid var(--line); padding: 12px 22px; }
+.cashier-brand .brand-badge { margin: 0; width: 30px; height: 30px; border-radius: 8px; font-size: 14px; }
+.cashier-brand strong { font-size: 15px; letter-spacing: .04em; }
+.cashier-brand span { color: var(--muted); font-size: 13px; }
+.cashier-loading { max-width: 720px; margin: 40px auto; }
 
-.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #dff3f1 0, var(--paper) 46%); }
+.cashier-layout { max-width: 980px; margin: 26px auto 0; padding: 0 18px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 18px; align-items: start; }
+.cashier-main { padding: 26px; }
+.cashier-main-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.cashier-main-head h1 { font-size: 19px; margin-top: 8px; }
+.cashier-paybox { text-align: center; display: grid; justify-items: center; gap: 8px; }
+.amount { font-weight: 800; font-size: 34px; margin: 6px 0; letter-spacing: -.01em; }
+.qr { width: 210px; height: 210px; margin: 8px auto; border: 10px solid white; box-shadow: 0 4px 22px rgba(0,0,0,.08); border-radius: 4px; }
+.cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: 9px; display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; }
+.cashier-state strong { font-size: 16px; }
+.cashier-state.success { background: var(--success-soft); color: #15794f; }
+.cashier-state.warning { background: var(--warning-soft); color: var(--warning); }
+.cashier-state.failure { background: var(--danger-soft); color: #c73e36; }
+.cashier-state.neutral { background: #eef1f6; color: #5b6b80; }
+.cashier-state .button { margin-top: 6px; }
+.cashier-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+.cashier-duo-item { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; display: grid; gap: 5px; }
+.cashier-duo-item span { color: var(--muted); font-size: 11px; }
+.cashier-duo-item strong { font-size: 17px; }
+.cashier-countdown { color: var(--primary); }
+.cashier-note { margin-top: 16px; font-size: 11px; line-height: 1.6; }
+
+.cashier-side { padding: 20px; }
+.cashier-side h2 { margin: 0 0 14px; font-size: 14px; }
+.cashier-side-rows { display: grid; }
+.cashier-side-rows > div { display: grid; gap: 4px; padding: 9px 0; border-bottom: 1px solid #eef1f6; }
+.cashier-side-rows > div:last-child { border-bottom: 0; }
+.cashier-side-rows span { color: var(--muted); font-size: 11px; }
+.cashier-side-rows strong { font-size: 13px; font-weight: 650; word-break: break-all; }
+.cashier-refresh { width: 100%; margin-top: 16px; }
+
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #dbe7fd 0, var(--paper) 48%); }
 .login-card { width: min(420px, 100%); padding: 36px; text-align: center; }
-.login-card h1 { font-size: 27px; }
+.login-card h1 { font-size: 24px; }
 .login-form { margin-top: 26px; display: grid; gap: 15px; text-align: left; }
 .login-form .button { width: 100%; padding: 12px; }
 .login-form .operation-notice { margin: 0; }
 .login-note { margin: 20px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
+@media (max-width: 860px) {
+  .cashier-layout { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 560px) {
-  .cashier-meta { flex-direction: column; }
+  .cashier-duo { grid-template-columns: 1fr; }
 }
