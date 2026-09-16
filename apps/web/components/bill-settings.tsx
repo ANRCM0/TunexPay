@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState } from "./common";
+import { LoadingState, Section } from "./common";
 
 type Draft = {
   revision: number; enabled: boolean; collectorEnabled: boolean; appId: string; userId: string;
@@ -42,8 +42,7 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
     } catch (cause) { setNotice({ ok: false, text: cause instanceof Error ? cause.message : "保存失败" }); }
     finally { setSaving(false); }
   }
-  return <section className="card section detail-section">
-    <div className="section-title"><h2>支付宝账单收款配置</h2><span className="muted">数据库持久化 · 密钥加密 · 仅影响账单通道</span></div>
+  return <Section title="支付宝账单收款配置" action={<span className="muted">数据库持久化 · 密钥加密 · 仅影响账单通道</span>} className="detail-section">
     {notice && <div className={`operation-notice ${notice.ok ? "ok" : "error"}`}>{notice.text}</div>}
     <LoadingState loading={loading} error={error}>
       {draft && data && <form onSubmit={event => void save(event)}>
@@ -79,7 +78,7 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
         </fieldset>
       </form>}
     </LoadingState>
-  </section>;
+  </Section>;
 }
 
 function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {

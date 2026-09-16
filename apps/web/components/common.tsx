@@ -2,8 +2,47 @@ export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; ti
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
 }
 
+export function Section({ title, action, className = "", style, children }: { title: string; action?: React.ReactNode; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+  return <section className={`card section ${className}`.trim()} style={style}>
+    <div className="section-title"><h2>{title}</h2>{action}</div>
+    {children}
+  </section>;
+}
+
+export function Stat({ label, value, note, detail = false }: { label: string; value: React.ReactNode; note: string; detail?: boolean }) {
+  return <div className="card stat">
+    <div className="stat-label">{label}</div>
+    <div className={detail ? "stat-value detail-value" : "stat-value"}>{value}</div>
+    <div className="stat-note">{note}</div>
+  </div>;
+}
+
+type Tone = "success" | "warning" | "danger" | "neutral";
+
+const STATUS_TONE: Record<string, Tone> = {
+  ACTIVE: "success",
+  SUCCESS: "success",
+  MATCHED: "success",
+  PENDING: "warning",
+  PROCESSING: "warning",
+  UNKNOWN: "warning",
+  UNMATCHED: "warning",
+  FAILED: "danger",
+  DEAD: "danger",
+  DISABLED: "danger",
+  MISMATCH: "danger",
+  OPEN: "danger",
+  CREATED: "neutral",
+  CLOSED: "neutral",
+  PARTIALLY_REFUNDED: "neutral",
+  REFUNDED: "neutral",
+  IGNORED: "neutral",
+  RESOLVED: "neutral",
+};
+
 export function Status({ value }: { value: string }) {
-  return <span className={`badge ${value}`} title={value}>{statusText(value)}</span>;
+  const tone = STATUS_TONE[value] ?? "neutral";
+  return <span className={`badge badge-${tone}`} title={value}>{statusText(value)}</span>;
 }
 
 export function LoadingState({ loading, error, empty, children }: { loading: boolean; error: string; empty?: boolean; children: React.ReactNode }) {

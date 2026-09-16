@@ -1,6 +1,6 @@
 "use client";
 
-import { LoadingState, PageHead, money, time } from "./common";
+import { LoadingState, PageHead, Section, Stat, money, time } from "./common";
 import { useApi } from "../lib/api";
 
 type Event = { id: string; type: string; source: string; aggregateId: string; createdAt: string };
@@ -29,18 +29,13 @@ export function Dashboard() {
           <Stat label="过期关闭异常" value={String(data.expirationFailures)} note="Worker 将自动退避重试" />
           <Stat label="今日管理失败" value={String(data.failedAdminActionsToday)} note="可在操作审计中查看" />
         </div>
-        <section className="card section">
-          <div className="section-title"><h2>最近业务事件</h2><span className="muted">自动刷新</span></div>
+        <Section title="最近业务事件" action={<span className="muted">自动刷新</span>}>
           <div className="timeline">{data.recentEvents.map(event => <div className="timeline-item" key={event.id}>
             <div className="timeline-type">{event.type}</div>
             <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {event.source} · {time(event.createdAt)}</div>
           </div>)}</div>
-        </section>
+        </Section>
       </>}
     </LoadingState>
   </>;
-}
-
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
-  return <div className="card stat"><div className="stat-label">{label}</div><div className="stat-value">{value}</div><div className="stat-note">{note}</div></div>;
 }

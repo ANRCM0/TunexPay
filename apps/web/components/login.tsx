@@ -25,7 +25,7 @@ export function Login() {
 
   return <main className="login-shell">
     <section className="card login-card">
-      <div className="cashier-logo">T</div>
+      <div className="brand-badge">T</div>
       <div className="eyebrow">TUOXIN PAY CONSOLE</div>
       <h1>管理员登录</h1>
       <p className="page-copy">使用部署时配置的管理员口令进入支付控制台。</p>

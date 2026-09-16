@@ -1,8 +1,9 @@
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  outputFileTracingRoot: new URL("../../", import.meta.url).pathname,
+  outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   async headers() {
     return ["/cashier/:path*", "/api/backend/public/:path*"].map(source => ({ source, headers: [
       { key: "Cache-Control", value: "no-store, private" },
