@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { api, useApi } from "../lib/api";
-import { Toggle } from "./common";
+import { Toggle, statusText } from "./common";
 import type { Channel } from "./channels";
 
 const defaults: Record<string, string | number | boolean> = { appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "", collectorEnabled: false, matchMode: "AMOUNT", validSeconds: 300, amountOffsetMax: 99, pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15 };
@@ -56,5 +56,5 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
 
 function CollectorStatus({ id }: { id: string }) {
   const { data, error } = useApi<{ status: string; lastError?: string; lastSuccessAt?: string }>(`/channel-instances/${id}/collector`, 10_000);
-  return <p className="channel-check-detail">采集器：{error || data?.status || "加载中…"}{data?.lastError && ` · ${data.lastError}`}{data?.lastSuccessAt && ` · 最近成功 ${new Date(data.lastSuccessAt).toLocaleString("zh-CN")}`}</p>;
+  return <p className="channel-check-detail">采集器：{error || (data ? statusText(data.status) : "加载中…")}{data?.lastError && ` · ${data.lastError}`}{data?.lastSuccessAt && ` · 最近成功 ${new Date(data.lastSuccessAt).toLocaleString("zh-CN")}`}</p>;
 }

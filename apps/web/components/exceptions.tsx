@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { LoadingState, PageHead, Section, Status, money, time } from "./common";
+import { eventSourceLabel, exceptionSeverityLabel, exceptionTypeLabel } from "../lib/labels";
 
 type PaymentException = {
   id: string;
@@ -57,23 +58,15 @@ export function Exceptions() {
         <div className="table-wrap"><table>
           <thead><tr><th>异常 / 风险</th><th>订单与支付</th><th>金额 / 渠道流水</th><th>状态</th><th>发现时间</th><th>处置</th></tr></thead>
           <tbody>{data?.map(item => <tr key={item.id}>
-            <td><strong>{typeText(item.type)}</strong><div className="row-error">{item.summary}</div><div className="mono muted">{item.exceptionNo} · {item.source}</div></td>
-            <td>{item.order ? <><Link className="data-link" href={`/orders/${item.order.orderNo}`}><strong>{item.order.subject}</strong></Link><div className="mono muted">{item.order.orderNo}</div></> : "—"}{item.payment && <div className="mono muted">{item.payment.paymentNo}</div>}</td>
-            <td>{item.payment ? <><strong>{money(item.payment.receivedAmount ?? item.payment.amount)}</strong>{item.payment.receivedAmount && item.payment.receivedAmount !== item.payment.amount && <div className="muted">业务金额 {money(item.payment.amount)}</div>}<div className="mono muted">{item.payment.channelTradeNo ?? "—"}</div></> : "—"}</td>
-            <td><Status value={item.status} /><div className={`severity ${item.severity}`}>{severityText(item.severity)}</div>{item.resolution && <div className="muted">{item.resolution}{item.resolutionRef ? ` · ${item.resolutionRef}` : ""}</div>}</td>
-            <td>{time(item.detectedAt)}{item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}</td>
-            <td><div className="row-actions">{item.status === "OPEN" && <button className="button secondary" disabled={working !== ""} onClick={() => void change(item, "PROCESSING")}>开始处理</button>}{["OPEN", "PROCESSING"].includes(item.status) && <><button className="button" disabled={working !== ""} onClick={() => void change(item, "RESOLVED")}>标记解决</button><button className="button danger" disabled={working !== ""} onClick={() => void change(item, "IGNORED")}>忽略</button></>}</div></td>
+            <td><strong>{exceptionTypeLabel(item.type)}</strong><div className="row-error">{item.summary}</div><div className="mono muted">{item.exceptionNo} · {eventSourceLabel(item.source)}</div></td>
+            <td data-label="订单与支付">{item.order ? <><Link className="data-link" href={`/orders/${item.order.orderNo}`}><strong>{item.order.subject}</strong></Link><div className="mono muted">{item.order.orderNo}</div></> : "—"}{item.payment && <div className="mono muted">{item.payment.paymentNo}</div>}</td>
+            <td data-label="金额 / 流水">{item.payment ? <><strong>{money(item.payment.receivedAmount ?? item.payment.amount)}</strong>{item.payment.receivedAmount && item.payment.receivedAmount !== item.payment.amount && <div className="muted">业务金额 {money(item.payment.amount)}</div>}<div className="mono muted">{item.payment.channelTradeNo ?? "—"}</div></> : "—"}</td>
+            <td data-label="状态"><Status value={item.status} /><div className={`severity ${item.severity}`}>{exceptionSeverityLabel(item.severity)}</div>{item.resolution && <div className="muted">{item.resolution}{item.resolutionRef ? ` · ${item.resolutionRef}` : ""}</div>}</td>
+            <td data-label="发现时间">{time(item.detectedAt)}{item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}</td>
+            <td data-label="处置"><div className="row-actions">{item.status === "OPEN" && <button className="button secondary" disabled={working !== ""} onClick={() => void change(item, "PROCESSING")}>开始处理</button>}{["OPEN", "PROCESSING"].includes(item.status) && <><button className="button" disabled={working !== ""} onClick={() => void change(item, "RESOLVED")}>标记解决</button><button className="button danger" disabled={working !== ""} onClick={() => void change(item, "IGNORED")}>忽略</button></>}</div></td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>
     </Section>
   </>;
-}
-
-function typeText(value: string): string {
-  return ({ LATE_DUPLICATE: "晚到 / 重复支付", RECEIPT_AMBIGUOUS: "流水匹配多候选", PAYMENT_STATE_CONFLICT: "支付状态冲突" } as Record<string, string>)[value] ?? value;
-}
-
-function severityText(value: string): string {
-  return ({ MEDIUM: "中风险", HIGH: "高风险", CRITICAL: "严重" } as Record<string, string>)[value] ?? value;
 }

@@ -1,4 +1,38 @@
 import { X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { channelLabel } from "../lib/labels";
+
+// 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+function useDialog(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    node?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { closeRef.current(); return; }
+      if (event.key !== "Tab" || !node) return;
+      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!items.length) { event.preventDefault(); node.focus(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !node.contains(active)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); return; }
+      if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      previous?.focus?.();
+    };
+  }, []);
+  return ref;
+}
 
 export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
@@ -30,12 +64,13 @@ export function Toggle({ checked, onChange, label, disabled = false }: { checked
 const CHANNEL_TAG_STYLE: Record<string, string> = { ALIPAY: "tag-blue", ALIPAY_BILL: "tag-green", MOCK: "tag-gray" };
 
 export function ChannelTag({ code }: { code: string }) {
-  return <span className={`tag ${CHANNEL_TAG_STYLE[code] ?? "tag-gray"}`}>{code}</span>;
+  return <span className={`tag ${CHANNEL_TAG_STYLE[code] ?? "tag-gray"}`} title={code}>{channelLabel(code)}</span>;
 }
 
 export function Drawer({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
+  const ref = useDialog(onClose);
   return <div className="drawer-mask" onClick={onClose}>
-    <div className={wide ? "drawer drawer-wide" : "drawer"} onClick={event => event.stopPropagation()} role="dialog" aria-label={title}>
+    <div ref={ref} tabIndex={-1} className={wide ? "drawer drawer-wide" : "drawer"} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
       <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
       <div className="drawer-body">{children}</div>
     </div>
@@ -43,8 +78,9 @@ export function Drawer({ title, onClose, wide = false, children }: { title: stri
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useDialog(onClose);
   return <div className="drawer-mask modal-mask" onClick={onClose}>
-    <div className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-label={title}>
+    <div ref={ref} tabIndex={-1} className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
       <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
       <div className="drawer-body">{children}</div>
     </div>
@@ -62,18 +98,22 @@ const STATUS_TONE: Record<string, Tone> = {
   SUCCESS: "success",
   MATCHED: "success",
   ONLINE: "success",
+  RUNNING: "success",
   PENDING: "warning",
   PROCESSING: "warning",
   UNKNOWN: "warning",
   UNMATCHED: "warning",
   STALE: "warning",
+  STARTING: "warning",
   FAILED: "danger",
+  ERROR: "danger",
   DEAD: "danger",
   DISABLED: "danger",
   MISMATCH: "danger",
   OPEN: "danger",
   OFFLINE: "danger",
   CREATED: "neutral",
+  IDLE: "neutral",
   CLOSED: "neutral",
   PARTIALLY_REFUNDED: "neutral",
   REFUNDED: "neutral",
@@ -87,8 +127,8 @@ export function Status({ value }: { value: string }) {
 }
 
 export function LoadingState({ loading, error, empty, children }: { loading: boolean; error: string; empty?: boolean; children: React.ReactNode }) {
-  if (loading) return <div className="card loading">正在加载…</div>;
-  if (error) return <div className="card error">{error}</div>;
+  if (loading) return <div className="card loading" role="status">正在加载…</div>;
+  if (error) return <div className="card error" role="alert">{error}</div>;
   if (empty) return <div className="card empty">暂无数据</div>;
   return <>{children}</>;
 }
@@ -116,8 +156,12 @@ const statusLabels: Record<string, string> = {
   OPEN: "待处理",
   RESOLVED: "已解决",
   ONLINE: "在线",
+  RUNNING: "运行中",
   STALE: "心跳延迟",
+  STARTING: "首次启动",
+  ERROR: "出错",
   OFFLINE: "离线",
+  IDLE: "空闲待命",
 };
 
 export function statusText(value: string) { return statusLabels[value] ?? value; }

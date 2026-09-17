@@ -78,6 +78,8 @@ docker compose up -d --build
 
 首次可以在“应用”页面创建 `TUOXIN Matrix`。API Key、Webhook Secret、ePay Key 只显示一次，请立即保存。
 
+应用创建后可以在同一页面重置凭证、停用或删除。重置会同时换掉 API Key、Webhook Secret 与 ePay Key（`epayPid` 作为商户标识不变），旧凭证立即失效。删除只对从未产生订单、退款、通知投递的应用开放；已经承载过资金数据的应用会被拒绝删除并提示改用停用，因为订单与流水必须留在账上。
+
 管理端使用 12 小时有效的签名 HttpOnly 会话 Cookie。`ADMIN_TOKEN` 只用于 Web 服务访问内部管理 API，不会下发到浏览器；请勿将 `ADMIN_PASSWORD`、`ADMIN_SESSION_SECRET` 和 `ADMIN_TOKEN` 设置为相同内容。
 
 ## 自动异常恢复

@@ -2,18 +2,36 @@
 
 import { FormEvent, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Section, Status, time } from "./common";
+import { LoadingState, Modal, PageHead, Section, Status, time } from "./common";
 import { assignable, type Channel } from "./channels";
+import { channelLabel } from "../lib/labels";
 
-type Application = { id: string; appId: string; epayPid: string; name: string; status: string; webhookUrl: string | null; defaultChannel: string; defaultChannelId: string | null; createdAt: string };
-type Credentials = { apiKey: string; webhookSecret: string; epayPid: string; epayKey: string };
+type Counts = { orders: number; refunds: number; webhookDeliveries: number };
+type Application = {
+  id: string; appId: string; epayPid: string; name: string; status: string; webhookUrl: string | null;
+  defaultChannel: string; defaultChannelId: string | null; createdAt: string; _count: Counts;
+};
+type CreatedCredentials = { apiKey: string; webhookSecret: string; epayPid: string; epayKey: string };
+type RotatedCredentials = { apiKey: string; webhookSecret: string; epayKey: string };
+
+// 订单、退款、通知投递都挂在应用上，任何一条存在都意味着这个应用承载过资金事实，不允许被删除。
+function businessTotal(count: Counts) { return count.orders + count.refunds + count.webhookDeliveries; }
+function businessSummary(count: Counts) { return `订单 ${count.orders} 笔 · 退款 ${count.refunds} 笔 · 通知投递 ${count.webhookDeliveries} 条`; }
+function reason(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
 
 export function Applications() {
   const { data, loading, error, reload } = useApi<Application[]>("/applications");
   const channels = useApi<Channel[]>("/channel-instances");
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [credentials, setCredentials] = useState<CreatedCredentials | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [rotating, setRotating] = useState<Application | null>(null);
+  const [rotated, setRotated] = useState<RotatedCredentials | null>(null);
+  const [removing, setRemoving] = useState<Application | null>(null);
+  const [confirmName, setConfirmName] = useState("");
+  const [removeError, setRemoveError] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,19 +39,56 @@ export function Applications() {
     const element = event.currentTarget;
     const form = new FormData(element);
     try {
-      const response = await api<{ data: { credentials: Credentials } }>("/applications", {
+      const response = await api<{ data: { credentials: CreatedCredentials } }>("/applications", {
         method: "POST",
         body: JSON.stringify({ name: form.get("name"), webhookUrl: form.get("webhookUrl"), defaultChannelId: form.get("defaultChannelId") }),
       });
       setCredentials(response.data.credentials);
       element.reset();
       await reload();
-    } catch (cause) { setFormError(cause instanceof Error ? cause.message : "创建失败"); }
+    } catch (cause) { setFormError(reason(cause, "创建失败")); }
     finally { setSaving(false); }
   }
 
+  async function rotate(application: Application) {
+    setBusy(application.id); setNotice(null);
+    try {
+      const response = await api<{ data: RotatedCredentials }>(`/applications/${application.id}/rotate-credentials`, { method: "POST" });
+      setRotated(response.data);
+      setNotice({ type: "ok", text: `「${application.name}」凭证已重置，旧凭证立即失效。` });
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, "凭证重置失败") }); }
+    finally { setBusy(""); }
+  }
+
+  async function toggleStatus(application: Application) {
+    const next = application.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+    if (next === "DISABLED" && !window.confirm(`停用「${application.name}」后，该应用不能再创建新订单；已存在的订单、退款和通知投递仍会继续处理。确认停用？`)) return;
+    setBusy(application.id); setNotice(null);
+    try {
+      await api(`/applications/${application.id}/status`, { method: "POST", body: JSON.stringify({ status: next }) });
+      setNotice({ type: "ok", text: next === "DISABLED" ? `「${application.name}」已停用。` : `「${application.name}」已启用。` });
+      await reload();
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, next === "DISABLED" ? "停用失败" : "启用失败") }); }
+    finally { setBusy(""); }
+  }
+
+  async function remove(application: Application) {
+    setBusy(application.id); setRemoveError("");
+    try {
+      await api(`/applications/${application.id}/delete`, { method: "POST" });
+      setNotice({ type: "ok", text: `「${application.name}」已删除。` });
+      setRemoving(null); setConfirmName("");
+      await reload();
+    } catch (cause) { setRemoveError(reason(cause, "删除失败")); }
+    finally { setBusy(""); }
+  }
+
+  function closeRotate() { setRotating(null); setRotated(null); }
+  function closeRemove() { setRemoving(null); setConfirmName(""); setRemoveError(""); }
+
   return <>
-    <PageHead eyebrow="Applications" title="业务应用" copy="每个自有业务使用独立 API Key、Webhook 密钥和 ePay 凭证。" />
+    <PageHead eyebrow="Applications" title="业务应用" copy="每个自有业务使用独立 API Key、Webhook 密钥和 ePay 凭证；凭证可随时重置，不再使用的应用可停用或删除。" />
+    {notice && <div className={`operation-notice ${notice.type === "error" ? "error" : ""}`} aria-live="polite">{notice.text}</div>}
     <Section title="创建应用" action={<span className="muted">凭证只显示一次</span>} style={{ marginBottom: 22 }}>
       <form className="form-grid" onSubmit={submit}>
         <label>应用名称<input name="name" required placeholder="TUOXIN Matrix" /></label>
@@ -44,18 +99,83 @@ export function Applications() {
       {formError && <div className="error">{formError}</div>}
       {channels.error && <div className="error">{channels.error}</div>}
       {!channels.loading && !channels.data?.some(assignable) && <p className="muted">请先在“插件与通道”中配置、启用并检测一个收款通道。</p>}
-      {credentials && <div className="credentials"><strong>请立即保存以下凭证，关闭后无法再次查看。</strong><div className="credentials-grid">
-        <Secret label="API Key" value={credentials.apiKey} /><Secret label="Webhook Secret" value={credentials.webhookSecret} /><Secret label="ePay PID" value={credentials.epayPid} /><Secret label="ePay Key" value={credentials.epayKey} />
-      </div></div>}
+      {credentials && <CredentialBlock title="请立即保存以下凭证，关闭后无法再次查看。" items={[
+        ["API Key", credentials.apiKey], ["Webhook Secret", credentials.webhookSecret], ["ePay PID", credentials.epayPid], ["ePay Key", credentials.epayKey],
+      ]} />}
     </Section>
+
     <LoadingState loading={loading} error={error} empty={!data?.length}>
-      <section className="card section"><div className="table-wrap"><table><thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th></tr></thead>
-        <tbody>{data?.map(item => <tr key={item.id}><td><strong>{item.name}</strong></td><td><div className="mono">{item.appId}</div><div className="mono muted">PID {item.epayPid}</div></td><td>{channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || item.defaultChannel}</td><td className="mono">{item.webhookUrl || "—"}</td><td><Status value={item.status} /></td><td>{time(item.createdAt)}</td></tr>)}</tbody>
+      <section className="card section"><div className="table-wrap"><table>
+        <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody>{data?.map(item => <tr key={item.id}>
+          <td><strong>{item.name}</strong></td>
+          <td data-label="App ID"><div className="mono">{item.appId}</div><div className="mono muted">PID {item.epayPid}</div></td>
+          <td data-label="默认通道">{channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel)}</td>
+          <td data-label="Webhook" className="mono">{item.webhookUrl || "—"}</td>
+          <td data-label="状态"><Status value={item.status} /></td>
+          <td data-label="创建时间">{time(item.createdAt)}</td>
+          <td data-label="操作">
+            <div className="row-actions">
+              <button className="button secondary" type="button" disabled={busy !== ""} onClick={() => { setRotated(null); setRotating(item); }}>重置凭证</button>
+              <button className="button secondary" type="button" disabled={busy !== ""} onClick={() => void toggleStatus(item)}>{busy === item.id ? "处理中…" : item.status === "ACTIVE" ? "停用" : "启用"}</button>
+              <button className="button danger" type="button" disabled={busy !== "" || businessTotal(item._count) > 0} title={businessTotal(item._count) > 0 ? `已有业务数据（${businessSummary(item._count)}），只能停用` : "删除该应用"} onClick={() => { setConfirmName(""); setRemoveError(""); setRemoving(item); }}>删除</button>
+            </div>
+            <div className="muted">{businessTotal(item._count) > 0 ? `已有 ${businessSummary(item._count)}，只能停用` : "尚无业务数据，可直接删除"}</div>
+          </td>
+        </tr>)}</tbody>
       </table></div></section>
     </LoadingState>
+
+    {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} onClose={closeRotate}>
+      {rotated ? <>
+        <p className="muted">旧凭证已立即失效，请把新凭证更新到业务侧配置。离开本窗口后无法再次查看。</p>
+        <CredentialBlock title="请立即保存以下凭证。" items={[
+          ["API Key", rotated.apiKey], ["Webhook Secret", rotated.webhookSecret], ["ePay Key", rotated.epayKey],
+        ]} />
+        <p className="muted">ePay PID 未变更：它是商户标识而不是密钥，轮换只会让业务侧已配置的商户号失效。</p>
+        <div className="dialog-actions"><button className="button" type="button" onClick={closeRotate}>我已保存，关闭</button></div>
+      </> : <>
+        <p>即将重置「<strong>{rotating.name}</strong>」的三项凭证：接口鉴权 API Key、回调验签 Webhook Secret、ePay 商户密钥。</p>
+        <ul className="dialog-list">
+          <li>重置后旧凭证立即失效：业务侧未同步新凭证期间，新订单接口与回调验签都会失败。</li>
+          <li>已存在的订单、退款与通知投递不受影响，仍按原流程继续处理。</li>
+          <li>本次操作会记入管理操作审计。</li>
+        </ul>
+        {busy === rotating.id && <p className="muted">正在重置…</p>}
+        <div className="dialog-actions">
+          <button className="button danger" type="button" disabled={busy !== ""} onClick={() => void rotate(rotating)}>确认重置</button>
+          <button className="button secondary" type="button" onClick={closeRotate}>取消</button>
+        </div>
+      </>}
+    </Modal>}
+
+    {removing && <Modal title="删除应用" onClose={closeRemove}>
+      <p>应用「<strong>{removing.name}</strong>」，App ID <span className="mono">{removing.appId}</span>。</p>
+      {businessTotal(removing._count) > 0 ? <>
+        <div className="dialog-warning">该应用已产生业务数据（{businessSummary(removing._count)}），不允许删除。</div>
+        <ul className="dialog-list">
+          <li>订单、退款与通知投递是资金事实，必须留在账上，本页面不提供删除资金数据的入口。</li>
+          <li>不再需要这个应用时，请改用「停用」：停用后它不能再创建新订单，已存在的订单与退款仍会继续处理。</li>
+        </ul>
+        <div className="dialog-actions"><button className="button secondary" type="button" onClick={closeRemove}>知道了</button></div>
+      </> : <>
+        <ul className="dialog-list">
+          <li>该应用目前没有订单、退款或通知投递记录，删除不会影响任何资金数据。</li>
+          <li>删除后 API Key、Webhook 密钥与 ePay 凭证立即失效，且无法恢复。</li>
+        </ul>
+        <label>输入应用名称以确认<input value={confirmName} onChange={event => setConfirmName(event.target.value)} placeholder={removing.name} autoComplete="off" /></label>
+        {removeError && <div className="error">{removeError}</div>}
+        <div className="dialog-actions">
+          <button className="button danger" type="button" disabled={busy !== "" || confirmName.trim() !== removing.name} onClick={() => void remove(removing)}>{busy === removing.id ? "删除中…" : "确认删除"}</button>
+          <button className="button secondary" type="button" onClick={closeRemove}>取消</button>
+        </div>
+      </>}
+    </Modal>}
   </>;
 }
 
-function Secret({ label, value }: { label: string; value: string }) {
-  return <div className="secret-row"><span>{label}</span><code>{value}</code></div>;
+function CredentialBlock({ title, items }: { title: string; items: Array<[string, string]> }) {
+  return <div className="credentials"><strong>{title}</strong><div className="credentials-grid">
+    {items.map(([label, value]) => <div className="secret-row" key={label}><span>{label}</span><code>{value}</code></div>)}
+  </div></div>;
 }

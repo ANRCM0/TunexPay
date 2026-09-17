@@ -76,10 +76,10 @@ export function Reconciliation() {
           <thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead>
           <tbody>{runs?.map(run => <tr key={run.id}>
             <td><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td>
-            <td><Status value={run.status} />{run.errorMessage && <div className="row-error">{run.errorMessage}</div>}</td>
-            <td>新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
-            <td><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
-            <td>{time(run.completedAt)}</td>
+            <td data-label="状态"><Status value={run.status} />{run.errorMessage && <div className="row-error">{run.errorMessage}</div>}</td>
+            <td data-label="导入">新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
+            <td data-label="匹配结果"><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
+            <td data-label="完成时间">{time(run.completedAt)}</td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>
@@ -91,11 +91,11 @@ export function Reconciliation() {
           <thead><tr><th>业务 / 时间</th><th>账单标识</th><th>金额</th><th>系统记录</th><th>匹配状态</th><th>操作</th></tr></thead>
           <tbody>{receipts?.map(item => <tr key={item.id}>
             <td><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td>
-            <td><div className="mono">{item.providerTradeNo ?? item.providerRefundNo ?? "—"}</div><div className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo ?? "—"}</div></td>
-            <td><strong>{money(item.amount)}</strong></td>
-            <td>{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</div></> : "—"}</td>
-            <td><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td>
-            <td>{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
+            <td data-label="账单标识"><div className="mono">{item.providerTradeNo ?? item.providerRefundNo ?? "—"}</div><div className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo ?? "—"}</div></td>
+            <td data-label="金额"><strong>{money(item.amount)}</strong></td>
+            <td data-label="系统记录">{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</div></> : "—"}</td>
+            <td data-label="匹配状态"><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td>
+            <td data-label="操作">{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>

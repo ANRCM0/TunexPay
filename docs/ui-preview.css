@@ -1,3 +1,110 @@
+/* 自动生成：内容拼接自 apps/web/app/globals.css 与 apps/web/app/(admin)/admin.css，仅供 docs/ui-preview.html 静态预览使用。 */
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --ink: #243143;
+  --muted: #7a869a;
+  --line: #e4e9f2;
+  --paper: #f5f7fb;
+  --panel: #ffffff;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #e8f0fe;
+  --success: #22a06b;
+  --success-soft: #e3f6ed;
+  --warning: #b97c14;
+  --warning-soft: #fdf1da;
+  --danger: #e5534b;
+  --danger-soft: #fdeceb;
+  --shadow: 0 1px 3px rgba(36, 49, 67, 0.06);
+  /* 旧别名，避免漏改处直接崩色 */
+  --teal: var(--primary);
+  --teal-soft: var(--primary-soft);
+  --navy: var(--primary);
+  --amber: var(--warning);
+  --red: var(--danger);
+}
+
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+button, input, select { font: inherit; }
+a { color: inherit; text-decoration: none; }
+::selection { background: rgba(37, 99, 235, .16); }
+
+/* ---- 跨界面共享原语（admin / cashier / login 都可用） ---- */
+
+.eyebrow { text-transform: uppercase; letter-spacing: .12em; color: var(--primary); font-size: 11px; font-weight: 700; }
+h1 { font-size: 22px; font-weight: 700; margin: 5px 0 0; letter-spacing: -.015em; }
+.page-copy { color: var(--muted); margin: 7px 0 0; font-size: 13.5px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
+
+.button { border: 0; border-radius: 8px; background: linear-gradient(180deg, #3b82f6, #2563eb); color: white; padding: 9px 15px; font-weight: 600; cursor: pointer; font-size: 13px; letter-spacing: .01em; transition: background .15s ease, box-shadow .15s ease, transform .1s ease; box-shadow: 0 1px 2px rgba(37, 99, 235, .25); }
+.button:hover { background: linear-gradient(180deg, #2563eb, #1d4ed8); box-shadow: 0 3px 8px rgba(37, 99, 235, .28); }
+.button:active { transform: translateY(1px); box-shadow: none; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.button.secondary { background: var(--primary-soft); color: var(--primary); box-shadow: none; }
+.button.secondary:hover { background: #d8e5fd; box-shadow: none; }
+.button.danger { background: var(--danger-soft); color: var(--danger); border: 1px solid #f6c9c6; box-shadow: none; }
+.button.danger:hover { background: #fbdcdb; box-shadow: none; }
+.button:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.badge { display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #eef1f6; color: #5b6b80; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.badge-success { background: var(--success-soft); color: #15794f; }
+.badge-warning { background: var(--warning-soft); color: var(--warning); }
+.badge-danger { background: var(--danger-soft); color: #c73e36; }
+.badge-neutral { background: #eef1f6; color: #5b6b80; }
+
+.mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.break-all { word-break: break-all; }
+
+label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
+input, select { min-width: 0; border: 1px solid #ccd6e4; background: white; color: var(--ink); border-radius: 8px; padding: 9px 11px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--primary); }
+input:hover, select:hover { border-color: #aab8cd; }
+input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+
+.operation-notice { margin-bottom: 18px; padding: 12px 14px; border-radius: 9px; border: 1px solid #bcd4fb; background: var(--primary-soft); color: #1e4fb8; font-size: 13px; animation: notice-in .18s ease; }
+.operation-notice.error { padding: 12px 14px; border-color: #f6c9c6; background: var(--danger-soft); color: #c73e36; }
+@keyframes notice-in { from { opacity: 0; transform: translateY(-4px); } }
+
+.empty, .loading, .error { padding: 34px; text-align: center; color: var(--muted); }
+.compact { padding: 18px; }
+.error { color: var(--danger); }
+
+.data-link { color: var(--primary); }
+.data-link:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
+
+.brand-badge { margin: 0 auto 18px; width: 40px; height: 40px; display: grid; place-items: center; background: var(--primary); color: #fff; border-radius: 10px; font-weight: 900; font-size: 18px; }
+
+/* ---- 窄屏触控目标：可点区域不小于 44px，避免误触 ---- */
+
+@media (max-width: 980px) {
+  .button { min-height: 42px; padding: 11px 16px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { min-height: 44px; }
+  .toggle { padding: 10px 0; }
+}
+
+/* ---- 动效偏好：系统要求减少动态效果时，只保留状态变化本身 ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .stat:hover, .channel-card:hover { transform: none !important; }
+}
+
 /* 管理后台专属样式，仅由 app/(admin)/layout.tsx 引入 */
 
 /* ---- 布局骨架：浅色侧边栏 + 顶栏 ---- */

@@ -48,7 +48,7 @@ h1 { font-size: 22px; font-weight: 700; margin: 5px 0 0; letter-spacing: -.015em
 .button { border: 0; border-radius: 8px; background: linear-gradient(180deg, #3b82f6, #2563eb); color: white; padding: 9px 15px; font-weight: 600; cursor: pointer; font-size: 13px; letter-spacing: .01em; transition: background .15s ease, box-shadow .15s ease, transform .1s ease; box-shadow: 0 1px 2px rgba(37, 99, 235, .25); }
 .button:hover { background: linear-gradient(180deg, #2563eb, #1d4ed8); box-shadow: 0 3px 8px rgba(37, 99, 235, .28); }
 .button:active { transform: translateY(1px); box-shadow: none; }
-.button:focus-visible, .toggle:focus-visible, .tabs-item:focus-visible, .topbar-menu:focus-visible, .drawer-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .button.secondary { background: var(--primary-soft); color: var(--primary); box-shadow: none; }
 .button.secondary:hover { background: #d8e5fd; box-shadow: none; }
 .button.danger { background: var(--danger-soft); color: var(--danger); border: 1px solid #f6c9c6; box-shadow: none; }
@@ -67,6 +67,7 @@ h1 { font-size: 22px; font-weight: 700; margin: 5px 0 0; letter-spacing: -.015em
 
 label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 input, select { min-width: 0; border: 1px solid #ccd6e4; background: white; color: var(--ink); border-radius: 8px; padding: 9px 11px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--primary); }
 input:hover, select:hover { border-color: #aab8cd; }
 input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
 
@@ -82,3 +83,23 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
 .data-link:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
 
 .brand-badge { margin: 0 auto 18px; width: 40px; height: 40px; display: grid; place-items: center; background: var(--primary); color: #fff; border-radius: 10px; font-weight: 900; font-size: 18px; }
+
+/* ---- 窄屏触控目标：可点区域不小于 44px，避免误触 ---- */
+
+@media (max-width: 980px) {
+  .button { min-height: 42px; padding: 11px 16px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { min-height: 44px; }
+  .toggle { padding: 10px 0; }
+}
+
+/* ---- 动效偏好：系统要求减少动态效果时，只保留状态变化本身 ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .stat:hover, .channel-card:hover { transform: none !important; }
+}

@@ -11,6 +11,18 @@ describe("admin audit descriptors", () => {
     });
   });
 
+  it("names application lifecycle actions", () => {
+    expect(describeAdminAction("POST", "/admin/v1/applications/app_1/rotate-credentials")).toEqual({
+      action: "APPLICATION_CREDENTIAL_ROTATE", resourceType: "APPLICATION", resourceId: "app_1",
+    });
+    expect(describeAdminAction("POST", "/admin/v1/applications/app_1/status")).toEqual({
+      action: "APPLICATION_STATUS_UPDATE", resourceType: "APPLICATION", resourceId: "app_1",
+    });
+    expect(describeAdminAction("POST", "/admin/v1/applications/app_1/delete")).toEqual({
+      action: "APPLICATION_DELETE", resourceType: "APPLICATION", resourceId: "app_1",
+    });
+  });
+
   it("extracts reconciliation receipt ids", () => {
     expect(describeAdminAction("POST", "/admin/v1/reconciliation/receipts/rcp_1/match")).toEqual({
       action: "RECEIPT_REMATCH", resourceType: "RECEIPT", resourceId: "rcp_1",
