@@ -10,6 +10,8 @@ export async function runDueOrderExpirations(limit = 20): Promise<ExpirationSumm
   const due = await db.order.findMany({
     where: {
       status: { in: ["CREATED", "PENDING"] },
+      // 随应用归档的订单已从在用数据集摘除，不能再被过期任务捞起来关单。
+      deletedAt: null,
       expiresAt: { lte: now },
       expirationNextAttemptAt: { lte: now },
       OR: [{ expirationLockedUntil: null }, { expirationLockedUntil: { lt: now } }],

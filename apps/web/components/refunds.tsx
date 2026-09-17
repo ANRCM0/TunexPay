@@ -7,7 +7,7 @@ import { LoadingState, PageHead, Status, money, time } from "./common";
 type Refund = {
   id: string; refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string;
   queryAttempts: number; nextQueryAt: string | null; lastQueriedAt: string | null; errorMessage: string | null;
-  application: { name: string }; payment: { paymentNo: string; order: { subject: string } };
+  application: { name: string; archivedAt: string | null }; payment: { paymentNo: string; order: { subject: string; deletedAt: string | null } };
 };
 
 export function Refunds() {
@@ -26,12 +26,13 @@ export function Refunds() {
   return <>
     <PageHead eyebrow="Reconciliation" title="退款记录" copy="退款有独立状态和幂等单号，UNKNOWN 会保留待查而不会被误判失败。" />
     {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
+    <p className="muted">带「已归档」标记的退款来自已删除的应用：通道侧的钱已经动了，这些记录仍保留可查，未完成的会继续自动查单。</p>
     <LoadingState loading={loading} error={error} empty={!data?.length}>
       <section className="card section"><div className="table-wrap"><table>
         <thead><tr><th>退款单</th><th>支付单 / 应用</th><th>金额</th><th>状态 / 恢复</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody>{data?.map(item => <tr key={item.id}>
           <td><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refundNo}<br />{item.externalRefundNo}</div>{item.reason && <div className="muted">{item.reason}</div>}</td>
-          <td data-label="支付单"><span className="mono">{item.payment.paymentNo}</span><div className="muted">{item.application.name}</div></td>
+          <td data-label="支付单"><span className="mono">{item.payment.paymentNo}</span><div className="muted">{item.application.name}{item.application.archivedAt && <span className="tag-archived">已归档</span>}</div></td>
           <td data-label="金额"><strong>{money(item.amount)}</strong></td>
           <td data-label="状态"><Status value={item.status} />{item.queryAttempts > 0 && <div className="recovery-note">已查询 {item.queryAttempts} 次<br />{item.nextQueryAt ? `下次 ${time(item.nextQueryAt)}` : "等待人工处理"}</div>}{item.errorMessage && <div className="row-error">{item.errorMessage}</div>}</td>
           <td data-label="创建时间">{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>

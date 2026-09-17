@@ -31,7 +31,7 @@ export async function createRefund(application: Application, input: CreateRefund
   try {
     dispatch = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM payments WHERE paymentNo = ${input.paymentNo} FOR UPDATE`;
-      const payment = await tx.payment.findFirst({ where: { paymentNo: input.paymentNo, order: { applicationId: application.id } }, include: { order: true } });
+      const payment = await tx.payment.findFirst({ where: { paymentNo: input.paymentNo, order: { applicationId: application.id, deletedAt: null } }, include: { order: true } });
       if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
       if (payment.status !== "SUCCESS") throw new AppError("PAYMENT_NOT_REFUNDABLE", "只有成功支付单可以退款", 409);
       const raced = await tx.refund.findUnique({ where: { applicationId_externalRefundNo: { applicationId: application.id, externalRefundNo: input.externalRefundNo } } });

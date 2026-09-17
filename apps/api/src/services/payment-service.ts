@@ -36,7 +36,7 @@ export async function createPayment(application: Application, orderNo: string, i
     if (application.defaultChannelId && application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
     if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true, channelId);
     await tx.$queryRaw`SELECT id FROM orders WHERE orderNo = ${orderNo} FOR UPDATE`;
-    const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id } });
+    const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id, deletedAt: null } });
     if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
     if (order.expiresAt && order.expiresAt <= new Date()) throw new AppError("ORDER_EXPIRED", "订单已过期", 409);
     if (!["CREATED", "PENDING"].includes(order.status)) throw new AppError("ORDER_NOT_PAYABLE", `订单状态 ${order.status} 不允许发起支付`, 409);
@@ -198,7 +198,7 @@ export async function markPaymentSucceeded(result: ChannelWebhookResult, source:
 }
 
 export async function queryPayment(applicationId: string | null, paymentNo: string) {
-  const payment = await db.payment.findFirst({ where: { paymentNo, ...(applicationId ? { order: { applicationId } } : {}) }, include: { order: true } });
+  const payment = await db.payment.findFirst({ where: { paymentNo, ...(applicationId ? { order: { applicationId, deletedAt: null } } : {}) }, include: { order: true } });
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
   const result = await (await adapterForPayment(payment)).query(payment.paymentNo);
   if (result.status === "SUCCESS") {
@@ -223,13 +223,13 @@ export async function queryPayment(applicationId: string | null, paymentNo: stri
 }
 
 export async function getPayment(applicationId: string, paymentNo: string) {
-  const payment = await db.payment.findFirst({ where: { paymentNo, order: { applicationId } } });
+  const payment = await db.payment.findFirst({ where: { paymentNo, order: { applicationId, deletedAt: null } } });
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
   return presentPayment(payment);
 }
 
 export async function closePayment(applicationId: string | null, paymentNo: string, source = "API") {
-  const payment = await db.payment.findFirst({ where: { paymentNo, ...(applicationId ? { order: { applicationId } } : {}) } });
+  const payment = await db.payment.findFirst({ where: { paymentNo, ...(applicationId ? { order: { applicationId, deletedAt: null } } : {}) } });
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
   if (payment.status === "SUCCESS" || payment.status === "CLOSED") return presentPayment(payment);
   if (!["CREATED", "PROCESSING", "UNKNOWN"].includes(payment.status)) throw new AppError("PAYMENT_NOT_CLOSABLE", `支付状态 ${payment.status} 不允许关闭`, 409);

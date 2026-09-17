@@ -84,7 +84,8 @@ export async function updateApplicationStatus(id: string, status: ApplicationSta
   return db.application.update({ where: { id }, data: { status } });
 }
 
-// 删除前置校验：订单、退款、通知投递都是资金事实或待投递事实，任何一条存在都不允许随应用消失。
+// 删除应用分两种：没有业务数据的直接删行；承载过订单、退款、通知投递的走归档删除，
+// 行保留（历史订单、事件、退款推进与异常记录仍挂在它上面），但对业务侧立即等同于删除。
 export async function deleteApplication(id: string) {
   const application = await db.application.findUnique({
     where: { id },
@@ -92,22 +93,87 @@ export async function deleteApplication(id: string) {
   });
   if (!application) throw new AppError("APPLICATION_NOT_FOUND", "应用不存在", 404);
   if (application.appId === INTERNAL_APPLICATION_ID) throw new AppError("APPLICATION_INTERNAL", "通道验收用的内部应用不允许删除", 409);
-  assertNoBusinessData(application._count);
+  if (application._count.orders || application._count.refunds || application._count.webhookDeliveries) {
+    return archiveApplication(id);
+  }
   try {
     await db.application.delete({ where: { id } });
   } catch (error) {
-    // 计数与删除之间若并发落进一笔新订单，外键会拦住删除；这里转成同一条可读结论。
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") assertNoBusinessData({ orders: 1, refunds: 0, webhookDeliveries: 0 });
+    // 计数与删除之间若并发落进一笔新订单，外键会拦住删除；这时改走归档，而不是把删除挡回去。
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") return archiveApplication(id);
     throw error;
   }
-  return { appId: application.appId, name: application.name };
+  return { appId: application.appId, name: application.name, archived: false as const, cleared: emptyCleared() };
 }
 
-function assertNoBusinessData(count: { orders: number; refunds: number; webhookDeliveries: number }): void {
-  if (!count.orders && !count.refunds && !count.webhookDeliveries) return;
-  throw new AppError(
-    "APPLICATION_HAS_BUSINESS_DATA",
-    `该应用已产生业务数据（订单 ${count.orders} 笔、退款 ${count.refunds} 笔、通知投递 ${count.webhookDeliveries} 条）。订单与流水是资金事实，不能随应用删除；请改用停用。`,
-    409,
-  );
+export type ArchivedApplication = {
+  appId: string;
+  name: string;
+  archived: true;
+  cleared: { orders: number; payments: number; refunds: number; events: number; webhookDeliveries: number; exceptions: number; receipts: number };
+};
+
+function emptyCleared(): ArchivedApplication["cleared"] {
+  return { orders: 0, payments: 0, refunds: 0, events: 0, webhookDeliveries: 0, exceptions: 0, receipts: 0 };
+}
+
+// 归档删除：一次事务内把该应用从在用数据集里摘干净。
+// 凭证重新随机、状态置 DISABLED、archivedAt / pausedAt 记录归档时刻；该应用下的订单打上 deletedAt，
+// 尚未成功的支付尝试、未投递的通知、未处置的异常与回执线索一并清掉；已成功的支付与已发起的退款保留行。
+// 行本身不删，DBA 可以按 orders.deletedWithApplicationId 把整批数据还原。
+async function archiveApplication(id: string): Promise<ArchivedApplication> {
+  return db.$transaction(async (tx) => {
+    const application = await tx.application.findUniqueOrThrow({ where: { id }, select: { appId: true, name: true } });
+    const orderIds = (await tx.order.findMany({ where: { applicationId: id, deletedAt: null }, select: { id: true } })).map(row => row.id);
+    const subjectWhere = { OR: [{ orderId: { in: orderIds } }, { payment: { orderId: { in: orderIds } } }] };
+    const [receipts, events, deliveries, exceptions, payments, refunds] = await Promise.all([
+      tx.receipt.findMany({ where: { OR: [{ payment: { orderId: { in: orderIds } } }, { refund: { applicationId: id } }] }, select: { id: true } }),
+      tx.paymentEvent.count({ where: subjectWhere }),
+      tx.webhookDelivery.count({ where: { applicationId: id } }),
+      tx.paymentException.count({ where: subjectWhere }),
+      tx.payment.count({ where: { orderId: { in: orderIds } } }),
+      tx.refund.count({ where: { applicationId: id } }),
+    ]);
+    // 成功的支付单与已发起的退款要留在库里：通道侧的钱已经动了，删掉就再也对不上账。
+    const keptPayments = (await tx.payment.findMany({
+      where: { orderId: { in: orderIds }, status: { in: ["SUCCESS", "CLOSED"] } },
+      select: { id: true },
+    })).map(row => row.id);
+    const keptRefunds = (await tx.refund.findMany({ where: { applicationId: id, status: { in: ["SUCCESS", "PROCESSING", "UNKNOWN"] } }, select: { id: true } })).map(row => row.id);
+    const archivedAt = new Date();
+
+    await tx.receipt.deleteMany({ where: { id: { in: receipts.map(row => row.id) } } });
+    await tx.paymentEvent.deleteMany({ where: subjectWhere });
+    await tx.paymentException.deleteMany({ where: subjectWhere });
+    await tx.refund.deleteMany({ where: { applicationId: id, id: { notIn: keptRefunds } } });
+    await tx.webhookDelivery.deleteMany({ where: { applicationId: id } });
+    await tx.payment.deleteMany({ where: { orderId: { in: orderIds }, id: { notIn: keptPayments } } });
+    await tx.order.updateMany({ where: { id: { in: orderIds } }, data: { deletedAt: archivedAt, deletedWithApplicationId: application.appId } });
+    await tx.application.update({
+      where: { id },
+      data: {
+        status: "DISABLED",
+        archivedAt,
+        pausedAt: archivedAt,
+        apiKeyHash: sha256(randomSecret(32)),
+        webhookSecretEncrypted: seal(randomSecret(32)),
+        epayKeyEncrypted: seal(randomSecret(32)),
+        webhookUrl: null,
+      },
+    });
+    return {
+      appId: application.appId,
+      name: application.name,
+      archived: true as const,
+      cleared: {
+        orders: orderIds.length,
+        payments: payments - keptPayments.length,
+        refunds: refunds - keptRefunds.length,
+        events,
+        webhookDeliveries: deliveries,
+        exceptions,
+        receipts: receipts.length,
+      },
+    };
+  });
 }

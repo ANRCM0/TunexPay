@@ -31,6 +31,7 @@ export async function createOrder(
   const existing = await db.order.findFirst({
     where: {
       applicationId: application.id,
+      deletedAt: null,
       OR: [
         { externalOrderNo: input.externalOrderNo },
         ...(normalizedKey ? [{ idempotencyKey: normalizedKey }] : []),
@@ -82,6 +83,7 @@ export async function createOrder(
       const raced = await db.order.findFirst({
         where: {
           applicationId: application.id,
+          deletedAt: null,
           OR: [{ externalOrderNo: input.externalOrderNo }, ...(normalizedKey ? [{ idempotencyKey: normalizedKey }] : [])],
         },
       });
@@ -92,9 +94,10 @@ export async function createOrder(
   }
 }
 
+// 业务侧只能看到在用的订单：随应用归档的订单已经「删除」，不该再出现在接口返回里。
 export async function findApplicationOrder(applicationId: string, orderNo: string) {
   const order = await db.order.findFirst({
-    where: { applicationId, orderNo },
+    where: { applicationId, orderNo, deletedAt: null },
     include: { payments: { orderBy: { attemptNo: "asc" } } },
   });
   if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
