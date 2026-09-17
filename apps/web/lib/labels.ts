@@ -119,6 +119,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   APPLICATION_CREDENTIAL_ROTATE: "重置应用凭证",
   APPLICATION_STATUS_UPDATE: "启用 / 停用应用",
   APPLICATION_DELETE: "删除应用",
+  APPLICATION_ARCHIVE: "归档删除应用",
+  APPLICATION_RESTORE: "还原归档应用",
   APPLICATION_CHANNEL_CHANGE: "切换默认渠道",
   ALIPAY_CONNECTION_CHECK: "检查支付宝连接",
   PAYMENT_QUERY: "支付主动查单",

@@ -197,8 +197,20 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .dialog-list { margin: 12px 0 0; padding-left: 18px; color: #40506a; font-size: 12.5px; line-height: 1.85; }
 .dialog-warning { margin-top: 14px; padding: 12px 14px; border: 1px solid #f3d3cf; border-radius: 9px; background: #fffaf9; color: #b8382f; font-size: 12.5px; line-height: 1.7; }
+.dialog-warning.is-info { border-color: #cddcf5; background: #f7faff; color: #2b4d94; }
 .dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .dialog-actions .muted { font-size: 11.5px; }
+
+/* ---- 已归档应用：列表降噪，但保留可读性 ---- */
+
+.row-archived { background: #fafbfd; }
+.row-archived td { color: var(--muted); }
+.row-archived td strong { color: #5a6b83; font-weight: 600; }
+.tag-archived { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: #eef1f6; color: #64748b; font-size: 10px; vertical-align: 1px; }
+.toggle-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.toggle-inline input { width: auto; margin: 0; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.section-head h2 { margin: 0; font-size: 15px; }
 
 /* ---- 渠道卡片 ---- */
 

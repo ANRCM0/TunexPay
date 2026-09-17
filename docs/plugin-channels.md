@@ -63,9 +63,16 @@ npm run build
 | POST | `/applications/{id}/channel-instance` | 分配通道，正文 `{channelId}` |
 | POST | `/applications/{id}/rotate-credentials` | 重置 API Key、Webhook Secret 与 ePay Key，返回值只显示这一次，`epayPid` 不变 |
 | POST | `/applications/{id}/status` | 启用 / 停用，正文 `{status: "ACTIVE" \| "DISABLED"}` |
-| POST | `/applications/{id}/delete` | 删除应用，仅在订单、退款、通知投递均为 0 时允许；否则返回 409 `APPLICATION_HAS_BUSINESS_DATA` |
+| POST | `/applications/{id}/delete` | 删除应用。无业务数据时直接删行；有订单 / 退款 / 通知投递时走归档删除，返回 `{archived: true, cleared}` 清理明细 |
 
-应用的启停与删除以订单、退款、通知投递是否存在为界：存在任意一条时拒绝删除（`APPLICATION_HAS_BUSINESS_DATA`），因为这些是资金事实；通道实付验收用的内部应用 `channel-diagnostics` 既不参与启停也不允许删除（`APPLICATION_INTERNAL`）。管理端变更统一使用 POST 动作式路径，因此前端 BFF 不需要放开 PATCH / DELETE。
+删除分两条路径，由服务端按业务数据量自动判定，前端不需要传参：
+
+- **直接删除**：订单、退款、通知投递都为 0 时物理删行。
+- **归档删除**：存在任意一条业务数据时，在**同一事务**内把该应用从在用数据集摘除 —— 凭证重新随机、状态置 `DISABLED`、写入 `archivedAt` / `pausedAt`；该应用下的订单打上 `orders.deletedAt` + `deletedWithApplicationId`；未成功的支付尝试、未投递的通知、未处置的异常与回执线索一并清理；**已成功的支付单与已发起（含 PROCESSING/UNKNOWN）的退款保留行**，因为通道侧的钱已经动了，删掉就再也对不上账。行本身不删，DBA 可按 `orders.deletedWithApplicationId` 反查还原整批数据。
+
+归档后生效的边界：业务接口与 ePay 接口一律拒绝该应用的凭证（`middleware/auth.ts`、`routes/epay.ts` 都查 `archivedAt`）；订单、支付、退款的业务查询统一带 `orders.deletedAt: null`；管理台的订单 / 通知 / 异常 / 看板计数同样排除归档数据，但**订单详情不做过滤**（按订单号仍可直接打开，这是追溯历史资金流向的唯一出口），退款列表也保留并标注「已归档」。归档集合由应用列表的「显示已归档」开关控制。
+
+通道实付验收用的内部应用 `channel-diagnostics` 既不参与启停也不允许删除（`APPLICATION_INTERNAL`）。管理端变更统一使用 POST 动作式路径，因此前端 BFF 不需要放开 PATCH / DELETE。
 
 创建/保存正文为 `{name, plugin, enabled, settings, revision?}`；修改必须带当前版本。插件注册在 `apps/api/src/channels/plugins.ts`，实例管理在 `channel-instance-service.ts`，运行时通过 `adapterForPayment()` 解析支付绑定。目前提供内置插件，不支持上传执行第三方插件代码。
 

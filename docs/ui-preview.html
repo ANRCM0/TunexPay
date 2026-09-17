@@ -223,12 +223,13 @@
       <div class="preview-block">
         <h2 class="preview-h2">四、业务应用：新增 重置凭证 / 停用 / 删除</h2>
         <div class="preview-note">
-          删除的判定规则写在服务端：应用下只要有订单、退款或通知投递，删除请求会被拒绝（409），并在列表里直接标明「只能停用」。
-          订单与流水是资金事实，不提供随应用一起删除的入口。
+          删除按业务数据量自动分两条路径：没有订单、退款、通知投递的应用直接删行；已经承载过资金数据的应用走<b>归档删除</b> ——
+          凭证立即失效、业务接口查不到它的任何订单，但记录保留在库中，DBA 可按 <code class="mono">orders.deletedWithApplicationId</code> 还原。
+          归档应用默认不在列表显示，用「显示已归档」开关查看。
         </div>
 
         <section class="card section">
-          <div class="section-title"><h2>应用列表（新增操作列）</h2><span class="muted">示例数据</span></div>
+          <div class="section-head"><h2>应用列表（新增操作列）</h2><label class="toggle-inline"><input type="checkbox" checked readonly>显示已归档</label></div>
           <div class="table-wrap"><table>
             <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
             <tbody>
@@ -243,9 +244,9 @@
                   <div class="row-actions">
                     <button class="button secondary" type="button">重置凭证</button>
                     <button class="button secondary" type="button">停用</button>
-                    <button class="button danger" type="button" disabled title="已有业务数据（订单 12 笔、退款 1 笔、通知投递 4 条），只能停用">删除</button>
+                    <button class="button danger" type="button" title="删除该应用">删除</button>
                   </div>
-                  <div class="muted">已有 订单 12 笔 · 退款 1 笔 · 通知投递 4 条，只能停用</div>
+                  <div class="muted">已有 订单 12 笔 · 退款 1 笔 · 通知投递 4 条，删除后归档保留</div>
                 </td>
               </tr>
               <tr>
@@ -263,6 +264,15 @@
                   </div>
                   <div class="muted">尚无业务数据，可直接删除</div>
                 </td>
+              </tr>
+              <tr class="row-archived">
+                <td><strong>旧版验收环境</strong><div class="muted">已于 2026/9/17 10:24:03 归档</div></td>
+                <td data-label="App ID"><div class="mono">app_old3v8n2k</div><div class="mono muted">PID 1887000456</div></td>
+                <td data-label="默认通道">模拟通道</td>
+                <td data-label="Webhook" class="mono">—</td>
+                <td data-label="状态"><span class="badge badge-danger" title="DISABLED">停用</span></td>
+                <td data-label="创建时间">2026/8/22 09:11:37</td>
+                <td data-label="操作"><span class="muted">已归档，仅作追溯</span></td>
               </tr>
             </tbody>
           </table></div>
@@ -301,13 +311,48 @@
           </div>
 
           <div class="modal" style="width:100%">
-            <div class="drawer-head"><h2>删除应用（已有业务数据 → 只能停用）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-head"><h2>删除应用（有业务数据 → 归档删除）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
             <div class="drawer-body">
               <p>应用「<strong>TUOXIN Matrix</strong>」，App ID <span class="mono">app_mt9k2h1x</span>。</p>
-              <div class="dialog-warning">该应用已产生业务数据（订单 12 笔 · 退款 1 笔 · 通知投递 4 条），不允许删除。</div>
+              <div class="dialog-warning">该应用已产生业务数据（订单 12 笔 · 退款 1 笔 · 通知投递 4 条），删除后这些数据会一并从管理台移除。</div>
               <ul class="dialog-list">
-                <li>订单、退款与通知投递是资金事实，必须留在账上，本页面不提供删除资金数据的入口。</li>
-                <li>不再需要这个应用时，请改用「停用」：停用后它不能再创建新订单，已存在的订单与退款仍会继续处理。</li>
+                <li>删除立即生效且不可撤销：凭证失效、不能再创建新订单，订单、退款、对账、异常各页都不再显示它的数据。</li>
+                <li>记录不是物理抹除：已成功的支付与已发起的退款会保留在库里以备追溯，随时可以由 DBA 还原。</li>
+                <li>如果只是想停掉这个业务、又希望数据继续留在管理台，请改用「停用」。本次操作会记入管理操作审计。</li>
+              </ul>
+              <label>输入应用名称以确认<input value="TUOXIN Matrix" readonly></label>
+              <div class="dialog-actions">
+                <button class="button danger" type="button">确认删除</button>
+                <button class="button secondary" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>删除应用（无业务数据 → 输名称确认）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p>应用「<strong>临时验收应用</strong>」，App ID <span class="mono">app_tmp7c4q0z</span>。</p>
+              <ul class="dialog-list">
+                <li>该应用目前没有订单、退款或通知投递记录，删除不会影响任何资金数据。</li>
+                <li>删除后 API Key、Webhook 密钥与 ePay 凭证立即失效，且无法恢复。</li>
+              </ul>
+              <label>输入应用名称以确认<input value="临时验收应用" readonly></label>
+              <div class="dialog-actions">
+                <button class="button danger" type="button">确认删除</button>
+                <button class="button secondary" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>删除完成（归档清理明细）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p>应用「<strong>TUOXIN Matrix</strong>」已删除。</p>
+              <div class="dialog-warning is-info">该应用承载过业务数据，已归档清理：12 笔订单、6 次支付尝试、4 条通知投递、18 条事件、3 条对账线索。</div>
+              <ul class="dialog-list">
+                <li>凭证已立即失效，该应用不能再创建新订单，业务接口也查不到它的任何订单。</li>
+                <li>已成功的支付与已发起的退款记录保留在库里，对账与追溯不受影响，可在退款列表按「已归档」筛出。</li>
+                <li>如需还原这批历史数据，请让 DBA 按 App ID <span class="mono">app_mt9k2h1x</span> 从 orders.deletedWithApplicationId 反查。</li>
               </ul>
               <div class="dialog-actions"><button class="button secondary" type="button">知道了</button></div>
             </div>

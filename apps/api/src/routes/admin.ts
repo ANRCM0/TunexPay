@@ -50,26 +50,28 @@ function pageOf(c: Context<AppEnv>) {
 adminRoutes.get("/dashboard", async (c) => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
+  // 归档订单（随应用删除的历史数据）不进入任何一个计数：管理台只看在用业务。
+  const live = { deletedAt: null };
   const [applications, ordersToday, successfulToday, unknownPayments, pendingWebhooks, amount, recoveringPayments, recoveringRefunds, exhaustedRecoveries, unmatchedReceipts, mismatchedReceipts, openPaymentExceptions, expirationFailures, failedAdminActionsToday] = await Promise.all([
-    db.application.count({ where: { status: "ACTIVE" } }),
-    db.order.count({ where: { createdAt: { gte: start } } }),
-    db.order.count({ where: { paidAt: { gte: start } } }),
-    db.payment.count({ where: { status: "UNKNOWN" } }),
-    db.webhookDelivery.count({ where: { status: { in: ["PENDING", "PROCESSING", "DEAD"] } } }),
-    db.payment.aggregate({ where: { status: "SUCCESS", paidAt: { gte: start } }, _sum: { amount: true } }),
-    db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
-    db.refund.count({ where: { payment: { channel: "ALIPAY" }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
+    db.application.count({ where: { status: "ACTIVE", archivedAt: null } }),
+    db.order.count({ where: { ...live, createdAt: { gte: start } } }),
+    db.order.count({ where: { ...live, paidAt: { gte: start } } }),
+    db.payment.count({ where: { status: "UNKNOWN", order: live } }),
+    db.webhookDelivery.count({ where: { status: { in: ["PENDING", "PROCESSING", "DEAD"] }, order: live } }),
+    db.payment.aggregate({ where: { status: "SUCCESS", paidAt: { gte: start }, order: live }, _sum: { amount: true } }),
+    db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null }, order: live } }),
+    db.refund.count({ where: { payment: { channel: "ALIPAY", order: live }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
     Promise.all([
-      db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS } } }),
-      db.refund.count({ where: { payment: { channel: "ALIPAY" }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS } } }),
+      db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS }, order: live } }),
+      db.refund.count({ where: { payment: { channel: "ALIPAY", order: live }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS } } }),
     ]).then(([payments, refunds]) => payments + refunds),
-    db.receipt.count({ where: { matchStatus: "UNMATCHED" } }),
-    db.receipt.count({ where: { matchStatus: "MISMATCH" } }),
-    db.paymentException.count({ where: { status: { in: ["OPEN", "PROCESSING"] } } }),
-    db.order.count({ where: { status: { in: ["CREATED", "PENDING"] }, expirationError: { not: null } } }),
+    db.receipt.count({ where: { matchStatus: "UNMATCHED", OR: [{ payment: { order: live } }, { payment: null }] } }),
+    db.receipt.count({ where: { matchStatus: "MISMATCH", OR: [{ payment: { order: live } }, { payment: null }] } }),
+    db.paymentException.count({ where: { status: { in: ["OPEN", "PROCESSING"] }, OR: [{ order: live }, { order: null }] } }),
+    db.order.count({ where: { ...live, status: { in: ["CREATED", "PENDING"] }, expirationError: { not: null } } }),
     db.adminAuditLog.count({ where: { success: false, createdAt: { gte: start } } }),
   ]);
-  const recentEvents = await db.paymentEvent.findMany({ orderBy: { id: "desc" }, take: 12 });
+  const recentEvents = await db.paymentEvent.findMany({ where: { OR: [{ order: live }, { order: null }] }, orderBy: { id: "desc" }, take: 12 });
   return c.json({ data: jsonSafe({
     applications, ordersToday, successfulToday, amountToday: amount._sum.amount ?? 0, unknownPayments, pendingWebhooks,
     recoveringPayments, recoveringRefunds, exhaustedRecoveries, unmatchedReceipts, mismatchedReceipts,
@@ -80,10 +82,18 @@ adminRoutes.get("/dashboard", async (c) => {
 adminRoutes.get("/system", async c => c.json({ data: jsonSafe(await collectSystemStatus()) }));
 
 adminRoutes.get("/applications", async (c) => {
-  const applications = await db.application.findMany({ where: { appId: { not: "channel-diagnostics" } }, orderBy: { createdAt: "desc" }, select: {
-    id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true, createdAt: true, updatedAt: true,
-    _count: { select: { orders: true, refunds: true, webhookDeliveries: true } },
-  } });
+  // 归档应用（删除过的）仍然返回：列表要能显示「已归档」状态，否则删完就从页面上消失、
+  // 看起来像数据丢了。前端默认只展示在用应用，可切换到「含已归档」。
+  const includeArchived = z.enum(["true", "false"]).optional().parse(c.req.query("includeArchived")) === "true";
+  const applications = await db.application.findMany({
+    where: { appId: { not: "channel-diagnostics" }, ...(includeArchived ? {} : { archivedAt: null }) },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true,
+      archivedAt: true, pausedAt: true, createdAt: true, updatedAt: true,
+      _count: { select: { orders: true, refunds: true, webhookDeliveries: true } },
+    },
+  });
   return c.json({ data: applications });
 });
 
@@ -129,6 +139,7 @@ adminRoutes.post("/applications/:id/status", async (c) => {
 });
 
 adminRoutes.post("/applications/:id/delete", async (c) => {
+  // 有业务数据的应用走归档删除：凭证立即失效、订单等从在用数据集摘除，行保留以备追溯。
   return c.json({ data: await deleteApplication(c.req.param("id")) });
 });
 
@@ -160,10 +171,13 @@ adminRoutes.post("/channels/alipay/check", async (c) => {
   return c.json({ data: await checkChannel(row.id, row.revision) });
 });
 
+const liveOrder = { deletedAt: null };
+
 adminRoutes.get("/orders", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
   const status = z.enum(["CREATED", "PENDING", "SUCCESS", "CLOSED", "PARTIALLY_REFUNDED", "REFUNDED"]).optional().parse(c.req.query("status"));
-  const where = status ? { status } : {};
+  // 归档订单（随应用删除的历史数据）不出现在在用列表里，但仍可用订单号直接打开查看。
+  const where = { ...liveOrder, ...(status ? { status } : {}) };
   const [rows, total] = await Promise.all([
     db.order.findMany({ where, include: { application: { select: { name: true, appId: true } }, payments: { orderBy: { attemptNo: "desc" }, take: 1 } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
     db.order.count({ where }),
@@ -173,8 +187,9 @@ adminRoutes.get("/orders", async (c) => {
 
 adminRoutes.get("/orders/:orderNo", async (c) => {
   const orderNo = z.string().max(40).parse(c.req.param("orderNo"));
+  // 详情不做在用过滤：归档订单的唯一出口就是这里，排查历史资金流向要靠它。
   const order = await db.order.findUnique({ where: { orderNo }, include: {
-    application: { select: { name: true, appId: true } }, payments: { include: { refunds: true }, orderBy: { attemptNo: "desc" } }, events: { orderBy: { id: "asc" } }, webhookDeliveries: { orderBy: { createdAt: "asc" } }, paymentExceptions: { orderBy: { detectedAt: "desc" } },
+    application: { select: { name: true, appId: true, archivedAt: true } }, payments: { include: { refunds: true }, orderBy: { attemptNo: "desc" } }, events: { orderBy: { id: "asc" } }, webhookDeliveries: { orderBy: { createdAt: "asc" } }, paymentExceptions: { orderBy: { detectedAt: "desc" } },
   } });
   if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
   return c.json({ data: jsonSafe(order) });
@@ -182,8 +197,9 @@ adminRoutes.get("/orders/:orderNo", async (c) => {
 
 adminRoutes.get("/refunds", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
+  // 已归档应用的历史退款保留在库里（通道侧的钱已经动了），列表照常可查，前端会标出「已归档」。
   const [rows, total] = await Promise.all([
-    db.refund.findMany({ include: { application: { select: { name: true } }, payment: { select: { paymentNo: true, order: { select: { orderNo: true, subject: true } } } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+    db.refund.findMany({ include: { application: { select: { name: true, archivedAt: true } }, payment: { select: { paymentNo: true, order: { select: { orderNo: true, subject: true, deletedAt: true } } } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
     db.refund.count(),
   ]);
   return c.json({ data: rows, meta: { page, pageSize, total } });
@@ -196,8 +212,10 @@ adminRoutes.post("/refunds/:refundNo/query", async (c) => {
 
 adminRoutes.get("/exceptions", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
-  const status = z.enum(["OPEN", "PROCESSING", "RESOLVED", "IGNORED"]).optional().parse(c.req.query("status"));
-  const where = status ? { status } : {};
+  const rawStatus = c.req.query("status");
+  const status = z.enum(["OPEN", "PROCESSING", "RESOLVED", "IGNORED"]).optional().parse(rawStatus);
+  // 挂在归档订单上的异常记录会随应用归档一起清掉，这里保留 order 为空的异常（对账类）。
+  const where = { OR: [{ order: liveOrder }, { order: null }], ...(rawStatus && status ? { status } : {}) };
   const [rows, total] = await Promise.all([
     db.paymentException.findMany({
       where,
@@ -266,9 +284,11 @@ adminRoutes.post("/reconciliation/receipts/:id/match", async (c) => {
 
 adminRoutes.get("/webhooks", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
+  // 归档应用的通知投递已被清掉，这里再兜一层，避免历史残留混进在用列表。
+  const where = { order: liveOrder };
   const [rows, total] = await Promise.all([
-    db.webhookDelivery.findMany({ include: { application: { select: { name: true } }, order: { select: { orderNo: true, externalOrderNo: true } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
-    db.webhookDelivery.count(),
+    db.webhookDelivery.findMany({ where, include: { application: { select: { name: true } }, order: { select: { orderNo: true, externalOrderNo: true } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+    db.webhookDelivery.count({ where }),
   ]);
   return c.json({ data: rows, meta: { page, pageSize, total } });
 });

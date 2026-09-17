@@ -10,7 +10,8 @@ export const applicationAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const appId = c.req.header("x-app-id") || /^txp_(app_[a-z0-9]+)_/i.exec(apiKey)?.[1];
   if (!apiKey || !appId) throw new AppError("UNAUTHORIZED", "缺少有效的应用凭证", 401);
   const application = await db.application.findUnique({ where: { appId } });
-  if (!application || application.status !== "ACTIVE" || !safeEqual(application.apiKeyHash, sha256(apiKey))) {
+  // 归档应用等同于已删除：即使旧 Key 还留在业务侧，也必须立刻失效。
+  if (!application || application.archivedAt || application.status !== "ACTIVE" || !safeEqual(application.apiKeyHash, sha256(apiKey))) {
     throw new AppError("UNAUTHORIZED", "应用凭证无效", 401);
   }
   c.set("application", application);

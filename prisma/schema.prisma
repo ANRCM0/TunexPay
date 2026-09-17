@@ -112,6 +112,10 @@ model Application {
   epayKeyEncrypted       String             @db.Text
   defaultChannel         PaymentChannelCode @default(MOCK)
   defaultChannelId       String?            @db.VarChar(80)
+  // 归档软删除标记：非空表示该应用已被管理端移除。行保留是因为历史订单、事件、退款推进与异常
+  // 记录仍挂在它上面；应用列表不再展示，凭证立即失效，pausedAt 记录归档时刻用于区分新增与历史数据。
+  archivedAt             DateTime?
+  pausedAt               DateTime?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   orders                 Order[]
@@ -119,84 +123,91 @@ model Application {
   webhookDeliveries      WebhookDelivery[]
 
   @@index([status, createdAt])
+  @@index([archivedAt, createdAt])
   @@map("applications")
 }
 
 model Order {
-  id                String              @id @default(cuid())
-  orderNo           String              @unique @db.VarChar(40)
-  externalOrderNo   String              @db.VarChar(80)
-  applicationId     String
-  amount            Int                 @db.UnsignedInt
-  currency          String              @default("CNY") @db.Char(3)
-  subject           String              @db.VarChar(160)
-  description       String?             @db.VarChar(500)
-  metadata          Json?
-  protocol          IntegrationProtocol @default(NATIVE_V1)
-  notifyUrl         String?             @db.VarChar(500)
-  returnUrl         String?             @db.VarChar(500)
-  status            OrderStatus         @default(CREATED)
-  idempotencyKey    String?             @db.VarChar(120)
-  requestHash       String              @db.Char(64)
-  winningPaymentId  String?             @db.VarChar(32)
-  expiresAt         DateTime?
-  expirationAttempts Int                @default(0) @db.UnsignedSmallInt
-  expirationNextAttemptAt DateTime?
-  expirationLockedUntil DateTime?
-  expirationError   String?             @db.VarChar(500)
-  paidAt            DateTime?
-  closedAt          DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  application       Application         @relation(fields: [applicationId], references: [id])
-  payments          Payment[]
-  events            PaymentEvent[]
-  webhookDeliveries WebhookDelivery[]
-  paymentExceptions PaymentException[]
+  id                       String              @id @default(cuid())
+  orderNo                  String              @unique @db.VarChar(40)
+  externalOrderNo          String              @db.VarChar(80)
+  applicationId            String
+  amount                   Int                 @db.UnsignedInt
+  currency                 String              @default("CNY") @db.Char(3)
+  subject                  String              @db.VarChar(160)
+  description              String?             @db.VarChar(500)
+  metadata                 Json?
+  protocol                 IntegrationProtocol @default(NATIVE_V1)
+  notifyUrl                String?             @db.VarChar(500)
+  returnUrl                String?             @db.VarChar(500)
+  status                   OrderStatus         @default(CREATED)
+  idempotencyKey           String?             @db.VarChar(120)
+  requestHash              String              @db.Char(64)
+  winningPaymentId         String?             @db.VarChar(32)
+  expiresAt                DateTime?
+  expirationAttempts       Int                 @default(0) @db.UnsignedSmallInt
+  expirationNextAttemptAt  DateTime?
+  expirationLockedUntil    DateTime?
+  expirationError          String?             @db.VarChar(500)
+  paidAt                   DateTime?
+  closedAt                 DateTime?
+  // 软删除标记：管理端「删除业务应用」时，该应用下的订单会连同支付尝试、事件、退款推进、
+  // 回执线索、异常记录一起移出在用数据集（凭证失效、业务单号释放），但行本身保留在库里，
+  // 随时可由 DBA 按 applicationId 还原。非空表示「已随应用归档」，业务接口不再可见、不再可用。
+  deletedAt                DateTime?
+  deletedWithApplicationId String?             @db.VarChar(40)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  application              Application         @relation(fields: [applicationId], references: [id])
+  payments                 Payment[]
+  events                   PaymentEvent[]
+  webhookDeliveries        WebhookDelivery[]
+  paymentExceptions        PaymentException[]
 
   @@unique([applicationId, externalOrderNo])
   @@unique([applicationId, idempotencyKey])
   @@index([applicationId, status, createdAt])
+  @@index([applicationId, deletedAt])
   @@index([createdAt, id])
   @@index([status, expirationNextAttemptAt, id])
   @@map("orders")
 }
 
 model Payment {
-  id             String             @id @default(cuid())
-  paymentNo      String             @unique @db.VarChar(40)
-  orderId        String
-  attemptNo      Int                @db.UnsignedSmallInt
-  idempotencyKey String?            @db.VarChar(120)
-  channel        PaymentChannelCode
-  channelId      String?            @db.VarChar(80)
-  method         String             @db.VarChar(32)
-  status         PaymentStatus      @default(CREATED)
-  amount         Int                @db.UnsignedInt
-  channelAmount  Int                @db.UnsignedInt
-  receivedAmount Int?               @db.UnsignedInt
-  channelTradeNo String?            @unique @db.VarChar(100)
-  channelOrderNo String?            @db.VarChar(100)
-  receiptMatchMode ReceiptMatchMode?
-  receiptMatchReference String?     @db.VarChar(64)
-  receiptValidFrom DateTime?
-  receiptValidUntil DateTime?
-  clientPayload  Json?
-  rawResponse    Json?
-  errorCode      String?            @db.VarChar(80)
-  errorMessage   String?            @db.VarChar(500)
-  queryAttempts  Int                @default(0) @db.UnsignedSmallInt
-  nextQueryAt    DateTime?
-  lastQueriedAt  DateTime?
-  paidAt         DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  order          Order              @relation(fields: [orderId], references: [id])
-  refunds        Refund[]
-  events         PaymentEvent[]
-  receipts       Receipt[]
-  paymentExceptions PaymentException[]
-  receiptReservation ReceiptMatchReservation?
+  id                    String                   @id @default(cuid())
+  paymentNo             String                   @unique @db.VarChar(40)
+  orderId               String
+  attemptNo             Int                      @db.UnsignedSmallInt
+  idempotencyKey        String?                  @db.VarChar(120)
+  channel               PaymentChannelCode
+  channelId             String?                  @db.VarChar(80)
+  method                String                   @db.VarChar(32)
+  status                PaymentStatus            @default(CREATED)
+  amount                Int                      @db.UnsignedInt
+  channelAmount         Int                      @db.UnsignedInt
+  receivedAmount        Int?                     @db.UnsignedInt
+  channelTradeNo        String?                  @unique @db.VarChar(100)
+  channelOrderNo        String?                  @db.VarChar(100)
+  receiptMatchMode      ReceiptMatchMode?
+  receiptMatchReference String?                  @db.VarChar(64)
+  receiptValidFrom      DateTime?
+  receiptValidUntil     DateTime?
+  clientPayload         Json?
+  rawResponse           Json?
+  errorCode             String?                  @db.VarChar(80)
+  errorMessage          String?                  @db.VarChar(500)
+  queryAttempts         Int                      @default(0) @db.UnsignedSmallInt
+  nextQueryAt           DateTime?
+  lastQueriedAt         DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  order                 Order                    @relation(fields: [orderId], references: [id])
+  refunds               Refund[]
+  events                PaymentEvent[]
+  receipts              Receipt[]
+  paymentExceptions     PaymentException[]
+  receiptReservation    ReceiptMatchReservation?
 
   @@unique([orderId, attemptNo])
   @@unique([orderId, idempotencyKey])
@@ -262,18 +273,18 @@ model Refund {
 }
 
 model PaymentEvent {
-  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  aggregateType String   @db.VarChar(24)
-  aggregateId   String   @db.VarChar(40)
+  id            BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  aggregateType String                 @db.VarChar(24)
+  aggregateId   String                 @db.VarChar(40)
   orderId       String?
   paymentId     String?
-  type          String   @db.VarChar(64)
-  source        String   @db.VarChar(32)
-  requestId     String?  @db.VarChar(64)
+  type          String                 @db.VarChar(64)
+  source        String                 @db.VarChar(32)
+  requestId     String?                @db.VarChar(64)
   payload       Json?
-  createdAt     DateTime @default(now())
-  order         Order?   @relation(fields: [orderId], references: [id])
-  payment       Payment? @relation(fields: [paymentId], references: [id])
+  createdAt     DateTime               @default(now())
+  order         Order?                 @relation(fields: [orderId], references: [id])
+  payment       Payment?               @relation(fields: [paymentId], references: [id])
   ownerSeen     OwnerNotificationSeen?
 
   @@index([aggregateType, aggregateId, id])
@@ -330,31 +341,31 @@ model WebhookDelivery {
 }
 
 model Receipt {
-  id                String             @id @default(cuid())
-  provider          PaymentChannelCode
-  statementDate     DateTime           @db.Date
-  direction         ReceiptDirection
-  providerTradeNo   String?            @db.VarChar(100)
-  merchantOrderNo   String?            @db.VarChar(80)
-  providerRefundNo  String?            @db.VarChar(100)
-  merchantRefundNo  String?            @db.VarChar(80)
-  amount            Int                @db.UnsignedInt
-  currency          String             @default("CNY") @db.Char(3)
-  occurredAt        DateTime
-  fingerprint       String             @unique @db.Char(64)
-  matchStatus       ReceiptMatchStatus @default(UNMATCHED)
-  mismatchReason    String?            @db.VarChar(500)
-  accountKey        String?            @db.VarChar(80)
-  remark            String?            @db.VarChar(300)
-  matchMode         ReceiptMatchMode?
-  lockedUntil       DateTime?
-  rawPayload        Json
-  paymentId         String?
-  refundId          String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  payment           Payment?           @relation(fields: [paymentId], references: [id])
-  refund            Refund?            @relation(fields: [refundId], references: [id])
+  id               String             @id @default(cuid())
+  provider         PaymentChannelCode
+  statementDate    DateTime           @db.Date
+  direction        ReceiptDirection
+  providerTradeNo  String?            @db.VarChar(100)
+  merchantOrderNo  String?            @db.VarChar(80)
+  providerRefundNo String?            @db.VarChar(100)
+  merchantRefundNo String?            @db.VarChar(80)
+  amount           Int                @db.UnsignedInt
+  currency         String             @default("CNY") @db.Char(3)
+  occurredAt       DateTime
+  fingerprint      String             @unique @db.Char(64)
+  matchStatus      ReceiptMatchStatus @default(UNMATCHED)
+  mismatchReason   String?            @db.VarChar(500)
+  accountKey       String?            @db.VarChar(80)
+  remark           String?            @db.VarChar(300)
+  matchMode        ReceiptMatchMode?
+  lockedUntil      DateTime?
+  rawPayload       Json
+  paymentId        String?
+  refundId         String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  payment          Payment?           @relation(fields: [paymentId], references: [id])
+  refund           Refund?            @relation(fields: [refundId], references: [id])
 
   @@index([provider, statementDate, id])
   @@index([matchStatus, occurredAt, id])
@@ -388,34 +399,37 @@ model ReconciliationRun {
 }
 
 model OwnerNotificationSettings {
-  id String @id @db.VarChar(40)
-  revision Int @default(1)
-  payloadEncrypted String @db.LongText
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @db.VarChar(40)
+  revision         Int      @default(1)
+  payloadEncrypted String   @db.LongText
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
   @@map("owner_notification_settings")
 }
 
 model OwnerNotificationSeen {
-  eventId BigInt @id @db.UnsignedBigInt
-  event PaymentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId BigInt       @id @db.UnsignedBigInt
+  event   PaymentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
   @@map("owner_notification_seen")
 }
 
 model OwnerNotificationDelivery {
-  id String @id @default(cuid())
-  dedupeKey String @unique @db.VarChar(160)
-  channel String @db.VarChar(16)
-  title String @db.VarChar(160)
-  message String @db.Text
-  status String @default("PENDING") @db.VarChar(16)
-  attempts Int @default(0)
-  nextAttemptAt DateTime @default(now())
-  leaseOwner String? @db.VarChar(40)
-  lockedUntil DateTime?
-  lastError String? @db.VarChar(80)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  dedupeKey     String    @unique @db.VarChar(160)
+  channel       String    @db.VarChar(16)
+  title         String    @db.VarChar(160)
+  message       String    @db.Text
+  status        String    @default("PENDING") @db.VarChar(16)
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  leaseOwner    String?   @db.VarChar(40)
+  lockedUntil   DateTime?
+  lastError     String?   @db.VarChar(80)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([status, nextAttemptAt])
   @@map("owner_notification_deliveries")
 }
@@ -430,45 +444,45 @@ model BillChannelSettings {
 }
 
 model BillCollectorState {
-  id                String   @id @db.VarChar(80)
-  binding           String   @db.Char(64)
+  id                String    @id @db.VarChar(80)
+  binding           String    @db.Char(64)
   cursorAt          DateTime
   windowStart       DateTime?
   windowEnd         DateTime?
-  nextPage          Int      @default(1)
-  leaseOwner        String?  @db.VarChar(64)
+  nextPage          Int       @default(1)
+  leaseOwner        String?   @db.VarChar(64)
   lockedUntil       DateTime?
-  nextRunAt         DateTime @default(now())
+  nextRunAt         DateTime  @default(now())
   heartbeatAt       DateTime?
   lastSuccessAt     DateTime?
-  lastError         String?  @db.VarChar(500)
-  consecutiveErrors Int      @default(0)
-  processedRecords  Int      @default(0)
-  updatedAt         DateTime @updatedAt
+  lastError         String?   @db.VarChar(500)
+  consecutiveErrors Int       @default(0)
+  processedRecords  Int       @default(0)
+  updatedAt         DateTime  @updatedAt
 
   @@map("bill_collector_states")
 }
 
 model ReceiptAccount {
-  id        String   @id @db.VarChar(80)
-  name      String   @db.VarChar(120)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String                    @id @db.VarChar(80)
+  name         String                    @db.VarChar(120)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
   reservations ReceiptMatchReservation[]
 
   @@map("receipt_accounts")
 }
 
 model ReceiptMatchReservation {
-  id         String           @id @default(cuid())
-  accountId  String           @db.VarChar(80)
-  mode       ReceiptMatchMode
-  value      String           @db.VarChar(64)
-  paymentId  String           @unique
-  expiresAt  DateTime
-  createdAt  DateTime         @default(now())
-  account    ReceiptAccount   @relation(fields: [accountId], references: [id])
-  payment    Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id        String           @id @default(cuid())
+  accountId String           @db.VarChar(80)
+  mode      ReceiptMatchMode
+  value     String           @db.VarChar(64)
+  paymentId String           @unique
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+  account   ReceiptAccount   @relation(fields: [accountId], references: [id])
+  payment   Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, mode, value])
   @@index([accountId, expiresAt])

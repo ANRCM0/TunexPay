@@ -19,7 +19,9 @@ export async function recoverExpiredDeliveries(): Promise<number> {
 
 export async function listDueDeliveryIds(limit = 100): Promise<Array<{ id: string; attempts: number }>> {
   return db.webhookDelivery.findMany({
-    where: { status: "PENDING", nextAttemptAt: { lte: new Date() } },
+    // 应用归档时该应用的通知投递已经被清掉；这里再兜一层 order.deletedAt，
+    // 防止归档事务与 Worker 抢跑，让已删应用的过期通知又发出去。
+    where: { status: "PENDING", nextAttemptAt: { lte: new Date() }, order: { deletedAt: null } },
     select: { id: true, attempts: true },
     orderBy: [{ nextAttemptAt: "asc" }, { id: "asc" }],
     take: limit,
