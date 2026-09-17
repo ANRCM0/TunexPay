@@ -3,6 +3,7 @@ import { useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
 import { LoadingState, PageHead, Section, Status, Modal, time } from "./common";
+import { channelLabel } from "../lib/labels";
 import { ChannelEditor } from "./channel-editor";
 
 export type Channel = {
@@ -59,12 +60,12 @@ export function Channels() {
       <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>
           {channels.data?.map(channel => <tr key={channel.id}>
-            <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="mono muted">{channel.plugin} · {channel.id}</div></div></div></td>
-            <td><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
-            <td><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg ellipsis" title={channel.checkMessage}>{channel.checkMessage}</div>}
+            <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="muted">{channelLabel(channel.plugin)} · <span className="mono">{channel.id}</span></div></div></div></td>
+            <td data-label="新订单"><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
+            <td data-label="验证状态"><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg ellipsis" title={channel.checkMessage}>{channel.checkMessage}</div>}
               {channel.testPayment && <div className="muted check-msg">实付订单 <Status value={channel.testPayment.status} />{!channel.testPayment.currentRevision && "（旧配置）"}</div>}
-            </td><td>{time(channel.checkedAt)}</td>
-            <td><div className="channel-actions">
+            </td><td data-label="最近检测">{time(channel.checkedAt)}</td>
+            <td data-label="操作"><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
               <button className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
               <button className="link-button" disabled={!!busy || !channel.enabled} onClick={() => void operate(channel, "test-payment")}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
@@ -78,7 +79,7 @@ export function Channels() {
       <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length}>
         <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款通道</th></tr></thead><tbody>{applications.data?.map(app => {
           const current = app.defaultChannelId || `${app.defaultChannel.toLowerCase().replaceAll("_", "-")}-default`;
-          return <tr key={app.id}><td><strong>{app.name}</strong></td><td><select aria-label={`${app.name} 收款通道`} value={current} disabled={!!busy} onChange={event => void assign(app, event.target.value)}>
+          return <tr key={app.id}><td><strong>{app.name}</strong></td><td data-label="收款通道"><select aria-label={`${app.name} 收款通道`} value={current} disabled={!!busy} onChange={event => void assign(app, event.target.value)}>
             {!channels.data?.some(channel => channel.id === current) && <option value={current}>原默认通道（待加载）</option>}
             {channels.data?.map(channel => <option key={channel.id} value={channel.id} disabled={!assignable(channel)}>{channel.name} · {checkLabels[channel.checkStatus]}{!channel.enabled ? " · 已停用" : ""}</option>)}
           </select></td></tr>;

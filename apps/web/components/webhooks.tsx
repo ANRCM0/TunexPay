@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { LoadingState, PageHead, Status, time } from "./common";
+import { protocolLabel, webhookEventLabel } from "../lib/labels";
 
 type Delivery = { id: string; eventType: string; protocol: string; url: string; status: string; attempts: number; lastError: string | null; nextAttemptAt: string; application: { name: string }; order: { orderNo: string; externalOrderNo: string } };
 
@@ -20,13 +21,13 @@ export function Webhooks() {
       <section className="card section"><div className="table-wrap"><table>
         <thead><tr><th>事件 / 订单</th><th>目标地址</th><th>协议</th><th>状态</th><th>尝试</th><th>下次执行</th><th></th></tr></thead>
         <tbody>{data?.map(item => <tr key={item.id}>
-          <td><strong>{item.eventType.split(":")[0]}</strong><div className="mono muted">{item.order.externalOrderNo}</div>{item.lastError && <div className="row-error">{item.lastError}</div>}</td>
-          <td className="mono">{item.url}</td>
-          <td>{item.protocol}</td>
-          <td><Status value={item.status} /></td>
-          <td>{item.attempts}</td>
-          <td>{time(item.nextAttemptAt)}</td>
-          <td>{item.status === "DEAD" && <button className="button secondary" disabled={retrying === item.id} onClick={() => void retry(item.id)}>重试</button>}</td>
+          <td><strong>{webhookEventLabel(item.eventType.split(":")[0])}</strong><div className="mono muted">{item.eventType}</div><div className="mono muted">{item.order.externalOrderNo}</div>{item.lastError && <div className="row-error">{item.lastError}</div>}</td>
+          <td data-label="目标地址" className="mono">{item.url}</td>
+          <td data-label="协议">{protocolLabel(item.protocol)}</td>
+          <td data-label="状态"><Status value={item.status} /></td>
+          <td data-label="尝试">{item.attempts}</td>
+          <td data-label="下次执行">{time(item.nextAttemptAt)}</td>
+          <td data-label="操作">{item.status === "DEAD" && <button className="button secondary" disabled={retrying === item.id} onClick={() => void retry(item.id)}>重试</button>}</td>
         </tr>)}</tbody>
       </table></div></section>
     </LoadingState>

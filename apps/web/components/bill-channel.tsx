@@ -16,7 +16,7 @@ export function BillChannel() {
       <LoadingState loading={loading} error={error}>
         {collector && <div className="detail-list">
           <Row label="运行状态" value={<Status value={collector.enabled ? "ACTIVE" : "DISABLED"} />} />
-          <Row label="采集状态" value={collector.status} />
+          <Row label="采集状态" value={<Status value={collector.status} />} />
           <Row label="最后成功查询" value={collector.lastSuccessAt ? time(collector.lastSuccessAt) : "尚未查询成功"} />
           <Row label="采集断点" value={collector.cursorAt ? time(collector.cursorAt) : "—"} />
           <Row label="当前页码" value={collector.nextPage != null ? String(collector.nextPage) : "—"} />

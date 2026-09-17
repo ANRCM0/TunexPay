@@ -61,6 +61,11 @@ npm run build
 | POST | `/channel-instances/{id}/test-payment` | 创建或复用当前配置验收单，正文 `{revision}` |
 | GET | `/channel-instances/{id}/collector` | 当前账单通道的采集状态 |
 | POST | `/applications/{id}/channel-instance` | 分配通道，正文 `{channelId}` |
+| POST | `/applications/{id}/rotate-credentials` | 重置 API Key、Webhook Secret 与 ePay Key，返回值只显示这一次，`epayPid` 不变 |
+| POST | `/applications/{id}/status` | 启用 / 停用，正文 `{status: "ACTIVE" \| "DISABLED"}` |
+| POST | `/applications/{id}/delete` | 删除应用，仅在订单、退款、通知投递均为 0 时允许；否则返回 409 `APPLICATION_HAS_BUSINESS_DATA` |
+
+应用的启停与删除以订单、退款、通知投递是否存在为界：存在任意一条时拒绝删除（`APPLICATION_HAS_BUSINESS_DATA`），因为这些是资金事实；通道实付验收用的内部应用 `channel-diagnostics` 既不参与启停也不允许删除（`APPLICATION_INTERNAL`）。管理端变更统一使用 POST 动作式路径，因此前端 BFF 不需要放开 PATCH / DELETE。
 
 创建/保存正文为 `{name, plugin, enabled, settings, revision?}`；修改必须带当前版本。插件注册在 `apps/api/src/channels/plugins.ts`，实例管理在 `channel-instance-service.ts`，运行时通过 `adapterForPayment()` 解析支付绑定。目前提供内置插件，不支持上传执行第三方插件代码。
 

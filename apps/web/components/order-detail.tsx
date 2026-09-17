@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { ChannelTag, LoadingState, Section, Stat, Status, Tabs, money, time } from "./common";
+import { eventLabel, eventSourceLabel, eventTone, exceptionSeverityLabel, exceptionTypeLabel, protocolLabel, receiptMatchModeLabel } from "../lib/labels";
 
 type Refund = { refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string };
 type Payment = {
@@ -63,7 +64,7 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
           <div className="detail-list">
             <Detail label="应用" value={`${data.application.name} (${data.application.appId})`} mono />
             <Detail label="业务订单号" value={data.externalOrderNo} mono />
-            <Detail label="接入协议" value={data.protocol} />
+            <Detail label="接入协议" value={protocolLabel(data.protocol)} />
             <Detail label="创建时间" value={time(data.createdAt)} />
             <Detail label="订单到期" value={time(data.expiresAt)} />
             <Detail label="过期处理" value={data.expirationAttempts ? `${data.expirationAttempts} 次` : "尚未触发"} />
@@ -77,11 +78,11 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
           {data.payments.length ? <div className="table-wrap"><table><thead><tr><th>尝试</th><th>渠道 / 支付单号</th><th>状态</th><th>金额</th><th>渠道交易号</th><th>创建 / 支付时间</th><th>操作</th></tr></thead>
             <tbody>{data.payments.map(payment => <tr key={payment.id}>
               <td>#{payment.attemptNo}</td>
-              <td><ChannelTag code={payment.channel} /><div className="mono muted">{payment.method} · {payment.paymentNo}</div>{payment.errorMessage && <div className="row-error">{payment.errorCode}: {payment.errorMessage}</div>}</td>
-              <td><Status value={payment.status} /></td><td>{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
-              <td className="mono">{payment.channelTradeNo || payment.channelOrderNo || "—"}</td>
-              <td>{time(payment.createdAt)}<div className="muted">{payment.paidAt ? time(payment.paidAt) : "未支付"}</div></td>
-              <td><div className="row-actions">
+              <td data-label="渠道"><ChannelTag code={payment.channel} /><div className="mono muted">{payment.method} · {payment.paymentNo}</div>{payment.errorMessage && <div className="row-error">{payment.errorCode}: {payment.errorMessage}</div>}</td>
+              <td data-label="状态"><Status value={payment.status} /></td><td data-label="金额">{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
+              <td data-label="渠道交易号" className="mono">{payment.channelTradeNo || payment.channelOrderNo || "—"}</td>
+              <td data-label="时间">{time(payment.createdAt)}<div className="muted">{payment.paidAt ? time(payment.paidAt) : "未支付"}</div></td>
+              <td data-label="操作"><div className="row-actions">
                 {payment.status !== "SUCCESS" && <button className="button secondary" disabled={working !== ""} onClick={() => void operate(payment.paymentNo, "query")}>{working === `${payment.paymentNo}:query` ? "查询中…" : "主动查单"}</button>}
                 {["CREATED", "PROCESSING", "UNKNOWN"].includes(payment.status) && <button className="button danger" disabled={working !== ""} onClick={() => void operate(payment.paymentNo, "close")}>{working === `${payment.paymentNo}:close` ? "关闭中…" : "关闭"}</button>}
               </div>{payment.queryAttempts > 0 && <div className="recovery-note">已自动查询 {payment.queryAttempts} 次<br />{payment.nextQueryAt ? `下次 ${time(payment.nextQueryAt)}` : "等待人工处理"}</div>}</td>
@@ -90,14 +91,14 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
         </Section>
 
         {data.paymentExceptions.length > 0 && <Section title="支付异常" action={<span className="muted">处置请前往“支付异常”队列</span>} className="detail-section">
-          {data.paymentExceptions.map(item => <div className="record" key={item.id}><div><strong>{item.summary}</strong> <Status value={item.status} /></div><div className="mono muted">{item.exceptionNo} · {item.type} · {item.severity}</div><div className="muted">{item.resolution || "尚未填写处置结果"} · {time(item.detectedAt)}</div></div>)}
+          {data.paymentExceptions.map(item => <div className="record" key={item.id}><div><strong>{item.summary}</strong> <Status value={item.status} /></div><div className="mono muted">{item.exceptionNo} · {exceptionTypeLabel(item.type)} · {exceptionSeverityLabel(item.severity)}</div><div className="muted">{item.resolution || "尚未填写处置结果"} · {time(item.detectedAt)}</div></div>)}
         </Section>}
       </>}
 
       {tab === "事件时间线" && <Section title="事件时间线" action={<span className="muted">{data.events.length} 条</span>}>
-        {data.events.length ? <div className="timeline">{data.events.map(event => <div className="timeline-item" key={event.id}>
-          <div className="timeline-type">{event.type}</div>
-          <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {event.source} · {time(event.createdAt)}</div>
+        {data.events.length ? <div className="timeline">{data.events.map(event => <div className={`timeline-item tone-${eventTone(event.type)}`} key={event.id}>
+          <div className="timeline-type">{eventLabel(event.type)}</div>
+          <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {eventSourceLabel(event.source)} · {time(event.createdAt)}</div>
           {hasPayload(event.payload) && <details className="event-payload"><summary>查看事件数据</summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>}
         </div>)}</div> : <div className="empty compact">暂无事件</div>}
       </Section>}
@@ -108,7 +109,7 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
             <div><strong>{money(refund.amount)}</strong> <Status value={refund.status} /></div><div className="mono muted">{refund.refundNo} · {refund.paymentNo}</div><div className="muted">{refund.reason || "未填写原因"} · {time(refund.createdAt)}</div>
           </div>)}{data.payments.every(payment => payment.refunds.length === 0) && <div className="empty compact">暂无退款</div>}</div>
           <div><h3>Webhook 投递</h3>{data.webhookDeliveries.map(delivery => <div className="record" key={delivery.id}>
-            <div><strong>{delivery.eventType}</strong> <Status value={delivery.status} /></div><div className="mono muted break-all">{delivery.url}</div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>{delivery.lastError && <div className="row-error">{delivery.lastError}</div>}
+            <div><strong>{eventLabel(delivery.eventType)}</strong> <Status value={delivery.status} /></div><div className="mono muted break-all">{delivery.url}</div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>{delivery.lastError && <div className="row-error">{delivery.lastError}</div>}
           </div>)}{!data.webhookDeliveries.length && <div className="empty compact">暂无通知任务</div>}</div>
         </div>
       </Section>}

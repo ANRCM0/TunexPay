@@ -10,7 +10,7 @@ import { AppError } from "../lib/errors.js";
 import { RECOVERY_MAX_ATTEMPTS } from "../lib/recovery-policy.js";
 import { adminAuth } from "../middleware/auth.js";
 import { adminAudit } from "../middleware/admin-audit.js";
-import { createApplication, rotateApplicationApiKey } from "../services/application-service.js";
+import { createApplication, deleteApplication, rotateApplicationApiKey, rotateApplicationCredentials, updateApplicationStatus } from "../services/application-service.js";
 import { closePayment, queryPayment } from "../services/payment-service.js";
 import { updatePaymentException } from "../services/payment-exception-service.js";
 import { queryRefund } from "../services/refund-service.js";
@@ -82,6 +82,7 @@ adminRoutes.get("/system", async c => c.json({ data: jsonSafe(await collectSyste
 adminRoutes.get("/applications", async (c) => {
   const applications = await db.application.findMany({ where: { appId: { not: "channel-diagnostics" } }, orderBy: { createdAt: "desc" }, select: {
     id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true, createdAt: true, updatedAt: true,
+    _count: { select: { orders: true, refunds: true, webhookDeliveries: true } },
   } });
   return c.json({ data: applications });
 });
@@ -114,6 +115,21 @@ adminRoutes.post("/applications", async (c) => {
 
 adminRoutes.post("/applications/:id/rotate-api-key", async (c) => {
   return c.json({ data: await rotateApplicationApiKey(c.req.param("id")) });
+});
+
+adminRoutes.post("/applications/:id/rotate-credentials", async (c) => {
+  return c.json({ data: await rotateApplicationCredentials(c.req.param("id")) });
+});
+
+// 管理端的变更接口统一走 POST 动作式路径（与查单 / 关闭 / 异常处置一致），
+// 这样 BFF 代理无需放开 PATCH / DELETE，同源校验也能覆盖到这些写操作。
+adminRoutes.post("/applications/:id/status", async (c) => {
+  const { status } = z.object({ status: z.enum(["ACTIVE", "DISABLED"]) }).parse(await c.req.json());
+  return c.json({ data: await updateApplicationStatus(c.req.param("id"), status) });
+});
+
+adminRoutes.post("/applications/:id/delete", async (c) => {
+  return c.json({ data: await deleteApplication(c.req.param("id")) });
 });
 
 adminRoutes.post("/applications/:id/default-channel", async (c) => {

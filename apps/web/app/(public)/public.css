@@ -30,11 +30,6 @@
 .cashier-countdown { color: var(--primary); }
 .cashier-note { margin-top: 16px; font-size: 11px; line-height: 1.6; }
 
-@media (max-width: 560px) {
-  .cashier-duo { grid-template-columns: 1fr; }
-  .cashier-foot { flex-direction: column; }
-}
-
 .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #dbe7fd 0, var(--paper) 48%); }
 .login-card { width: min(420px, 100%); padding: 36px; text-align: center; animation: cashier-in .25s ease; }
 .login-card h1 { font-size: 24px; }
@@ -44,6 +39,12 @@
 .login-note { margin: 20px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
 @media (max-width: 560px) {
+  .cashier-layout { margin-top: 18px; padding: 0 14px; gap: 14px; }
+  .cashier-main { padding: 20px; }
+  .cashier-main-head { flex-direction: column; gap: 10px; }
+  .amount { font-size: 30px; }
+  .qr { width: 180px; height: 180px; }
   .cashier-duo { grid-template-columns: 1fr; }
   .cashier-foot { flex-direction: column; }
+  .login-card { padding: 26px 20px; }
 }

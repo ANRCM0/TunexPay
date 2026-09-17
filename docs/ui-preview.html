@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUOXIN Pay 管理台 · 界面调整预览</title>
+<!-- 静态预览说明：
+     1) 样式来自仓库真实样式表：docs/ui-preview.css 由 apps/web/app/globals.css 与
+        apps/web/app/(admin)/admin.css 原样拼接生成，没有另写一套；
+     2) 标记结构逐段复制自 components/dashboard.tsx 与 components/owner-notifications.tsx，
+        数字/事件为示例数据，用于对比改前改后；
+     3) globals.css 首行的 @import "tailwindcss" 在静态环境取不到（构建时才内联），
+        这里用一个最小 reset 顶替 Tailwind preflight，其余样式均来自真实样式表。 -->
+<style>
+  h1, h2, h3, p, figure, blockquote { margin: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  button { font: inherit; border: 0; background: none; color: inherit; }
+  summary { display: list-item; }
+  .preview-note { margin-bottom: 22px; padding: 14px 16px; border: 1px dashed #c9d8f5; border-radius: 10px; background: #f6f9ff; color: #3c5a92; font-size: 12px; line-height: 1.7; }
+  .preview-block { margin-bottom: 36px; }
+  .preview-h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+  .preview-h2::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--primary); }
+  .preview-sub { margin: 18px 0 10px; color: var(--muted); font-size: 12.5px; font-weight: 700; }
+  .preview-old { padding: 16px; border: 1px dashed #e8b4b0; border-radius: 12px; background: #fffdfd; }
+  .preview-new { padding: 16px; border: 1px dashed #bfe6d3; border-radius: 12px; background: #fbfefc; }
+  .preview-flag { display: inline-block; margin-bottom: 12px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+  .preview-flag.old { background: var(--danger-soft); color: #c73e36; }
+  .preview-flag.new { background: var(--success-soft); color: #15794f; }
+  .preview-grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+  .preview-list { margin: 0; padding-left: 18px; color: #40506a; font-size: 12.5px; line-height: 1.9; }
+  .preview-list code { padding: 1px 5px; border-radius: 4px; background: #f1f4f9; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+</style>
+<link rel="stylesheet" href="ui-preview.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">T</div>
+      <div class="brand-text"><div class="brand-title">TUOXIN PAY</div><div class="brand-subtitle">自有支付网关</div></div>
+    </div>
+    <nav class="nav">
+      <a class="active" href="#"><span>支付运行总览</span></a>
+      <a href="#"><span>订单</span></a>
+      <a href="#"><span>支付异常</span></a>
+      <a href="#"><span>对账流水</span></a>
+    </nav>
+    <div class="nav-group">
+      <div class="nav-group-label">系统</div>
+      <a href="#"><span>通知设置</span></a>
+      <a href="#"><span>系统监控</span></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="breadcrumb"><span>管理台</span><i>/</i><span>界面调整预览</span></div>
+      <div class="topbar-user"><div class="topbar-avatar">管</div><span class="topbar-name">admin</span></div>
+    </header>
+
+    <div class="content">
+      <div class="preview-note">
+        这是<b>静态预览</b>：样式表链接的是仓库里真实的 <b>globals.css</b> 与 <b>admin.css</b>，
+        标记结构与 <b>components/dashboard.tsx</b>、<b>components/owner-notifications.tsx</b> 一致，数据为示例值。
+        响应式断点（980 / 700 / 560px）同样生效，可直接缩窗口验证。
+      </div>
+
+      <!-- ============ 一、首页总览 ============ -->
+      <div class="preview-block">
+        <h2 class="preview-h2">一、首页总览：11 张卡片墙 → 4 个核心指标 + 按需出现的异常条</h2>
+
+        <div class="preview-old">
+          <span class="preview-flag old">改前</span>
+          <div class="grid stats">
+            <div class="card stat stat-blue"><div class="stat-label">今日订单</div><div class="stat-value">18</div><div class="stat-note">12 笔支付成功</div></div>
+            <div class="card stat stat-green"><div class="stat-label">今日实收</div><div class="stat-value">¥3,486.00</div><div class="stat-note">仅统计成功支付</div></div>
+            <div class="card stat stat-orange"><div class="stat-label">结果未知</div><div class="stat-value">2</div><div class="stat-note">需要主动查单</div></div>
+            <div class="card stat stat-red"><div class="stat-label">需要人工处理</div><div class="stat-value">0</div><div class="stat-note">自动查单已达到上限</div></div>
+            <div class="card stat stat-red"><div class="stat-label">支付异常</div><div class="stat-value">1</div><div class="stat-note">待核实、退款或人工关闭</div></div>
+            <div class="card stat stat-orange"><div class="stat-label">未匹配账单</div><div class="stat-value">0</div><div class="stat-note">等待订单或退款单出现</div></div>
+            <div class="card stat stat-red"><div class="stat-label">对账差错</div><div class="stat-value">0</div><div class="stat-note">金额或流水号冲突</div></div>
+            <div class="card stat stat-orange"><div class="stat-label">过期关闭异常</div><div class="stat-value">0</div><div class="stat-note">Worker 将自动退避重试</div></div>
+            <div class="card stat stat-red"><div class="stat-label">今日管理失败</div><div class="stat-value">0</div><div class="stat-note">可在操作审计中查看</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">3</div><div class="stat-note">2 支付 · 1 退款</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">通知待处理</div><div class="stat-value">1</div><div class="stat-note">3 个活跃应用</div></div>
+          </div>
+          <div class="preview-sub">下面的业务事件直接吐后端事件码，靠人脑翻译：</div>
+          <div class="timeline">
+            <div class="timeline-item"><div class="timeline-type">ORDER_SUCCEEDED</div><div class="timeline-meta"><span class="mono">ORD2026091700041</span> · ALIPAY_BILL · 2026/9/17 09:12:03</div></div>
+            <div class="timeline-item"><div class="timeline-type">PAYMENT_UNKNOWN</div><div class="timeline-meta"><span class="mono">PAY2026091700088</span> · WORKER · 2026/9/17 09:08:41</div></div>
+          </div>
+        </div>
+
+        <div class="preview-new" style="margin-top:16px">
+          <span class="preview-flag new">改后</span>
+          <div class="grid stats">
+            <div class="card stat stat-blue"><div class="stat-label">今日订单</div><div class="stat-value">18</div><div class="stat-note">12 笔支付成功</div></div>
+            <div class="card stat stat-green"><div class="stat-label">今日实收</div><div class="stat-value">¥3,486.00</div><div class="stat-note">仅统计成功支付</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">3</div><div class="stat-note">2 支付 · 1 退款</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">通知待处理</div><div class="stat-value">1</div><div class="stat-note">3 个活跃应用</div></div>
+          </div>
+          <div class="alert-strip">
+            <div class="alert-strip-head">需要关注<span class="alert-count">3 项</span></div>
+            <div class="grid alert-grid">
+              <div class="card stat stat-red"><div class="stat-label">支付异常</div><div class="stat-value">1</div><div class="stat-note">待核实、退款或人工关闭</div></div>
+              <div class="card stat stat-orange"><div class="stat-label">结果未知</div><div class="stat-value">2</div><div class="stat-note">需要主动查单</div></div>
+              <div class="card stat stat-orange"><div class="stat-label">未匹配账单</div><div class="stat-value">4</div><div class="stat-note">等待订单或退款单出现</div></div>
+            </div>
+          </div>
+          <div class="preview-sub">异常全部为 0 时，整条警示区消失，改成一行“清零”提示：</div>
+          <div class="card stat-clear">当前没有需要人工处理的异常</div>
+          <div class="preview-sub">业务事件改为中文事件名 + 按成功 / 待查 / 失败着色：</div>
+          <div class="timeline">
+            <div class="timeline-item tone-ok"><div class="timeline-type">订单支付成功</div><div class="timeline-meta"><span class="mono">ORD2026091700041</span> · 支付宝账单 · 2026/9/17 09:12:03</div></div>
+            <div class="timeline-item tone-warn"><div class="timeline-type">支付结果未知</div><div class="timeline-meta"><span class="mono">PAY2026091700088</span> · 后台任务 · 2026/9/17 09:08:41</div></div>
+            <div class="timeline-item tone-bad"><div class="timeline-type">业务回调投递耗尽</div><div class="timeline-meta"><span class="mono">ORD2026091700033</span> · 后台任务 · 2026/9/17 08:57:12</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ 二、通知设置 ============ -->
+      <div class="preview-block">
+        <h2 class="preview-h2">二、通知设置：14 个字段一张网格 → 按渠道分三组</h2>
+        <div class="preview-old">
+          <span class="preview-flag old">改前</span>
+          <div class="bill-settings-grid">
+            <label>启用邮箱通知<select><option>开启</option><option>关闭</option></select></label>
+            <label>SMTP 主机<input value="smtp.example.com" readonly></label>
+            <label>SMTP 加密方式<select><option>465 · TLS</option></select></label>
+            <label>SMTP 登录账号<input value="pay@example.com" readonly></label>
+            <label>SMTP 密码 / 授权码<input type="password" value="12345678" readonly></label>
+            <label>发件邮箱<input value="pay@example.com" readonly></label>
+            <label>收件邮箱<input value="owner@example.com" readonly></label>
+            <label>启用飞书机器人通知<select><option>开启</option></select></label>
+            <label>飞书 Webhook<input type="password" value="abcdefgh" readonly></label>
+            <label>飞书签名校验密钥（选填）<input type="password" value="abcdefgh" readonly></label>
+            <label>收款成功<select><option>开启</option></select></label>
+            <label>支付 / 流水异常<select><option>开启</option></select></label>
+            <label>业务回调重试耗尽<select><option>开启</option></select></label>
+            <label>采集连续失败<select><option>开启</option></select></label>
+          </div>
+        </div>
+
+        <div class="preview-new" style="margin-top:16px">
+          <span class="preview-flag new">改后</span>
+          <section class="card section">
+            <div class="section-title"><h2>通知渠道与事件</h2><button class="link-button" type="button">重新加载</button></div>
+            <fieldset class="settings-group">
+              <div class="settings-group-head">
+                <div><h3>邮箱通知</h3><p>通过 SMTP 发送，只允许公网主机与安全 TLS。</p></div>
+                <button type="button" role="switch" aria-checked="true" class="toggle on"><span class="toggle-knob"></span><span class="toggle-label">启用邮箱通知</span></button>
+              </div>
+              <div class="settings-grid">
+                <label>SMTP 主机<input value="smtp.example.com" readonly></label>
+                <label>SMTP 加密方式<select><option>465 · TLS</option></select></label>
+                <label>SMTP 登录账号<input value="pay@example.com" readonly></label>
+                <label>SMTP 密码 / 授权码（已配置，留空保留）<input type="password" value="12345678" readonly>
+                  <span class="field-clear"><input type="checkbox">清除已保存的值</span></label>
+                <label>发件邮箱<input value="pay@example.com" readonly></label>
+                <label>收件邮箱<input value="owner@example.com" readonly></label>
+              </div>
+            </fieldset>
+            <fieldset class="settings-group">
+              <div class="settings-group-head">
+                <div><h3>飞书通知</h3><p>只允许官方自定义机器人地址，建议使用私密群。</p></div>
+                <button type="button" role="switch" aria-checked="true" class="toggle on"><span class="toggle-knob"></span><span class="toggle-label">启用飞书机器人通知</span></button>
+              </div>
+              <div class="settings-grid">
+                <label>飞书 Webhook（已配置，留空保留）<input type="password" value="abcdefgh" readonly></label>
+                <label>飞书签名校验密钥（选填）（未配置）<input type="password" value="" readonly></label>
+              </div>
+            </fieldset>
+            <fieldset class="settings-group">
+              <div class="settings-group-head">
+                <div><h3>通知事件</h3><p>Mock 收款不发送本人通知。</p></div>
+              </div>
+              <div class="settings-events">
+                <label class="event-option"><input type="checkbox" checked><span><strong>收款成功</strong><em>订单确认到账时提醒</em></span></label>
+                <label class="event-option"><input type="checkbox" checked><span><strong>支付 / 流水异常</strong><em>晚到重复、多候选、状态冲突</em></span></label>
+                <label class="event-option"><input type="checkbox" checked><span><strong>业务回调重试耗尽</strong><em>通知投递进入 DEAD 时提醒</em></span></label>
+                <label class="event-option"><input type="checkbox"><span><strong>采集连续失败</strong><em>相同故障每 15 分钟最多一次</em></span></label>
+              </div>
+            </fieldset>
+            <div class="settings-actions">
+              <button class="button" type="button">保存通知配置</button>
+              <button class="button secondary" type="button">发送测试邮件</button>
+              <button class="button secondary" type="button">发送飞书测试</button>
+              <span class="muted">配置需先保存，发送结果见下方投递记录</span>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ============ 三、其他修复 ============ -->
+      <div class="preview-block">
+        <h2 class="preview-h2">三、其他一并修掉的小问题</h2>
+        <div class="preview-grid-2">
+          <section class="card section">
+            <div class="section-title"><h2>渠道 / 枚举码统一翻中文</h2></div>
+            <div class="detail-list">
+              <div class="detail-row"><span>渠道标签（订单、收银台）</span><strong><span class="tag tag-blue">支付宝</span> <span class="tag tag-green">支付宝账单</span> <span class="tag tag-gray">模拟通道</span></strong></div>
+              <div class="detail-row"><span>接入协议</span><strong>自有协议 v1</strong></div>
+              <div class="detail-row"><span>支付异常类型</span><strong>流水匹配多候选 · 高风险</strong></div>
+              <div class="detail-row"><span>账单匹配方式</span><strong>按支付单号匹配</strong></div>
+              <div class="detail-row"><span>通知渠道</span><strong>邮件 / 飞书</strong></div>
+              <div class="detail-row"><span>采集器状态</span><strong><span class="badge badge-success" title="RUNNING">运行中</span></strong></div>
+            </div>
+          </section>
+          <section class="card section">
+            <div class="section-title"><h2>交互与健壮性</h2></div>
+            <ul class="preview-list">
+              <li>原生复选框曾被通用输入框规则污染（带输入框边框、被拉满宽），已单独还原外观并统一 <code>accent-color</code>。</li>
+              <li>系统监控里队列计数缺字段时会渲染成 <code>undefined</code>，已补 <code>?? 0</code> 兜底。</li>
+              <li>“已自动查询 N 次”在窄屏会撑破单元格，改为允许换行。</li>
+              <li>抽屉 / 弹窗此前只能用 Esc 关闭，Tab 会跑到遮罩后的页面；现在焦点在弹窗内循环，关闭后回落到原按钮。</li>
+              <li>详情页各分区间距由 16px 提到 20px，长页面不再糊成一片。</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <!-- ============ 四、业务应用的生命周期操作 ============ -->
+      <div class="preview-block">
+        <h2 class="preview-h2">四、业务应用：新增 重置凭证 / 停用 / 删除</h2>
+        <div class="preview-note">
+          删除的判定规则写在服务端：应用下只要有订单、退款或通知投递，删除请求会被拒绝（409），并在列表里直接标明「只能停用」。
+          订单与流水是资金事实，不提供随应用一起删除的入口。
+        </div>
+
+        <section class="card section">
+          <div class="section-title"><h2>应用列表（新增操作列）</h2><span class="muted">示例数据</span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>TUOXIN Matrix</strong></td>
+                <td data-label="App ID"><div class="mono">app_mt9k2h1x</div><div class="mono muted">PID 1234567890</div></td>
+                <td data-label="默认通道">支付宝收款 · 主账号</td>
+                <td data-label="Webhook" class="mono">https://matrix.example.com/pay/notify</td>
+                <td data-label="状态"><span class="badge badge-success" title="ACTIVE">启用</span></td>
+                <td data-label="创建时间">2026/9/1 10:02:11</td>
+                <td data-label="操作">
+                  <div class="row-actions">
+                    <button class="button secondary" type="button">重置凭证</button>
+                    <button class="button secondary" type="button">停用</button>
+                    <button class="button danger" type="button" disabled title="已有业务数据（订单 12 笔、退款 1 笔、通知投递 4 条），只能停用">删除</button>
+                  </div>
+                  <div class="muted">已有 订单 12 笔 · 退款 1 笔 · 通知投递 4 条，只能停用</div>
+                </td>
+              </tr>
+              <tr>
+                <td><strong>临时验收应用</strong></td>
+                <td data-label="App ID"><div class="mono">app_tmp7c4q0z</div><div class="mono muted">PID 1998000123</div></td>
+                <td data-label="默认通道">模拟通道</td>
+                <td data-label="Webhook" class="mono">—</td>
+                <td data-label="状态"><span class="badge badge-danger" title="DISABLED">停用</span></td>
+                <td data-label="创建时间">2026/9/16 17:40:52</td>
+                <td data-label="操作">
+                  <div class="row-actions">
+                    <button class="button secondary" type="button">重置凭证</button>
+                    <button class="button secondary" type="button">启用</button>
+                    <button class="button danger" type="button" title="删除该应用">删除</button>
+                  </div>
+                  <div class="muted">尚无业务数据，可直接删除</div>
+                </td>
+              </tr>
+            </tbody>
+          </table></div>
+        </section>
+
+        <div class="preview-sub">弹窗（正常居中显示，这里为了对照把遮罩层去掉，只放窗口本体）</div>
+        <div style="display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));align-items:start">
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>重置应用凭证</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p>即将重置「<strong>TUOXIN Matrix</strong>」的三项凭证：接口鉴权 API Key、回调验签 Webhook Secret、ePay 商户密钥。</p>
+              <ul class="dialog-list">
+                <li>重置后旧凭证立即失效：业务侧未同步新凭证期间，新订单接口与回调验签都会失败。</li>
+                <li>已存在的订单、退款与通知投递不受影响，仍按原流程继续处理。</li>
+                <li>本次操作会记入管理操作审计。</li>
+              </ul>
+              <div class="dialog-actions">
+                <button class="button danger" type="button">确认重置</button>
+                <button class="button secondary" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>新凭证（仅显示一次）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p class="muted">旧凭证已立即失效，请把新凭证更新到业务侧配置。离开本窗口后无法再次查看。</p>
+              <div class="credentials"><strong>请立即保存以下凭证。</strong><div class="credentials-grid">
+                <div class="secret-row"><span>API Key</span><code>txp_app_mt9k2h1x_8Qk2vL7pR4tZ0mXc1Yb6Nw</code></div>
+                <div class="secret-row"><span>Webhook Secret</span><code>whsec_9fJ2mQ7xL4pT8vR1zC6bN3kD0sW5yH</code></div>
+                <div class="secret-row"><span>ePay Key</span><code>4Zr8Kq2Vm7Nb0Xs5Jd1Lt9Qc</code></div>
+              </div></div>
+              <p class="muted">ePay PID 未变更：它是商户标识而不是密钥，轮换只会让业务侧已配置的商户号失效。</p>
+              <div class="dialog-actions"><button class="button" type="button">我已保存，关闭</button></div>
+            </div>
+          </div>
+
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>删除应用（已有业务数据 → 只能停用）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p>应用「<strong>TUOXIN Matrix</strong>」，App ID <span class="mono">app_mt9k2h1x</span>。</p>
+              <div class="dialog-warning">该应用已产生业务数据（订单 12 笔 · 退款 1 笔 · 通知投递 4 条），不允许删除。</div>
+              <ul class="dialog-list">
+                <li>订单、退款与通知投递是资金事实，必须留在账上，本页面不提供删除资金数据的入口。</li>
+                <li>不再需要这个应用时，请改用「停用」：停用后它不能再创建新订单，已存在的订单与退款仍会继续处理。</li>
+              </ul>
+              <div class="dialog-actions"><button class="button secondary" type="button">知道了</button></div>
+            </div>
+          </div>
+
+          <div class="modal" style="width:100%">
+            <div class="drawer-head"><h2>删除应用（无业务数据 → 输名称确认）</h2><button class="drawer-close" type="button" aria-label="关闭">×</button></div>
+            <div class="drawer-body">
+              <p>应用「<strong>临时验收应用</strong>」，App ID <span class="mono">app_tmp7c4q0z</span>。</p>
+              <ul class="dialog-list">
+                <li>该应用目前没有订单、退款或通知投递记录，删除不会影响任何资金数据。</li>
+                <li>删除后 API Key、Webhook 密钥与 ePay 凭证立即失效，且无法恢复。</li>
+              </ul>
+              <label>输入应用名称以确认<input value="临时验收应用" readonly></label>
+              <div class="dialog-actions">
+                <button class="button danger" type="button">确认删除</button>
+                <button class="button secondary" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

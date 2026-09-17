@@ -31,11 +31,11 @@ export function Refunds() {
         <thead><tr><th>退款单</th><th>支付单 / 应用</th><th>金额</th><th>状态 / 恢复</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody>{data?.map(item => <tr key={item.id}>
           <td><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refundNo}<br />{item.externalRefundNo}</div>{item.reason && <div className="muted">{item.reason}</div>}</td>
-          <td><span className="mono">{item.payment.paymentNo}</span><div className="muted">{item.application.name}</div></td>
-          <td><strong>{money(item.amount)}</strong></td>
-          <td><Status value={item.status} />{item.queryAttempts > 0 && <div className="recovery-note">已查询 {item.queryAttempts} 次<br />{item.nextQueryAt ? `下次 ${time(item.nextQueryAt)}` : "等待人工处理"}</div>}{item.errorMessage && <div className="row-error">{item.errorMessage}</div>}</td>
-          <td>{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>
-          <td>{item.status !== "SUCCESS" && <button className="button secondary" disabled={querying !== ""} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</button>}</td>
+          <td data-label="支付单"><span className="mono">{item.payment.paymentNo}</span><div className="muted">{item.application.name}</div></td>
+          <td data-label="金额"><strong>{money(item.amount)}</strong></td>
+          <td data-label="状态"><Status value={item.status} />{item.queryAttempts > 0 && <div className="recovery-note">已查询 {item.queryAttempts} 次<br />{item.nextQueryAt ? `下次 ${time(item.nextQueryAt)}` : "等待人工处理"}</div>}{item.errorMessage && <div className="row-error">{item.errorMessage}</div>}</td>
+          <td data-label="创建时间">{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>
+          <td data-label="操作">{item.status !== "SUCCESS" && <button className="button secondary" disabled={querying !== ""} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</button>}</td>
         </tr>)}</tbody>
       </table></div></section>
     </LoadingState>

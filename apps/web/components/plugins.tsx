@@ -19,10 +19,10 @@ export function Plugins() {
           <thead><tr><th>插件编码</th><th>名称</th><th>说明</th><th>支持能力</th><th>操作</th></tr></thead>
           <tbody>{plugins.data?.map(plugin => <tr key={plugin.code}>
             <td><code>{plugin.code}</code></td>
-            <td><strong>{plugin.name}</strong></td>
-            <td><span className="muted">{plugin.description}</span></td>
-            <td><div className="plugin-capabilities">{plugin.capabilities.map(item => <span key={item}>{item}</span>)}</div></td>
-            <td><button className="button secondary" onClick={() => setEditor(plugin.code)}><Plus size={14} />创建通道</button></td>
+            <td data-label="名称"><strong>{plugin.name}</strong></td>
+            <td data-label="说明"><span className="muted">{plugin.description}</span></td>
+            <td data-label="支持能力"><div className="plugin-capabilities">{plugin.capabilities.map(item => <span key={item}>{item}</span>)}</div></td>
+            <td data-label="操作"><button className="button secondary" onClick={() => setEditor(plugin.code)}><Plus size={14} />创建通道</button></td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>

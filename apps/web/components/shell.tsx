@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, Puzzle, ReceiptText, RotateCcw, Webhook } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, Puzzle, ReceiptText, RotateCcw, Webhook, X } from "lucide-react";
 
 const navigation = [
   { label: "", items: [["/", "总览", LayoutDashboard, "#2563eb"]] },
@@ -36,14 +36,32 @@ function crumbs(path: string): string[] {
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [path]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const previous = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setNavOpen(false); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [navOpen]);
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     window.location.assign("/login");
   }
   const trail = crumbs(path);
-  return <div className={collapsed ? "app-shell collapsed" : "app-shell"}>
-    <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">T</div><div className="brand-text"><div className="brand-title">TUOXIN PAY</div><div className="brand-subtitle">拓昕支付基础设施</div></div></div>
+  return <div className={`app-shell${collapsed ? " collapsed" : ""}${navOpen ? " nav-open" : ""}`}>
+    {navOpen && <div className="nav-mask" onClick={() => setNavOpen(false)} aria-hidden="true" />}
+    <aside className="sidebar" id="app-sidebar" aria-label="主导航">
+      <div className="brand">
+        <div className="brand-mark">T</div>
+        <div className="brand-text"><div className="brand-title">TUOXIN PAY</div><div className="brand-subtitle">拓昕支付基础设施</div></div>
+        <button className="nav-close" onClick={() => setNavOpen(false)} aria-label="关闭导航菜单"><X size={18} /></button>
+      </div>
       <nav className="nav">{navigation.map(group => <div className="nav-group" key={group.label}>
         {group.label && <div className="nav-group-label">{group.label}</div>}
         {group.items.map(([href, label, Icon, color]) => <Link title={label} className={path === href || (href !== "/" && path.startsWith(`${href}/`)) ? "active" : ""} href={href} key={href}><Icon size={17} color={color} /><span>{label}</span></Link>)}
@@ -52,9 +70,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     </aside>
     <div className="main">
       <header className="topbar">
-        <button className="topbar-menu" onClick={() => setCollapsed(value => !value)} aria-label="折叠侧边栏"><Menu size={18} /></button>
-        <nav className="breadcrumb">{trail.map((item, index) => <span key={item}>{index > 0 && <i>/</i>}{item}</span>)}</nav>
-        <div className="topbar-user"><span className="topbar-avatar">管</span><span className="topbar-name">系统管理员</span><button className="logout-button" onClick={() => void logout()}><LogOut size={14} />退出</button></div>
+        <button className="topbar-menu topbar-collapse" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={!collapsed} aria-controls="app-sidebar"><PanelLeftClose size={18} /></button>
+        <button className="topbar-menu topbar-nav" onClick={() => setNavOpen(true)} aria-label="打开导航菜单" aria-expanded={navOpen} aria-controls="app-sidebar"><Menu size={18} /></button>
+        <nav className="breadcrumb" aria-label="面包屑">{trail.map((item, index) => <span key={item}>{index > 0 && <i aria-hidden="true">/</i>}{item}</span>)}</nav>
+        <div className="topbar-user"><span className="topbar-avatar" aria-hidden="true">管</span><span className="topbar-name">系统管理员</span><button className="logout-button" onClick={() => void logout()}><LogOut size={14} />退出</button></div>
       </header>
       <main className="content">{children}</main>
     </div>
