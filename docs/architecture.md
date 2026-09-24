@@ -123,6 +123,41 @@ BEGIN
 - Webhook Secret 和 ePay Key 因为需要用于出站签名，使用 `SECRETS_ENCRYPTION_KEY` 做 AES-256-GCM 加密。
 - 支付宝私钥通过环境变量注入，不进入数据库、日志或代码库。
 
+
+## 运行时部署拓扑
+
+从单镜像版本开始，逻辑上的 Web、API 与 Worker 仍保持独立职责，但生产运行时收口在同一个 **TunexPay Appliance** 容器中。统一 Gateway 负责内部路由，宿主机只暴露一个应用端口。
+
+```text
+Internet
+   │
+OpenResty / Nginx
+   │
+127.0.0.1:3000
+   │
+┌──────────────────────────────┐
+│ TunexPay Appliance           │
+│                              │
+│ Gateway :8080                │
+│   ├─ Next.js Web :3000       │
+│   ├─ Hono API :3001          │
+│   └─ Worker                  │
+└──────────────┬───────────────┘
+               │
+        MySQL / Redis
+```
+
+这样做不改变支付核心的模块边界，只减少部署时的跨容器依赖与宿主机端口数量：
+
+- API 与 Web 之间走容器内部 loopback。
+- Worker 与 API 使用同一份应用镜像和环境配置。
+- 对外只有 Gateway 对应的宿主机 3000。
+- MySQL 与 Redis 仍保持独立，不打进应用镜像。
+- 数据库迁移失败时 Appliance 等待并重试，不再让 API 单独 crash-loop。
+- 任一核心子进程退出时整个 Appliance 退出，由 Docker restart policy 统一恢复。
+
+详细部署拓扑、环境变量、升级和故障排查见 [deployment.md](deployment.md)。
+
 ## 后续路线
 
 - v0.2：订单过期关闭任务、操作审计。（已完成）
