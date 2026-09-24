@@ -51,9 +51,11 @@ TUOXIN Matrix / Studio / Chat / NewAPI
              业务 Webhook
 ```
 
-详细设计见 [docs/architecture.md](docs/architecture.md)，从 MPAY 提取/删除的内容见 [docs/mpay-reference-notes.md](docs/mpay-reference-notes.md)，接口定义见 [docs/openapi.yaml](docs/openapi.yaml)。
+详细设计见 [docs/architecture.md](docs/architecture.md)，生产部署、升级、回滚与故障排查见 [docs/deployment.md](docs/deployment.md)，从 MPAY 提取/删除的内容见 [docs/mpay-reference-notes.md](docs/mpay-reference-notes.md)，接口定义见 [docs/openapi.yaml](docs/openapi.yaml)。
 
 ## 使用 Docker 启动
+
+> 完整的生产部署、宿主机 MySQL、OpenResty、升级、回滚与故障排查说明见 [部署与升级指南](docs/deployment.md)。
 
 要求 Docker Compose v2。
 
