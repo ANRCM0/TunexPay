@@ -2,9 +2,9 @@ name: tuoxin-pay
 
 x-backend-environment: &backend-environment
   NODE_ENV: production
-  DATABASE_URL: mysql://tuoxin:${MYSQL_PASSWORD:-tuoxin-change-me}@mysql:3306/tuoxin_pay
-  REDIS_URL: redis://redis:6379
-  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3001}
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3000}
   WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
   ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
   SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set SECRETS_ENCRYPTION_KEY in .env}
@@ -61,58 +61,33 @@ services:
       timeout: 3s
       retries: 20
 
-  api:
+  app:
+    image: ghcr.io/paimoncai/tunexpay:${TUNEXPAY_IMAGE_TAG:-latest}
     build: .
     restart: unless-stopped
     environment:
       <<: *backend-environment
-      PORT: 3001
-    command: ["sh", "-c", "npm run db:deploy && node apps/api/dist/server.js"]
+      INTERNAL_API_URL: http://127.0.0.1:3001
+      API_INTERNAL_PORT: 3001
+      WEB_INTERNAL_PORT: 3000
+      GATEWAY_PORT: 8080
+      DB_MIGRATION_RETRY_SECONDS: ${DB_MIGRATION_RETRY_SECONDS:-5}
+      DB_MIGRATION_MAX_ATTEMPTS: ${DB_MIGRATION_MAX_ATTEMPTS:-0}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?Set ADMIN_SESSION_SECRET in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3000:8080"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
-      retries: 12
-
-  worker:
-    build: .
-    restart: unless-stopped
-    stop_grace_period: 120s
-    environment:
-      <<: *backend-environment
-    command: ["node", "apps/api/dist/worker.js"]
-    depends_on:
-      api:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  web:
-    build: .
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      HOSTNAME: 0.0.0.0
-      INTERNAL_API_URL: http://api:3001
-      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
-      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?Set ADMIN_SESSION_SECRET in .env}
-      MOCK_CHANNEL_TOKEN: ${MOCK_CHANNEL_TOKEN:-}
-    command: ["npm", "run", "start", "--workspace", "@tuoxin-pay/web"]
-    ports:
-      - "127.0.0.1:3000:3000"
-    depends_on:
-      api:
-        condition: service_healthy
+      retries: 18
+      start_period: 20s
 
 volumes:
   mysql-data:
