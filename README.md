@@ -57,24 +57,248 @@ TUOXIN Matrix / Studio / Chat / NewAPI
 
 要求 Docker Compose v2。
 
+当前版本采用 **TunexPay Appliance 单应用镜像**：Next.js 管理端/收银台、Hono API 与后台 Worker 打包在同一个应用镜像中，由容器内统一 Gateway 分流。宿主机只需要一个应用端口，不再分别暴露 Web 3000 和 API 3001。
+
+```text
+Internet
+   │
+OpenResty / Nginx
+   │
+127.0.0.1:3000
+   │
+┌─────────────────────────────┐
+│ TunexPay Appliance          │
+│                             │
+│ Gateway :8080               │
+│   ├─ Next.js Web :3000      │
+│   ├─ Hono API :3001         │
+│   └─ Worker                 │
+└──────────────┬──────────────┘
+               │
+        MySQL / Redis
+```
+
+外部请求统一访问同一个域名：
+
+- 管理后台、收银台和静态页面 → Next.js
+- `/submit.php`、`/mapi.php`、`/api.php` → Hono API
+- `/api/v1/*`、`/admin/v1/*`、`/health` → Hono API
+- `/api/backend/*` → Next.js，再由 Next.js 访问容器内部 API
+
+因此 OpenResty/Nginx 只需要反代：
+
+```text
+127.0.0.1:3000
+```
+
+不再需要单独维护 `127.0.0.1:3001` 的公网反代规则。
+
+### 1. 准备环境变量
+
 ```bash
 cp .env.example .env
+
 openssl rand -hex 32       # 写入 SECRETS_ENCRYPTION_KEY
 openssl rand -base64 36    # 写入 ADMIN_TOKEN
 openssl rand -base64 24    # 写入 ADMIN_PASSWORD
 openssl rand -base64 36    # 写入 ADMIN_SESSION_SECRET
 openssl rand -base64 24    # 写入 MOCK_CHANNEL_TOKEN
 openssl rand -base64 36    # 写入 ALIPAY_BILL_WATCHER_TOKEN
-docker compose up -d --build
 ```
 
-生产环境同时修改 `MYSQL_PASSWORD` 与 `MYSQL_ROOT_PASSWORD`。如果仍保留示例占位密钥，API 会拒绝以 production 模式启动。
+生产环境必须显式设置 `DATABASE_URL`，不要依赖隐式数据库地址。
 
-启动后：
+### 2. 使用 Compose 自带 MySQL
 
-- 管理后台：`http://localhost:3000`，使用 `.env` 中的 `ADMIN_PASSWORD` 登录
-- API 健康检查：`http://localhost:3001/health`
-- MySQL 与 Redis 默认不暴露到公网。
+`.env` 示例：
+
+```dotenv
+DATABASE_URL=mysql://tuoxin:your-mysql-password@mysql:3306/tuoxin_pay
+MYSQL_PASSWORD=your-mysql-password
+MYSQL_ROOT_PASSWORD=your-root-password
+
+REDIS_URL=redis://redis:6379
+
+API_PUBLIC_URL=https://pay.example.com
+WEB_PUBLIC_URL=https://pay.example.com
+```
+
+启动：
+
+```bash
+docker compose up -d
+```
+
+MySQL 与 Redis 默认不发布到公网。
+
+### 3. 使用宿主机 MySQL
+
+如果 MySQL 已安装在宿主机，例如宝塔、1Panel 或手工安装：
+
+```dotenv
+DATABASE_URL=mysql://tuoxin:your-password@host.docker.internal:3306/tuoxin_pay
+REDIS_URL=redis://redis:6379
+
+API_PUBLIC_URL=https://pay.example.com
+WEB_PUBLIC_URL=https://pay.example.com
+```
+
+Compose 已加入：
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+此时只需要启动应用和 Redis，避免额外创建一套无用 MySQL：
+
+```bash
+docker compose up -d app redis
+```
+
+宿主机 MySQL 必须满足：
+
+1. MySQL 进程真实运行，而不只是 systemd 启动脚本显示 `active (exited)`。
+2. TCP 端口可从 Docker 网桥访问。
+3. 数据库用户允许来自 Docker 网段的连接。
+4. 防火墙继续阻止公网直接访问 3306。
+
+可从应用容器侧测试：
+
+```bash
+docker compose exec app node -e "
+const net=require('net');
+const s=net.connect(3306,'host.docker.internal',()=>{
+  console.log('MYSQL TCP OK');
+  s.end();
+});
+s.on('error',console.error);
+"
+```
+
+### 4. 数据库暂时不可用时的行为
+
+Appliance 启动时会先执行：
+
+```text
+Prisma migrate deploy
+```
+
+如果数据库暂时不可达，不再立即退出并形成 crash loop，而是按配置等待重试：
+
+```dotenv
+DB_MIGRATION_RETRY_SECONDS=5
+DB_MIGRATION_MAX_ATTEMPTS=0
+```
+
+其中 `0` 表示持续等待。
+
+数据库恢复后：
+
+```text
+数据库可用
+→ Prisma migration
+→ API 启动
+→ Worker 启动
+→ Web 启动
+→ Gateway 开放
+→ /health 变为 200
+```
+
+如果 API、Web、Worker 或 Gateway 任一子进程异常退出，整个 Appliance 会退出，由 Docker `restart: unless-stopped` 统一重建，避免出现“容器显示 Up，但只有部分服务活着”的半可用状态。
+
+### 5. 启动后检查
+
+```bash
+docker compose ps
+curl -v http://127.0.0.1:3000/health
+```
+
+正常应返回：
+
+```json
+{"status":"ok","service":"tuoxin-pay-api","version":"0.1.0"}
+```
+
+公网反代配置完成后：
+
+```bash
+curl -v https://pay.example.com/health
+```
+
+同样应返回 HTTP 200。
+
+### 6. OpenResty / Nginx
+
+单镜像版本只需要一个 upstream：
+
+```nginx
+upstream tunexpay {
+    server 127.0.0.1:3000;
+}
+
+server {
+    listen 443 ssl;
+    server_name pay.example.com;
+
+    location / {
+        proxy_pass http://tunexpay;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+无需再为 `/submit.php`、`/api/v1/*` 单独反代到宿主机 3001。
+
+### 7. 从旧三容器部署升级
+
+旧版本可能存在：
+
+```text
+tunexpay-web
+tunexpay-api
+tunexpay-worker
+```
+
+升级前先保存现有 `.env` 和数据库备份，然后：
+
+```bash
+cd /path/to/tuoxin-pay
+
+git pull
+docker compose down
+docker compose pull
+docker compose up -d app redis
+```
+
+如果使用 Compose 自带 MySQL，则使用：
+
+```bash
+docker compose up -d
+```
+
+升级后正常状态应以一个应用容器为主：
+
+```text
+tuoxin-pay-app
+redis
+mysql      # 仅使用 Compose MySQL 时
+```
+
+外部只需要确认：
+
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+无需再检查宿主机 3001。
+
+### 8. 应用与管理员凭证
 
 首次可以在“应用”页面创建 `TUOXIN Matrix`。API Key、Webhook Secret、ePay Key 只显示一次，请立即保存。
 
@@ -145,7 +369,7 @@ ALLOW_PRIVATE_WEBHOOKS=true
 创建订单：
 
 ```bash
-curl -X POST http://localhost:3001/api/v1/orders \
+curl -X POST http://localhost:3000/api/v1/orders \
   -H 'Content-Type: application/json' \
   -H 'X-App-Id: app_xxx' \
   -H 'X-Api-Key: txp_app_xxx_xxx' \
@@ -156,7 +380,7 @@ curl -X POST http://localhost:3001/api/v1/orders \
 使用返回的 `orderNo` 发起支付：
 
 ```bash
-curl -X POST http://localhost:3001/api/v1/orders/ord_xxx/pay \
+curl -X POST http://localhost:3000/api/v1/orders/ord_xxx/pay \
   -H 'Content-Type: application/json' \
   -H 'X-App-Id: app_xxx' \
   -H 'X-Api-Key: txp_app_xxx_xxx' \
