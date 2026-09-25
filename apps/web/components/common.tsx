@@ -1,4 +1,4 @@
-import { Check, Copy, X } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Copy, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { channelLabel } from "../lib/labels";
 
@@ -92,6 +92,40 @@ export function CopyValue({ value, label = "复制" }: { value: string; label?: 
   </button>;
 }
 
+export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; text: string; onClose: () => void }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const timer = window.setTimeout(() => closeRef.current(), 3200);
+    return () => window.clearTimeout(timer);
+  }, [text]);
+
+  return <div className={`toast toast-${type}`} role={type === "error" ? "alert" : "status"} aria-live="polite">
+    <span className="toast-icon">{type === "error" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}</span>
+    <span>{text}</span>
+    <button type="button" onClick={onClose} aria-label="关闭提示"><X size={14} /></button>
+  </div>;
+}
+
+export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = false, working = false, onConfirm, onClose }: {
+  title: string;
+  copy: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  working?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return <Modal title={title} onClose={working ? () => undefined : onClose}>
+    <p className="dialog-copy">{copy}</p>
+    {danger && <div className="dialog-warning">这是影响当前交易状态的操作，请确认你已经核对支付单信息。</div>}
+    <div className="dialog-actions">
+      <button type="button" className={danger ? "button danger" : "button"} disabled={working} onClick={onConfirm}>{working ? "处理中…" : confirmLabel}</button>
+      <button type="button" className="button secondary" disabled={working} onClick={onClose}>取消</button>
+    </div>
+  </Modal>;
+}
+
 export function Drawer({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
   const ref = useDialog(onClose);
   return <div className="drawer-mask" onClick={onClose}>
@@ -152,7 +186,7 @@ export function Status({ value }: { value: string }) {
 }
 
 export function LoadingState({ loading, error, empty, children }: { loading: boolean; error: string; empty?: boolean; children: React.ReactNode }) {
-  if (loading) return <div className="card loading" role="status">正在加载…</div>;
+  if (loading) return <div className="card skeleton-card" role="status" aria-label="正在加载"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
   if (error) return <div className="card error" role="alert">{error}</div>;
   if (empty) return <div className="card empty">暂无数据</div>;
   return <>{children}</>;

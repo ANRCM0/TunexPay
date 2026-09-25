@@ -190,6 +190,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .detail-row:last-child { border-bottom: 0; }
 .detail-row > span { color: var(--muted); }
 .detail-row > strong { font-weight: 650; }
+.detail-value-copy { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.detail-value-copy > strong { min-width: 0; font-weight: 650; }
+.detail-value-copy .copy-value { flex: 0 0 auto; }
 .detail-value { min-height: 34px; display: flex; align-items: center; }
 .detail-value .badge { font-family: Arial, "PingFang SC", sans-serif; font-size: 11px; }
 .event-payload { margin-top: 8px; color: var(--muted); font-size: 11px; }
@@ -210,6 +213,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
 /* ---- 确认类弹窗：影响清单 + 危险提示 + 底部按钮条 ---- */
 
+.dialog-copy { margin: 0; color: #40506a; font-size: 13px; line-height: 1.75; }
 .dialog-list { margin: 12px 0 0; padding-left: 18px; color: #40506a; font-size: 12.5px; line-height: 1.85; }
 .dialog-warning { margin-top: 14px; padding: 12px 14px; border: 1px solid #f3d3cf; border-radius: 9px; background: #fffaf9; color: #b8382f; font-size: 12.5px; line-height: 1.7; }
 .dialog-warning.is-info { border-color: #cddcf5; background: #f7faff; color: #2b4d94; }
