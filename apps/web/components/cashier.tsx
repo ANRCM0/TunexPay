@@ -84,7 +84,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
       <div className="cashier-secure"><i aria-hidden="true" />安全连接</div>
     </header>
 
-    {loading && <div className="card loading cashier-loading">正在读取订单…</div>}
+    {loading && <div className="card skeleton-card cashier-loading" role="status" aria-label="正在读取订单"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>}
     {error && <div className="card error cashier-loading">{error}</div>}
 
     {data && <div className="cashier-layout">
@@ -108,7 +108,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
           : data.channel === "MOCK" ? <div className="cashier-paybox"><p className="muted">当前为开发环境模拟支付，不会产生真实扣款。</p><button className="button" onClick={() => void mockPay()} disabled={paying}>{paying ? "处理中…" : "模拟支付成功"}</button></div>
           : <div className="cashier-paybox">
             <div className="cashier-scan-label">请使用支付宝扫码支付</div>
-            {qrError ? <div className="cashier-state failure">{qrError}</div> : qr ? <img className="qr" src={qr} alt="支付宝付款二维码" /> : <div className="loading compact">正在生成二维码…</div>}
+            {qrError ? <div className="cashier-state failure">{qrError}</div> : qr ? <img className="qr" src={qr} alt="支付宝付款二维码" /> : <div className="qr-placeholder" role="status" aria-label="正在生成二维码"><div className="skeleton qr-skeleton" /></div>}
             {data.channel === "ALIPAY_BILL"
               ? <div className="cashier-state warning"><strong>请精确支付 {money(data.amount)}</strong>{data.clientPayload?.remark && <span>付款备注请填写：<b className="mono">{data.clientPayload.remark}</b></span>}<span>不要修改金额或重复付款；到账后页面会自动确认。</span></div>
               : <p className="muted">付款完成后无需手动刷新，页面会自动确认结果。</p>}

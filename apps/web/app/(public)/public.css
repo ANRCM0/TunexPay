@@ -23,6 +23,8 @@
 .cashier-scan-label { color: #4d5e76; font-size: 12px; font-weight: 650; letter-spacing: .02em; }
 .cashier-foot { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
 .qr { width: 210px; height: 210px; margin: 8px auto; border: 10px solid white; box-shadow: 0 4px 22px rgba(0,0,0,.08); border-radius: 4px; }
+.qr-placeholder { width: 210px; height: 210px; margin: 8px auto; padding: 10px; border-radius: 8px; background: #fff; box-shadow: 0 4px 22px rgba(0,0,0,.06); }
+.qr-skeleton { width: 100%; height: 100%; border-radius: 4px; }
 .cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: 9px; display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; animation: notice-in .2s ease; }
 .cashier-state strong { font-size: 16px; }
 .cashier-state.success { background: var(--success-soft); color: #15794f; }
