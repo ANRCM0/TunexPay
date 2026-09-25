@@ -32,6 +32,7 @@ x-backend-environment: &backend-environment
 
 services:
   mysql:
+    container_name: ${TUNEXPAY_MYSQL_CONTAINER_NAME:-tunexpay-mysql}
     image: mysql:8.4
     restart: unless-stopped
     environment:
@@ -50,6 +51,7 @@ services:
       retries: 30
 
   redis:
+    container_name: ${TUNEXPAY_REDIS_CONTAINER_NAME:-tunexpay-redis}
     image: redis:7.4-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -62,7 +64,8 @@ services:
       retries: 20
 
   app:
-    image: ghcr.io/paimoncai/tunexpay:${TUNEXPAY_IMAGE_TAG:-latest}
+    container_name: ${TUNEXPAY_CONTAINER_NAME:-tunexpay}
+    image: ${TUNEXPAY_IMAGE:-ghcr.io/paimoncai/tunexpay}:${TUNEXPAY_IMAGE_TAG:-latest}
     build: .
     restart: unless-stopped
     environment:
