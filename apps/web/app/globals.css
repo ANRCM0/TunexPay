@@ -76,6 +76,7 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
 @keyframes notice-in { from { opacity: 0; transform: translateY(-4px); } }
 
 .empty, .loading, .error { padding: 34px; text-align: center; color: var(--muted); }
+.empty { border-style: dashed; background: rgba(255,255,255,.72); line-height: 1.8; }
 .compact { padding: 18px; }
 .error { color: var(--danger); }
 
@@ -117,4 +118,11 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px 
     scroll-behavior: auto !important;
   }
   .stat:hover, .channel-card:hover { transform: none !important; }
+}
+
+
+@media (max-width: 560px) {
+  .toast { left: 12px; right: 12px; bottom: 12px; width: auto; }
+  .page-copy { font-size: 13px; line-height: 1.7; }
+  h1 { font-size: 21px; }
 }

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Modal, PageHead, Section, Status, time } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, time } from "./common";
 import { assignable, type Channel } from "./channels";
 import { channelLabel } from "../lib/labels";
 
@@ -48,6 +48,7 @@ export function Applications() {
   const [confirmName, setConfirmName] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [removed, setRemoved] = useState<DeleteResult | null>(null);
+  const [pendingDisable, setPendingDisable] = useState<Application | null>(null);
 
   useEffect(() => { void reload(); }, [showArchived, reload]);
 
@@ -78,16 +79,25 @@ export function Applications() {
     finally { setBusy(""); }
   }
 
-  async function toggleStatus(application: Application) {
-    const next = application.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
-    if (next === "DISABLED" && !window.confirm(`停用「${application.name}」后，该应用不能再创建新订单；已存在的订单、退款和通知投递仍会继续处理。确认停用？`)) return;
+  async function setStatus(application: Application, next: "ACTIVE" | "DISABLED") {
     setBusy(application.id); setNotice(null);
     try {
       await api(`/applications/${application.id}/status`, { method: "POST", body: JSON.stringify({ status: next }) });
       setNotice({ type: "ok", text: next === "DISABLED" ? `「${application.name}」已停用。` : `「${application.name}」已启用。` });
       await reload();
-    } catch (cause) { setNotice({ type: "error", text: reason(cause, next === "DISABLED" ? "停用失败" : "启用失败") }); }
-    finally { setBusy(""); }
+      return true;
+    } catch (cause) {
+      setNotice({ type: "error", text: reason(cause, next === "DISABLED" ? "停用失败" : "启用失败") });
+      return false;
+    } finally { setBusy(""); }
+  }
+
+  async function toggleStatus(application: Application) {
+    if (application.status === "ACTIVE") {
+      setPendingDisable(application);
+      return;
+    }
+    await setStatus(application, "ACTIVE");
   }
 
   async function remove(application: Application) {
@@ -107,7 +117,7 @@ export function Applications() {
 
   return <>
     <PageHead eyebrow="Applications" title="业务应用" copy="每个自有业务使用独立 API Key、Webhook 密钥和 ePay 凭证；凭证可随时重置，不再使用的应用可停用或删除。" />
-    {notice && <div className={`operation-notice ${notice.type === "error" ? "error" : ""}`} aria-live="polite">{notice.text}</div>}
+    {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
     <Section title="创建应用" action={<span className="muted">凭证只显示一次</span>} style={{ marginBottom: 22 }}>
       <form className="form-grid" onSubmit={submit}>
         <label>应用名称<input name="name" required placeholder="TUOXIN Matrix" /></label>
@@ -123,16 +133,16 @@ export function Applications() {
       ]} />}
     </Section>
 
-    <LoadingState loading={loading} error={error} empty={!data?.length}>
+    <LoadingState loading={loading} error={error} empty={!data?.length} emptyText={showArchived ? "没有可显示的应用记录" : "还没有业务应用，请先创建一个应用"}>
       <section className="card section">
         <div className="section-head"><h2>应用列表</h2><label className="toggle-inline"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />显示已归档</label></div>
         <div className="table-wrap"><table>
         <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody>{data?.map(item => <tr key={item.id} className={item.archivedAt ? "row-archived" : undefined}>
           <td><strong>{item.name}</strong>{item.archivedAt && <div className="muted">已于 {time(item.archivedAt)} 归档</div>}</td>
-          <td data-label="App ID"><div className="mono">{item.appId}</div><div className="mono muted">PID {item.epayPid}</div></td>
+          <td data-label="App ID"><div className="id-line"><span className="mono">{item.appId}</span><CopyValue value={item.appId} label="复制 App ID" /></div><div className="id-line"><span className="mono muted">PID {item.epayPid}</span><CopyValue value={item.epayPid} label="复制 ePay PID" /></div></td>
           <td data-label="默认通道">{channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel)}</td>
-          <td data-label="Webhook" className="mono">{item.webhookUrl || "—"}</td>
+          <td data-label="Webhook">{item.webhookUrl ? <div className="id-line"><span className="mono break-all">{item.webhookUrl}</span><CopyValue value={item.webhookUrl} label="复制 Webhook 地址" /></div> : "—"}</td>
           <td data-label="状态"><Status value={item.status} /></td>
           <td data-label="创建时间">{time(item.createdAt)}</td>
           <td data-label="操作">
@@ -148,6 +158,17 @@ export function Applications() {
         </tr>)}</tbody>
       </table></div></section>
     </LoadingState>
+
+    {pendingDisable && <ConfirmModal
+      title="停用业务应用"
+      copy={`停用「${pendingDisable.name}」后，该应用不能再创建新订单；已经存在的订单、退款和通知投递仍会继续处理。`}
+      confirmLabel="确认停用"
+      danger
+      warning="停用会立即阻止该应用创建新订单；如果只是临时维护，请确认业务侧已做好相应处理。"
+      working={busy === pendingDisable.id}
+      onClose={() => setPendingDisable(null)}
+      onConfirm={() => void setStatus(pendingDisable, "DISABLED").then(ok => { if (ok) setPendingDisable(null); })}
+    />}
 
     {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} onClose={closeRotate}>
       {rotated ? <>
@@ -214,6 +235,6 @@ export function Applications() {
 
 function CredentialBlock({ title, items }: { title: string; items: Array<[string, string]> }) {
   return <div className="credentials"><strong>{title}</strong><div className="credentials-grid">
-    {items.map(([label, value]) => <div className="secret-row" key={label}><span>{label}</span><code>{value}</code></div>)}
+    {items.map(([label, value]) => <div className="secret-row" key={label}><span>{label}</span><span className="id-line"><code>{value}</code><CopyValue value={value} label={`复制${label}`} /></span></div>)}
   </div></div>;
 }

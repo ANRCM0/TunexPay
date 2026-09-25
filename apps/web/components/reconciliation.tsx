@@ -3,7 +3,7 @@
 import { FileUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, PageHead, Section, Status, money, time } from "./common";
+import { CopyValue, LoadingState, PageHead, Section, Status, Toast, money, time } from "./common";
 
 type Run = {
   id: string; statementDate: string; status: string; fileName: string | null; importedCount: number; duplicateCount: number;
@@ -59,7 +59,7 @@ export function Reconciliation() {
 
   return <>
     <PageHead eyebrow="Alipay Reconciliation" title="支付宝账单对账" copy="上传支付宝交易明细 CSV；系统会幂等导入，逐笔核对单号、渠道流水和金额。" />
-    {notice && <div className={`operation-notice ${notice.type}`}>{notice.text}</div>}
+    {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
     <section className="card reconciliation-upload">
       <div className="upload-copy"><div className="upload-icon"><FileUp size={21} /></div><div><h2>导入日账单</h2><p>支持 UTF-8、GBK/GB18030 编码。重复上传不会重复入账。</p></div></div>
       <div className="upload-form">
@@ -71,7 +71,7 @@ export function Reconciliation() {
     </section>
 
     <Section title="导入批次" action={<span className="muted">按账单日期幂等覆盖统计</span>} className="detail-section">
-      <LoadingState loading={runsLoading} error={runsError} empty={!runs?.length}>
+      <LoadingState loading={runsLoading} error={runsError} empty={!runs?.length} emptyText="还没有导入过支付宝账单">
         <div className="table-wrap"><table>
           <thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead>
           <tbody>{runs?.map(run => <tr key={run.id}>
@@ -86,14 +86,17 @@ export function Reconciliation() {
     </Section>
 
     <Section title="标准化流水" action={statusFilter} className="detail-section">
-      <LoadingState loading={receiptsLoading} error={receiptsError} empty={!receipts?.length}>
+      <LoadingState loading={receiptsLoading} error={receiptsError} empty={!receipts?.length} emptyText={status ? "当前筛选条件下没有对账流水" : "还没有标准化对账流水"}>
         <div className="table-wrap"><table>
           <thead><tr><th>业务 / 时间</th><th>账单标识</th><th>金额</th><th>系统记录</th><th>匹配状态</th><th>操作</th></tr></thead>
           <tbody>{receipts?.map(item => <tr key={item.id}>
             <td><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td>
-            <td data-label="账单标识"><div className="mono">{item.providerTradeNo ?? item.providerRefundNo ?? "—"}</div><div className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo ?? "—"}</div></td>
-            <td data-label="金额"><strong>{money(item.amount)}</strong></td>
-            <td data-label="系统记录">{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</div></> : "—"}</td>
+            <td data-label="账单标识">
+  {item.providerTradeNo ?? item.providerRefundNo ? <div className="id-line"><span className="mono">{item.providerTradeNo ?? item.providerRefundNo}</span><CopyValue value={item.providerTradeNo ?? item.providerRefundNo ?? ""} label="复制渠道流水号" /></div> : "—"}
+  {item.merchantRefundNo ?? item.merchantOrderNo ? <div className="id-line"><span className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo}</span><CopyValue value={item.merchantRefundNo ?? item.merchantOrderNo ?? ""} label="复制商户单号" /></div> : null}
+</td>
+            <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
+            <td data-label="系统记录">{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="id-line"><span className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</span><CopyValue value={item.refund?.refundNo ?? item.payment.paymentNo} label="复制系统单号" /></div></> : "—"}</td>
             <td data-label="匹配状态"><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td>
             <td data-label="操作">{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
           </tr>)}</tbody>
