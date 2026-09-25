@@ -1,10 +1,13 @@
 /* 公开界面专属样式（收银台 / 登录），仅由 app/(public)/layout.tsx 引入 */
 
 .cashier-shell { min-height: 100vh; background: #f5f7fb; padding: 0 0 48px; }
-.cashier-brand { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 12px 22px; }
-.cashier-brand .brand-badge { margin: 0; width: 30px; height: 30px; border-radius: 8px; font-size: 14px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
-.cashier-brand strong { font-size: 15px; letter-spacing: .04em; }
-.cashier-brand span { color: var(--muted); font-size: 13px; }
+.cashier-brand { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); padding: 12px 22px; }
+.cashier-brand .brand-badge { margin: 0; width: 32px; height: 32px; border-radius: 9px; font-size: 14px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.cashier-brand-copy { display: grid; gap: 1px; }
+.cashier-brand-copy strong { font-size: 14px; letter-spacing: .05em; }
+.cashier-brand-copy span { color: var(--muted); font-size: 10px; }
+.cashier-secure { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: #5f7087; font-size: 10px; }
+.cashier-secure i, .cashier-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .cashier-loading { max-width: 720px; margin: 40px auto; }
 
 .cashier-layout { max-width: 560px; margin: 26px auto 0; padding: 0 18px; display: grid; gap: 18px; animation: cashier-in .25s ease; }
@@ -12,8 +15,12 @@
 .cashier-main { padding: 26px; }
 .cashier-main-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
 .cashier-main-head h1 { font-size: 19px; margin-top: 8px; }
-.cashier-paybox { text-align: center; display: grid; justify-items: center; gap: 8px; }
-.amount { font-weight: 800; font-size: 34px; margin: 6px 0; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cashier-amount-block { margin: 16px 0 20px; padding: 18px 16px 17px; border-radius: 11px; background: linear-gradient(180deg, #f8fbff, #f3f7fe); border: 1px solid #dbe7fa; text-align: center; }
+.cashier-amount-block > span { display: block; color: var(--muted); font-size: 11px; font-weight: 700; }
+.cashier-amount-block > strong { display: block; margin: 3px 0 1px; color: #18263a; font-size: 36px; line-height: 1.25; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.cashier-amount-block > small { color: #8492a7; font-size: 10px; }
+.cashier-paybox { text-align: center; display: grid; justify-items: center; gap: 9px; }
+.cashier-scan-label { color: #4d5e76; font-size: 12px; font-weight: 650; letter-spacing: .02em; }
 .cashier-foot { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
 .qr { width: 210px; height: 210px; margin: 8px auto; border: 10px solid white; box-shadow: 0 4px 22px rgba(0,0,0,.08); border-radius: 4px; }
 .cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: 9px; display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; animation: notice-in .2s ease; }
@@ -27,7 +34,8 @@
 .cashier-duo-item { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; display: grid; gap: 5px; }
 .cashier-duo-item span { color: var(--muted); font-size: 11px; }
 .cashier-duo-item strong { font-size: 17px; }
-.cashier-countdown { color: var(--primary); }
+.cashier-countdown { color: var(--primary); font-variant-numeric: tabular-nums; }
+.cashier-live { display: inline-flex; align-items: center; gap: 8px; color: #15794f; font-size: 13px !important; }
 .cashier-note { margin-top: 16px; font-size: 11px; line-height: 1.6; }
 
 .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #dbe7fd 0, var(--paper) 48%); }
@@ -42,8 +50,10 @@
   .cashier-layout { margin-top: 18px; padding: 0 14px; gap: 14px; }
   .cashier-main { padding: 20px; }
   .cashier-main-head { flex-direction: column; gap: 10px; }
-  .amount { font-size: 30px; }
+  .cashier-amount-block > strong { font-size: 32px; }
   .qr { width: 180px; height: 180px; }
+  .cashier-brand { padding: 11px 14px; }
+  .cashier-secure { font-size: 9px; }
   .cashier-duo { grid-template-columns: 1fr; }
   .cashier-foot { flex-direction: column; }
   .login-card { padding: 26px 20px; }

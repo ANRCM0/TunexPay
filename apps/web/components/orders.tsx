@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useApi } from "../lib/api";
-import { ChannelTag, Drawer, LoadingState, PageHead, Status, money, time } from "./common";
+import { ChannelTag, CopyValue, Drawer, LoadingState, PageHead, Status, money, time } from "./common";
 import { OrderDetailBody } from "./order-detail";
 
 type Payment = { paymentNo: string; status: string; channel: string };
@@ -34,10 +34,10 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
         </div>
         {rows.length ? <div className="table-wrap"><table><thead><tr><th>订单</th><th>应用 / 业务单号</th><th>金额</th><th>最新支付</th><th>订单状态</th><th>时间</th></tr></thead>
         <tbody>{rows.map(item => { const payment = item.payments[0]; return <tr key={item.id}>
-          <td><button className="data-link row-open" onClick={() => setOpenOrderNo(item.orderNo)}><strong>{item.subject}</strong></button><div className="mono muted">{item.orderNo}</div>{item.expirationError && <div className="row-error">过期关闭：{item.expirationError}</div>}</td>
-          <td data-label="应用"><span>{item.application.name}</span><div className="mono muted">{item.externalOrderNo}</div></td>
-          <td data-label="金额"><strong>{money(item.amount)}</strong></td>
-          <td data-label="最新支付">{payment ? <><ChannelTag code={payment.channel} /><div className="mono muted">{payment.paymentNo}</div></> : "—"}</td>
+          <td><button className="data-link row-open" onClick={() => setOpenOrderNo(item.orderNo)}><strong>{item.subject}</strong></button><div className="id-line"><span className="mono muted">{item.orderNo}</span><CopyValue value={item.orderNo} label="复制订单号" /></div>{item.expirationError && <div className="row-error">过期关闭：{item.expirationError}</div>}</td>
+          <td data-label="应用"><span>{item.application.name}</span><div className="id-line"><span className="mono muted">{item.externalOrderNo}</span><CopyValue value={item.externalOrderNo} label="复制业务单号" /></div></td>
+          <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
+          <td data-label="最新支付">{payment ? <><ChannelTag code={payment.channel} /><div className="id-line"><span className="mono muted">{payment.paymentNo}</span><CopyValue value={payment.paymentNo} label="复制支付单号" /></div></> : "—"}</td>
           <td data-label="订单状态"><Status value={item.status} />{item.expirationAttempts > 0 && item.status !== "CLOSED" && <div className="recovery-note">过期处理 {item.expirationAttempts} 次</div>}</td><td data-label="时间">{time(item.paidAt || item.createdAt)}<div className="muted">到期 {time(item.expiresAt)}</div></td>
         </tr>; })}</tbody>
       </table></div> : <div className="empty compact">没有符合筛选条件的订单</div>}</section>
