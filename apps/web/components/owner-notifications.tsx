@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Section, Status, Toggle, time } from "./common";
+import { LoadingState, Section, Status, Toast, Toggle, time } from "./common";
 import { notificationChannelLabel } from "../lib/labels";
 
 type Draft = { revision: number; emailEnabled: boolean; feishuEnabled: boolean; smtpHost: string; smtpPort: 465 | 587; smtpUser: string; from: string; to: string; paymentSuccess: boolean; anomalies: boolean; webhookFailure: boolean; collectorFailure: boolean };
@@ -25,7 +25,7 @@ export function OwnerNotificationsPanel() {
   const [secrets, setSecrets] = useState(empty);
   const [clear, setClear] = useState({ smtpPassword: false, feishuWebhook: false, feishuSecret: false });
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -39,23 +39,23 @@ export function OwnerNotificationsPanel() {
 
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!draft) return;
-    setBusy(true); setNotice("");
+    setBusy(true); setNotice(null);
     try {
       await api("/owner-notifications/settings", { method: "POST", body: JSON.stringify({ ...draft, ...Object.fromEntries(Object.entries(secrets).map(([k, v]) => [k, clear[k as keyof typeof clear] ? null : v])) }) });
       setSecrets(empty);
       await reload();
-      setNotice("已保存，后续通知动态使用新配置。");
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "保存失败"); }
+      setNotice({ type: "ok", text: "已保存，后续通知动态使用新配置。" });
+    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "保存失败" }); }
     finally { setBusy(false); }
   }
 
   async function test(channel: "EMAIL" | "FEISHU") {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       await api("/owner-notifications/test", { method: "POST", body: JSON.stringify({ channel }) });
-      setNotice("测试任务已排队，请查看下方投递状态（SUCCESS 才代表发送成功）。");
+      setNotice({ type: "ok", text: "测试任务已排队，请查看下方投递状态（SUCCESS 才代表发送成功）。" });
       await reloadDeliveries();
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "测试失败"); }
+    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "测试失败" }); }
     finally { setBusy(false); }
   }
 
@@ -67,8 +67,8 @@ export function OwnerNotificationsPanel() {
   }
 
   return <>
+    {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
     <Section title="通知渠道与事件" action={<button className="link-button" type="button" disabled={busy} onClick={() => void reload()}>重新加载</button>}>
-      {notice && <div className="operation-notice" aria-live="polite">{notice}</div>}
       <LoadingState loading={loading} error={error}>{draft && data && <form onSubmit={event => void save(event)}>
         <fieldset className="settings-group" disabled={busy}>
           <div className="settings-group-head">
@@ -116,7 +116,7 @@ export function OwnerNotificationsPanel() {
     </Section>
 
     <Section title="投递记录" action={<span className="muted">最近 50 条 · 自动刷新</span>} className="detail-section">
-      <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length}>
+      <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录；保存配置后可发送一条测试通知验证">
         <div className="table-wrap"><table>
           <thead><tr><th>时间</th><th>渠道</th><th>标题</th><th>状态</th><th>尝试</th></tr></thead>
           <tbody>{deliveries?.map(row => <tr key={row.id}>

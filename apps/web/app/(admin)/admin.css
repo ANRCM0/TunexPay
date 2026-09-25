@@ -164,8 +164,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .credentials { margin: 18px 0; padding: 16px; background: #fff8e8; border: 1px solid #eed9a8; border-radius: 10px; }
 .credentials strong { color: #8b5b11; }
 .credentials-grid { margin-top: 12px; display: grid; gap: 9px; }
-.secret-row { display: grid; grid-template-columns: 110px 1fr; gap: 12px; }
-.secret-row code { word-break: break-all; }
+.secret-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: start; }
+.secret-row code { min-width: 0; word-break: break-all; }
+.secret-row .id-line { margin-top: 0; }
 
 /* ---- 时间线与详情 ---- */
 
@@ -205,7 +206,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .id-line .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .copy-value { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; border: 0; border-radius: 5px; padding: 3px 5px; background: transparent; color: #8a98ab; cursor: pointer; font-size: 10px; }
 .copy-value span { display: none; }
-.copy-value:hover { background: #f0f4fa; color: var(--primary); }
+.copy-value:hover, .copy-value:focus-visible { background: #f0f4fa; color: var(--primary); }
+.credentials .copy-value span { display: inline; }
 .row-error { color: var(--danger); margin-top: 6px; font-size: 11px; max-width: 420px; }
 .recovery-note { margin-top: 7px; color: var(--warning); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .record { padding: 10px 0; border-bottom: 1px solid #eef1f6; display: grid; gap: 5px; font-size: 12px; }
@@ -352,6 +354,8 @@ tbody tr:last-child td { border-bottom: 0; }
   .table-wrap td:first-child { padding-bottom: 10px; margin-bottom: 11px; border-bottom: 1px solid #eef1f6; }
   .table-wrap td:first-child::before { display: none; }
   .table-wrap .row-actions { margin-top: 2px; }
+  .table-wrap .id-line { align-items: flex-start; }
+  .table-wrap .id-line .mono, .table-wrap .id-line .break-all { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
   .settings-grid { grid-template-columns: 1fr; }
   .settings-group-head { flex-direction: column; gap: 12px; }
 }
@@ -359,6 +363,8 @@ tbody tr:last-child td { border-bottom: 0; }
 @media (max-width: 560px) {
   .page-head { align-items: flex-start; flex-direction: column; }
   .detail-row { grid-template-columns: 1fr; gap: 5px; }
+  .secret-row { grid-template-columns: 1fr; gap: 6px; }
+  .section-head { align-items: flex-start; flex-direction: column; }
   .topbar-name { display: none; }
   .content { padding: 16px 12px 44px; }
   .section { padding: 16px; }

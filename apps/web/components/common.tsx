@@ -107,18 +107,19 @@ export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; t
   </div>;
 }
 
-export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = false, working = false, onConfirm, onClose }: {
+export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = false, warning, working = false, onConfirm, onClose }: {
   title: string;
   copy: string;
   confirmLabel?: string;
   danger?: boolean;
+  warning?: string;
   working?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
   return <Modal title={title} onClose={working ? () => undefined : onClose}>
     <p className="dialog-copy">{copy}</p>
-    {danger && <div className="dialog-warning">这是影响当前交易状态的操作，请确认你已经核对支付单信息。</div>}
+    {danger && <div className="dialog-warning">{warning || "这是影响当前交易状态的操作，请确认你已经核对支付单信息。"}</div>}
     <div className="dialog-actions">
       <button type="button" className={danger ? "button danger" : "button"} disabled={working} onClick={onConfirm}>{working ? "处理中…" : confirmLabel}</button>
       <button type="button" className="button secondary" disabled={working} onClick={onClose}>取消</button>
@@ -185,10 +186,10 @@ export function Status({ value }: { value: string }) {
   return <span className={`badge badge-${tone}`} title={value}>{statusText(value)}</span>;
 }
 
-export function LoadingState({ loading, error, empty, children }: { loading: boolean; error: string; empty?: boolean; children: React.ReactNode }) {
+export function LoadingState({ loading, error, empty, emptyText = "暂无数据", children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {
   if (loading) return <div className="card skeleton-card" role="status" aria-label="正在加载"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
   if (error) return <div className="card error" role="alert">{error}</div>;
-  if (empty) return <div className="card empty">暂无数据</div>;
+  if (empty) return <div className="card empty">{emptyText}</div>;
   return <>{children}</>;
 }
 
