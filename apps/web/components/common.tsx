@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Check, Copy, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { channelLabel } from "../lib/labels";
 
 // 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
@@ -65,6 +65,31 @@ const CHANNEL_TAG_STYLE: Record<string, string> = { ALIPAY: "tag-blue", ALIPAY_B
 
 export function ChannelTag({ code }: { code: string }) {
   return <span className={`tag ${CHANNEL_TAG_STYLE[code] ?? "tag-gray"}`} title={code}>{channelLabel(code)}</span>;
+}
+
+export function CopyValue({ value, label = "复制" }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      const node = document.createElement("textarea");
+      node.value = value;
+      node.style.position = "fixed";
+      node.style.opacity = "0";
+      document.body.appendChild(node);
+      node.select();
+      document.execCommand("copy");
+      document.body.removeChild(node);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    }
+  }
+  return <button type="button" className="copy-value" onClick={() => void copy()} title={copied ? "已复制" : label} aria-label={copied ? "已复制" : label}>
+    {copied ? <Check size={12} /> : <Copy size={12} />}<span>{copied ? "已复制" : label}</span>
+  </button>;
 }
 
 export function Drawer({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
