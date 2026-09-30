@@ -42,7 +42,7 @@ if (config().NODE_ENV === "production" && !args.includes("--force")) {
 const requestedRounds = Number(args[args.indexOf("--rounds") + 1]);
 const rounds = Number.isFinite(requestedRounds) && requestedRounds > 0 ? Math.min(requestedRounds, 200) : 20;
 if (!process.env.DATABASE_URL) {
-  console.error("未设置 DATABASE_URL。请在部署机上加载 .env（set -a; . ./.env; set +a），或容器内执行：docker compose exec app npx tsx src/scripts/verify-concurrency.ts --yes");
+  console.error("未设置 DATABASE_URL。请在部署机上加载 .env（set -a; . ./.env; set +a），或容器内执行：docker compose exec app npx tsx apps/api/src/scripts/verify-concurrency.ts --yes");
   process.exit(1);
 }
 

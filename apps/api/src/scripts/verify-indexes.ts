@@ -21,7 +21,7 @@ if (args.includes("--help")) {
 const requestedMinRows = Number(args[args.indexOf("--min-rows") + 1]);
 const minRows = Number.isFinite(requestedMinRows) && requestedMinRows > 0 ? requestedMinRows : 500;
 if (!process.env.DATABASE_URL) {
-  console.error("未设置 DATABASE_URL。请在部署机上加载 .env（set -a; . ./.env; set +a），或容器内执行：docker compose exec app npx tsx src/scripts/verify-indexes.ts");
+  console.error("未设置 DATABASE_URL。请在部署机上加载 .env（set -a; . ./.env; set +a），或容器内执行：docker compose exec app npx tsx apps/api/src/scripts/verify-indexes.ts");
   process.exit(1);
 }
 
