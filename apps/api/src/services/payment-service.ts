@@ -14,6 +14,7 @@ import { openLateDuplicateException } from "./payment-exception-service.js";
 import { prepareReceiptPayment } from "./receipt-reservation-service.js";
 import { billRuntimeConfig } from "./bill-settings-service.js";
 import { cashierAccess, safeReturnUrl } from "../lib/cashier-security.js";
+import { publishPaymentChange } from "../lib/payment-wake.js";
 
 export const createPaymentSchema = z.object({
   channel: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).optional(),
@@ -29,6 +30,9 @@ export async function createPayment(application: Application, orderNo: string, i
   if (application.defaultChannelId && channel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
   const channelId = application.defaultChannelId || legacyChannelId(channel);
   if (!application.defaultChannelId) await ensureLegacyChannels();
+  // 保留 Serializable：本事务在取到订单行写锁之后还要用普通 SELECT 重读订单状态，而 MySQL 在
+  // Serializable 下会把普通 SELECT 隐式升级为加锁读，保证读到最新已提交版本。降到 REPEATABLE READ
+  // 时这些重读可能命中事务开始时的旧快照，从而在已经支付成功的订单上再建一笔支付单。
   const dispatch = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channelId} FOR UPDATE`;
     const instance = await tx.channelInstance.findUniqueOrThrow({ where: { id: channelId } });
@@ -109,7 +113,7 @@ export async function createPayment(application: Application, orderNo: string, i
 }
 
 async function updatePaymentObservation(payment: Payment, status: PaymentStatus, data: Record<string, unknown>, source = "CHANNEL"): Promise<Payment> {
-  return db.$transaction(async (tx) => {
+  const observed = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM payments WHERE id = ${payment.id} FOR UPDATE`;
     const current = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
     if (current.status === "SUCCESS" || !canPaymentTransition(current.status, status)) return current;
@@ -127,10 +131,16 @@ async function updatePaymentObservation(payment: Payment, status: PaymentStatus,
     } });
     return updated;
   });
+  // 状态没推进就不打扰收银台的长轮询；提交之后再发布，避免等待者醒来查到旧值。
+  if (observed.status !== payment.status) publishPaymentChange(observed.paymentNo);
+  return observed;
 }
 
 export async function markPaymentSucceeded(result: ChannelWebhookResult, source: string): Promise<Payment> {
-  return db.$transaction(async (tx) => {
+  // 保留 Serializable：晚到重复支付的判定依赖「锁住订单行之后再重读订单状态」。在 Serializable 下
+  // 这次重读是加锁读，一定看到最新已提交值；否则可能读到本事务开始时的旧快照，把一笔重复支付
+  // 误判成首次成功并改写胜出支付单。
+  const succeeded = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM payments WHERE paymentNo = ${result.paymentNo} FOR UPDATE`;
     const current = await tx.payment.findUnique({ where: { paymentNo: result.paymentNo } });
     if (!current) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
@@ -195,6 +205,9 @@ export async function markPaymentSucceeded(result: ChannelWebhookResult, source:
     await createPaymentSucceededDelivery(tx, order.application, updatedOrder, payment);
     return payment;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  // 提交之后再唤醒收银台长轮询：等待者醒来重查时一定读到 SUCCESS。
+  publishPaymentChange(succeeded.paymentNo);
+  return succeeded;
 }
 
 export async function queryPayment(applicationId: string | null, paymentNo: string) {
@@ -247,6 +260,8 @@ export async function closePayment(applicationId: string | null, paymentNo: stri
     } });
     return closed;
   });
+  // 关闭同样是终态：唤醒等待中的收银台，让页面立刻显示「已关闭」而不是等兜底轮询。
+  publishPaymentChange(updated.paymentNo);
   return presentPayment(updated);
 }
 

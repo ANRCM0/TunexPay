@@ -7,7 +7,7 @@ import { getOwnerSettings, saveOwnerSettings, testOwnerNotification } from "../s
 import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
 import { AppError } from "../lib/errors.js";
-import { RECOVERY_MAX_ATTEMPTS } from "../lib/recovery-policy.js";
+import { loadDashboardStats } from "../lib/dashboard-stats.js";
 import { adminAuth } from "../middleware/auth.js";
 import { adminAudit } from "../middleware/admin-audit.js";
 import { createApplication, deleteApplication, rotateApplicationApiKey, rotateApplicationCredentials, updateApplicationStatus } from "../services/application-service.js";
@@ -52,31 +52,13 @@ adminRoutes.get("/dashboard", async (c) => {
   start.setHours(0, 0, 0, 0);
   // 归档订单（随应用删除的历史数据）不进入任何一个计数：管理台只看在用业务。
   const live = { deletedAt: null };
-  const [applications, ordersToday, successfulToday, unknownPayments, pendingWebhooks, amount, recoveringPayments, recoveringRefunds, exhaustedRecoveries, unmatchedReceipts, mismatchedReceipts, openPaymentExceptions, expirationFailures, failedAdminActionsToday] = await Promise.all([
-    db.application.count({ where: { status: "ACTIVE", archivedAt: null } }),
-    db.order.count({ where: { ...live, createdAt: { gte: start } } }),
-    db.order.count({ where: { ...live, paidAt: { gte: start } } }),
-    db.payment.count({ where: { status: "UNKNOWN", order: live } }),
-    db.webhookDelivery.count({ where: { status: { in: ["PENDING", "PROCESSING", "DEAD"] }, order: live } }),
-    db.payment.aggregate({ where: { status: "SUCCESS", paidAt: { gte: start }, order: live }, _sum: { amount: true } }),
-    db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null }, order: live } }),
-    db.refund.count({ where: { payment: { channel: "ALIPAY", order: live }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
-    Promise.all([
-      db.payment.count({ where: { channel: "ALIPAY", status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS }, order: live } }),
-      db.refund.count({ where: { payment: { channel: "ALIPAY", order: live }, status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: null, queryAttempts: { gte: RECOVERY_MAX_ATTEMPTS } } }),
-    ]).then(([payments, refunds]) => payments + refunds),
-    db.receipt.count({ where: { matchStatus: "UNMATCHED", OR: [{ payment: { order: live } }, { payment: null }] } }),
-    db.receipt.count({ where: { matchStatus: "MISMATCH", OR: [{ payment: { order: live } }, { payment: null }] } }),
-    db.paymentException.count({ where: { status: { in: ["OPEN", "PROCESSING"] }, OR: [{ order: live }, { order: null }] } }),
-    db.order.count({ where: { ...live, status: { in: ["CREATED", "PENDING"] }, expirationError: { not: null } } }),
-    db.adminAuditLog.count({ where: { success: false, createdAt: { gte: start } } }),
+  // 14 个计数合并为一条条件聚合 SQL（见 lib/dashboard-stats.ts），这里只剩两条语句：
+  // 聚合 + recentEvents。
+  const [stats, recentEvents] = await Promise.all([
+    loadDashboardStats(start),
+    db.paymentEvent.findMany({ where: { OR: [{ order: live }, { order: null }] }, orderBy: { id: "desc" }, take: 12 }),
   ]);
-  const recentEvents = await db.paymentEvent.findMany({ where: { OR: [{ order: live }, { order: null }] }, orderBy: { id: "desc" }, take: 12 });
-  return c.json({ data: jsonSafe({
-    applications, ordersToday, successfulToday, amountToday: amount._sum.amount ?? 0, unknownPayments, pendingWebhooks,
-    recoveringPayments, recoveringRefunds, exhaustedRecoveries, unmatchedReceipts, mismatchedReceipts,
-    openPaymentExceptions, expirationFailures, failedAdminActionsToday, recentEvents,
-  }) });
+  return c.json({ data: jsonSafe({ ...stats, recentEvents }) });
 });
 
 adminRoutes.get("/system", async c => c.json({ data: jsonSafe(await collectSystemStatus()) }));

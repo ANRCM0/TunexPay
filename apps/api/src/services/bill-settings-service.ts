@@ -42,10 +42,31 @@ export function initialBillSettings(inherit = true): BillSettings {
   };
 }
 
+// 默认行按需初始化：以前用 upsert 自我初始化，等于每次读配置（外部 Watcher 投递流水、
+// 采集器每一轮、后台每次读取）都带一条写入语句和一次行锁。改成「先读、缺了才补」，
+// 稳定态下读取是纯 SELECT，并发初始化交给主键唯一约束兜底。
+async function readOrCreateSettingsRow(client: Client, id: string) {
+  try {
+    return await client.billChannelSettings.findUniqueOrThrow({ where: { id } });
+  } catch (error) {
+    // 只有「行不存在」才需要创建，连接错误和其它失败必须照旧往上抛。
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2025") throw error;
+    try {
+      return await client.billChannelSettings.create({ data: { id, payloadEncrypted: seal(JSON.stringify(initialBillSettings())) } });
+    } catch (createError) {
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === "P2002") {
+        return client.billChannelSettings.findUniqueOrThrow({ where: { id } });
+      }
+      throw createError;
+    }
+  }
+}
+
 export async function loadBillSettings(client: Client = db, lock = false, id = SETTINGS_ID) {
-  if (id === SETTINGS_ID) await client.billChannelSettings.upsert({ where: { id }, create: { id, payloadEncrypted: seal(JSON.stringify(initialBillSettings())) }, update: {} });
   if (lock) await client.$queryRaw`SELECT id FROM bill_channel_settings WHERE id = ${id} FOR UPDATE`;
-  const row = await client.billChannelSettings.findUniqueOrThrow({ where: { id } });
+  const row = id === SETTINGS_ID
+    ? await readOrCreateSettingsRow(client, id)
+    : await client.billChannelSettings.findUniqueOrThrow({ where: { id } });
   try {
     return { revision: row.revision, updatedAt: row.updatedAt, settings: storedSchema.parse(JSON.parse(openSealed(row.payloadEncrypted))) };
   } catch {
