@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
-import { ChannelTag, ConfirmModal, CopyValue, LoadingState, Section, Stat, Status, Tabs, Toast, money, time } from "./common";
+import { ChannelTag, ConfirmModal, CopyValue, HoverDetail, LoadingState, Section, Stat, Status, Tabs, Toast, money, time } from "./common";
 import { eventLabel, eventSourceLabel, eventTone, exceptionSeverityLabel, exceptionTypeLabel, protocolLabel, receiptMatchModeLabel } from "../lib/labels";
 
 type Refund = { refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string };
@@ -21,6 +21,15 @@ type Order = {
   expirationAttempts: number; expirationNextAttemptAt: string | null; expirationError: string | null;
   application: { name: string; appId: string }; payments: Payment[]; events: Event[]; webhookDeliveries: Delivery[]; paymentExceptions: PaymentException[];
 };
+
+// 支付状态列的查单进度与通道错误默认收起，悬浮或聚焦徽章才展开。
+function paymentRecovery(payment: Payment): string {
+  return [
+    payment.queryAttempts > 0 ? `已自动查询 ${payment.queryAttempts} 次` : null,
+    payment.queryAttempts > 0 ? (payment.nextQueryAt ? `下次查询 ${time(payment.nextQueryAt)}` : "查单已达上限，等待人工处理") : null,
+    payment.errorMessage ? `${payment.errorCode ?? "通道错误"}：${payment.errorMessage}` : null,
+  ].filter(Boolean).join("\n");
+}
 
 const DETAIL_TABS = ["概览", "事件时间线", "退款与通知"] as const;
 
@@ -78,14 +87,14 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
           {data.payments.length ? <div className="table-wrap"><table><thead><tr><th>尝试</th><th>渠道 / 支付单号</th><th>状态</th><th>金额</th><th>渠道交易号</th><th>创建 / 支付时间</th><th>操作</th></tr></thead>
             <tbody>{data.payments.map(payment => <tr key={payment.id}>
               <td>#{payment.attemptNo}</td>
-              <td data-label="渠道"><ChannelTag code={payment.channel} /><div className="id-line"><span className="mono muted">{payment.method} · {payment.paymentNo}</span><CopyValue value={payment.paymentNo} label="复制支付单号" /></div>{payment.errorMessage && <div className="row-error">{payment.errorCode}: {payment.errorMessage}</div>}</td>
-              <td data-label="状态"><Status value={payment.status} /></td><td data-label="金额">{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
+              <td data-label="渠道"><ChannelTag code={payment.channel} /><div className="id-line"><span className="mono muted">{payment.method} · {payment.paymentNo}</span><CopyValue value={payment.paymentNo} label="复制支付单号" /></div></td>
+              <td data-label="状态"><HoverDetail text={paymentRecovery(payment)} tone={payment.errorMessage ? "danger" : "muted"}><Status value={payment.status} /></HoverDetail></td><td data-label="金额">{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
               <td data-label="渠道交易号">{payment.channelTradeNo || payment.channelOrderNo ? <div className="id-line"><span className="mono">{payment.channelTradeNo || payment.channelOrderNo}</span><CopyValue value={payment.channelTradeNo || payment.channelOrderNo || ""} label="复制渠道交易号" /></div> : "—"}</td>
               <td data-label="时间">{time(payment.createdAt)}<div className="muted">{payment.paidAt ? time(payment.paidAt) : "未支付"}</div></td>
               <td data-label="操作"><div className="row-actions">
                 {payment.status !== "SUCCESS" && <button className="button secondary" disabled={working !== ""} onClick={() => void operate(payment.paymentNo, "query")}>{working === `${payment.paymentNo}:query` ? "查询中…" : "主动查单"}</button>}
                 {["CREATED", "PROCESSING", "UNKNOWN"].includes(payment.status) && <button className="button danger" disabled={working !== ""} onClick={() => setPendingClose(payment.paymentNo)}>{working === `${payment.paymentNo}:close` ? "关闭中…" : "关闭"}</button>}
-              </div>{payment.queryAttempts > 0 && <div className="recovery-note">已自动查询 {payment.queryAttempts} 次<br />{payment.nextQueryAt ? `下次 ${time(payment.nextQueryAt)}` : "等待人工处理"}</div>}</td>
+              </div></td>
             </tr>)}</tbody>
           </table></div> : <div className="empty compact">尚未发起支付</div>}
         </Section>
@@ -109,7 +118,7 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
             <div><strong>{money(refund.amount)}</strong> <Status value={refund.status} /></div><div className="id-line"><span className="mono muted">{refund.refundNo} · {refund.paymentNo}</span><CopyValue value={refund.refundNo} label="复制退款单号" /></div><div className="muted">{refund.reason || "未填写原因"} · {time(refund.createdAt)}</div>
           </div>)}{data.payments.every(payment => payment.refunds.length === 0) && <div className="empty compact">暂无退款</div>}</div>
           <div><h3>Webhook 投递</h3>{data.webhookDeliveries.map(delivery => <div className="record" key={delivery.id}>
-            <div><strong>{eventLabel(delivery.eventType)}</strong> <Status value={delivery.status} /></div><div className="id-line"><span className="mono muted break-all">{delivery.url}</span><CopyValue value={delivery.url} label="复制 Webhook 地址" /></div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>{delivery.lastError && <div className="row-error">{delivery.lastError}</div>}
+            <div><strong>{eventLabel(delivery.eventType)}</strong> <HoverDetail text={delivery.lastError} tone="danger"><Status value={delivery.status} /></HoverDetail></div><div className="id-line"><span className="mono muted break-all">{delivery.url}</span><CopyValue value={delivery.url} label="复制 Webhook 地址" /></div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>
           </div>)}{!data.webhookDeliveries.length && <div className="empty compact">暂无通知任务</div>}</div>
         </div>
       </Section>}

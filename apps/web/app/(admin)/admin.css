@@ -210,6 +210,15 @@ tbody tr:last-child td { border-bottom: 0; }
 .credentials .copy-value span { display: inline; }
 .row-error { color: var(--danger); margin-top: 6px; font-size: 11px; max-width: 420px; }
 .recovery-note { margin-top: 7px; color: var(--warning); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* 次要信息（失败原因 / 验证说明）默认不占版面，悬浮或键盘聚焦时浮出。
+   浮层必须是 fixed：.table-wrap 为 overflow: auto，绝对定位会被裁掉。 */
+.hover-detail { position: relative; display: inline-flex; align-items: center; border-radius: 6px; text-decoration: underline dotted rgba(36, 49, 67, .4); text-underline-offset: 3px; cursor: help; }
+.hover-detail.tone-danger { text-decoration-color: rgba(229, 83, 75, .55); }
+.hover-detail:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.hover-detail .badge { text-decoration: inherit; text-underline-offset: inherit; }
+.hover-detail-pop { position: fixed; z-index: 95; max-height: 60vh; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .98); box-shadow: 0 14px 40px rgba(36, 49, 67, .16); color: var(--ink); font-size: 12px; font-weight: 500; line-height: 1.65; text-align: left; white-space: pre-line; overflow-wrap: anywhere; animation: notice-in .16s ease; }
+.hover-detail.tone-danger .hover-detail-pop { border-color: #f3d3cf; background: #fffaf9; color: #c73e36; }
 .record { padding: 10px 0; border-bottom: 1px solid #eef1f6; display: grid; gap: 5px; font-size: 12px; }
 .record:last-child { border-bottom: 0; }
 
@@ -291,8 +300,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .link-button { border: 0; background: transparent; color: var(--primary); cursor: pointer; font-size: 12px; font-weight: 600; padding: 4px 0; }
 .link-button:hover { text-decoration: underline; text-underline-offset: 3px; }
 .link-button:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
-.check-msg { font-size: 11px; margin-top: 5px; max-width: 320px; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .channel-check-detail { max-width: 360px; white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 .channel-enable { display: flex !important; align-items: center; gap: 8px; }
 .channel-enable input { width: auto !important; }
