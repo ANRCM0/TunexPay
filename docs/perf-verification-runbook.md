@@ -67,12 +67,16 @@ cd apps/api && npx tsx src/scripts/verify-indexes.ts --min-rows 500
 
 期望输出：12 个 `[PASS]`（6 个索引 + 6 条查询计划；含 `orders` 的两条）。
 
-判读规则：
+判读规则（**两级判定**）：
 
-- `[SKIP]` 表示该表行数少于 `--min-rows`，MySQL 在小表上会直接全表扫描，EXPLAIN 结论不可信。
-  在有真实数据（或先灌压测数据）后重跑；把阈值调到实际行数以下即可。
-- `[FAIL] type=ALL` = 退化为全表扫描；`[FAIL] 没有使用期望索引` = 优化器选了别的索引；
-  `[FAIL] 仍需要 filesort` = 排序没有走索引。三者都请把输出的 `EXPLAIN` 摘要回传，再决定是否调整索引。
+- 表行数 `>= --min-rows`：判断优化器是否真的选了期望索引。`[FAIL] type=ALL` = 退化为全表扫描；
+  `[FAIL] 没有使用期望索引` = 优化器选了别的索引；`[FAIL] 仍需要 filesort` = 排序没有走索引。
+- 表行数 `< --min-rows`：优化器选全表扫描是**正确行为**，此时判定没有意义，脚本自动退化为
+  `FORCE INDEX` 探针 —— 只验证「该索引对这种查询形态可用、且不需要 filesort」。列序写错、
+  索引与谓词不匹配这类错误在这一级就能暴露。所以即使库很小，这一级也应给出 `[PASS]`；
+  若这里出现 `[FAIL]`，说明索引本身有问题，必须处理。
+- 若出现 `[FAIL] 无法解析 EXPLAIN 结果列`，是脚本与 MySQL 版本的列名兼容问题（不是索引问题），
+  请把「实际列名」那一行回传。
 
 索引清单（迁移里 6 个）：
 
@@ -113,7 +117,9 @@ cd apps/api && npx tsx src/scripts/verify-concurrency.ts --yes --rounds 20
 | S3 同 revision 并发保存通道配置 | 恰好 1 次成功、1 次 `CHANNEL_CONFIG_CONFLICT` | `saveChannel` 保留 Serializable（revision 校验） |
 | S4 两笔各 60% 并发退款 | 恰好 1 笔成功、累计 ≤ 支付金额 | `createRefund` 保留 Serializable（退款上限） |
 
-- S4 需要 `MOCK_CHANNEL_ENABLED=true`，否则显示 `[SKIP]`。
+- S1 会在日志里打出若干条 `prisma:error` / P2002 唯一键冲突，那是**并发下单的预期路径**
+  （`createOrder` 靠唯一约束 + P2002 分支收敛幂等，而不是先查后插），不是失败。
+- S4 需要 `MOCK_CHANNEL_ENABLED=true`，否则显示 `[SKIP]`——生产用支付宝时这是正常的跳过。
 - 脚本结尾会打印**死锁（1213）/锁等待超时（1205）**的出现次数。S2 是重点观察对象：
   如果出现 1213，说明并发下的锁顺序需要复核，请把完整报错回传。
 - 任一 `[FAIL]` 都请连同该轮的具体数字回传。
