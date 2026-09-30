@@ -10,8 +10,12 @@
 | `apps/api/src/scripts/verify-indexes.ts` | 校验 6 个新索引存在、关键查询走索引 | **只读**，可在生产库跑 |
 | `apps/api/src/scripts/verify-concurrency.ts` | 4 个并发正确性场景 | 会写测试数据（`perf-verify-` 前缀，自动清理） |
 
+配套脚本**只在手动执行时运行**：没有任何自动触发路径——CI（`.github/workflows/docker.yml`）只跑
+typecheck/测试/compose 校验，容器入口（`docker/entrypoint.sh`）只跑迁移与进程编排，两者都不调用它们。
+写库脚本因此在 CI 与容器启动时都不会碰到数据库。
+
 ```bash
-# 在部署机上加载环境变量后执行（或在容器内执行）
+# 方式一：在仓库目录执行（先加载 .env）
 cd /path/to/tuoxin-pay
 set -a; . ./.env; set +a
 
@@ -20,8 +24,16 @@ npx tsx src/scripts/verify-indexes.ts            # 只读
 npx tsx src/scripts/verify-concurrency.ts --yes  # 写测试数据，自动清理
 ```
 
-> 容器内执行也可以：`docker compose exec app npx tsx src/scripts/verify-indexes.ts`
-> （镜像里已经有 `tsx` 与源码目录时；否则请在仓库目录用上面的方式）。
+```bash
+# 方式二（推荐）：容器内执行，直接复用生产环境变量，省去加载 .env
+# 镜像里包含源码与 tsx（devDependencies 会被打进镜像），注意容器 WORKDIR 是 /app。
+docker compose exec app npx tsx apps/api/src/scripts/verify-indexes.ts
+# 写库脚本在 NODE_ENV=production 下必须额外加 --force：
+docker compose exec app npx tsx apps/api/src/scripts/verify-concurrency.ts --yes --force
+```
+
+> CI 里唯一的自动覆盖是 `tsc` 类型检查（脚本在 `apps/api/tsconfig.json` 的 include 范围内），
+> 它不会连数据库，也不会写任何数据。
 
 ## 安全前提
 
