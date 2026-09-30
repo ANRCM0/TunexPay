@@ -10,11 +10,17 @@ type Plugin = { code: string; name: string; description: string; capabilities: s
 
 export function Plugins() {
   const plugins = useApi<Plugin[]>("/plugins");
+  // 从插件行点进来时带上该插件作为默认选择；也可以从页面顶部直接创建后再选插件。
   const [editor, setEditor] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   return <>
     {notice && <Toast text={notice} onClose={() => setNotice("")} />}
-    <PageHead eyebrow="Payment Plugins" title="支付插件" copy="每个插件是一种收款能力；从插件创建独立收款通道，配置验证后分配给业务应用。" action={<button className="button secondary" onClick={() => void plugins.reload()}><RefreshCw size={14} />刷新</button>} />
+    <PageHead eyebrow="Payment Plugins" title="支付插件" copy="每个插件是一种收款能力；创建通道时必须选择一个插件作为对接，配置验证后分配给业务应用。" action={
+      <div className="page-head-actions">
+        <button className="button secondary" onClick={() => void plugins.reload()}><RefreshCw size={14} />刷新</button>
+        <button className="button" onClick={() => setEditor("")}><Plus size={14} />创建通道</button>
+      </div>
+    } />
     <Section title="插件列表" action={<span className="muted">{plugins.data?.length ?? 0} 个插件</span>}>
       <LoadingState loading={plugins.loading} error={plugins.error} empty={!plugins.data?.length} emptyText="当前没有可用的支付插件">
         <div className="table-wrap"><table>
@@ -29,6 +35,6 @@ export function Plugins() {
         </table></div>
       </LoadingState>
     </Section>
-    {editor && <Modal title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
+    {editor !== null && <Modal title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
   </>;
 }

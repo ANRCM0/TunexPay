@@ -238,10 +238,15 @@ model ChannelInstance {
   checkLockedUntil DateTime?
   testPaymentNo    String?            @db.VarChar(40)
   testRevision     Int?
+  // 归档软删除标记：非空表示该通道已被管理端移除。行必须保留，因为
+  // payloadEncrypted 里存着对接密钥 —— 历史支付单的查单、关闭与原路退款都还要用它，
+  // 硬删会让已经动过的钱再也对不上账。归档后不再出现在列表与分配选项里，也不能建新支付。
+  archivedAt       DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
   @@index([plugin, createdAt])
+  @@index([archivedAt, createdAt])
   @@map("channel_instances")
 }
 
