@@ -3,6 +3,7 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { retryDelayMs, sleep } from "../lib/retry";
 import { ChannelTag, Status, money, statusText } from "./common";
 
 type Payment = { paymentNo: string; status: string; channel: string; amount: number; businessAmount: number; currency: string; subject: string; payable: boolean; validUntil: string | null; createdAt?: string; clientPayload: { type?: string; value?: string; remark?: string | null; validUntil?: string | null } | null; returnUrl: string | null };
@@ -15,17 +16,22 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
+      let failures = 0;
       for (;;) {
         try {
           const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=12`, { signal: controller.signal });
           if (controller.signal.aborted) return;
+          failures = 0;
           setData(result.data); setError(""); setLoading(false);
           if (["SUCCESS", "FAILED", "CLOSED"].includes(result.data.status)) return;
         } catch (cause) {
           if (controller.signal.aborted) return;
+          failures += 1;
           setError(cause instanceof Error ? cause.message : "支付单读取失败");
           setLoading(false);
-          await new Promise(resolve => setTimeout(resolve, 2_000));
+          // 退避重试：连续失败时逐步拉长间隔并加入抖动，避免断网期间所有收银台同时硬打接口。
+          await sleep(retryDelayMs(failures), controller.signal);
+          if (controller.signal.aborted) return;
         }
       }
     })();
