@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, PageHead, Section, Status, Modal, Toast, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Section, Status, Modal, Toast, statusText, time } from "./common";
 import { channelLabel } from "../lib/labels";
 import { ChannelEditor } from "./channel-editor";
 
@@ -15,6 +15,14 @@ export type Channel = {
 type Application = { id: string; name: string; defaultChannel: string; defaultChannelId: string | null };
 export const checkLabels: Record<string, string> = { UNCHECKED: "待检测", API_VERIFIED: "接口已验证", PAYMENT_VERIFIED: "实付已验证", SIMULATED: "模拟配置通过", NEEDS_PAYMENT: "待实付验证", FAILED: "检测失败" };
 export const assignable = (channel: Channel) => channel.enabled && ["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(channel.checkStatus);
+
+// 验证状态列的次要说明默认收起（否则每行被撑高两三行），悬浮或聚焦徽章才展开。
+function checkDetail(channel: Channel): string {
+  return [
+    channel.checkMessage,
+    channel.testPayment ? `实付验收：${statusText(channel.testPayment.status)} · ${channel.testPayment.paymentNo}` : null,
+  ].filter(Boolean).join("\n");
+}
 
 export function Channels() {
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
@@ -59,8 +67,7 @@ export function Channels() {
           {channels.data?.map(channel => <tr key={channel.id}>
             <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="id-line"><span className="muted">{channelLabel(channel.plugin)} · <span className="mono">{channel.id}</span></span><CopyValue value={channel.id} label="复制通道 ID" /></div></div></div></td>
             <td data-label="新订单"><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
-            <td data-label="验证状态"><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span>{channel.checkMessage && <div className="muted check-msg ellipsis" title={channel.checkMessage}>{channel.checkMessage}</div>}
-              {channel.testPayment && <div className="check-msg"><span className="muted">实付订单 </span><Status value={channel.testPayment.status} /><div className="id-line"><span className="mono muted">{channel.testPayment.paymentNo}</span><CopyValue value={channel.testPayment.paymentNo} label="复制测试支付单号" /></div>{!channel.testPayment.currentRevision && <div className="muted">旧配置</div>}</div>}
+            <td data-label="验证状态"><HoverDetail text={checkDetail(channel)} tone={channel.checkStatus === "FAILED" ? "danger" : "muted"}><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span></HoverDetail>{channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新检测</div>}
             </td><td data-label="最近检测">{time(channel.checkedAt)}</td>
             <td data-label="操作"><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
