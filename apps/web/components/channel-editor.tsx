@@ -4,13 +4,19 @@ import { api, useApi } from "../lib/api";
 import { Toggle, statusText } from "./common";
 import type { Channel } from "./channels";
 
+export type PluginOption = { code: string; name: string; description: string; capabilities: string[] };
+
 const defaults: Record<string, string | number | boolean> = {
   appId: "", userId: "", gateway: "https://openapi.alipay.com/gateway.do", qrContent: "",
   collectorEnabled: false, matchMode: "AMOUNT", validSeconds: 300, amountOffsetMax: 99,
   pollSeconds: 10, lookbackSeconds: 3600, overlapSeconds: 300, lagSeconds: 15,
 };
 
-export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: string; channel?: Channel; onSaved: () => Promise<void>; onClose: () => void }) {
+export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose }: { plugin?: string; channel?: Channel; plugins: PluginOption[]; onSaved: () => Promise<void>; onClose: () => void }) {
+  const creating = !channel;
+  // 创建时必须显式选择插件作为对接；修改时插件不可改（通道 ID 与插件是支付单的绑定身份）。
+  const [selectedPlugin, setSelectedPlugin] = useState(channel?.plugin || plugin || "");
+  const [channelId, setChannelId] = useState("");
   const [name, setName] = useState(channel?.name || "");
   const [enabled, setEnabled] = useState(channel?.enabled || false);
   const [settings, setSettings] = useState({ ...defaults, ...channel?.settings });
@@ -19,16 +25,19 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const update = (key: string, value: string | number | boolean) => setSettings(previous => ({ ...previous, [key]: value }));
+  const activePlugin = channel?.plugin || selectedPlugin;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!activePlugin) { setError("请先选择要对接的支付插件"); return; }
     setSaving(true);
     setError("");
     try {
       await api(channel ? `/channel-instances/${channel.id}` : "/channel-instances", {
         method: "POST",
         body: JSON.stringify({
-          name, enabled, plugin, revision: channel?.revision,
+          ...(creating && channelId.trim() ? { id: channelId.trim() } : {}),
+          name, enabled, plugin: activePlugin, revision: channel?.revision,
           settings: {
             ...settings,
             privateKey: clear.privateKey ? null : secrets.privateKey,
@@ -46,7 +55,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
   }
 
   return <div>
-    {channel && plugin === "ALIPAY_BILL" && <CollectorStatus id={channel.id} />}
+    {channel && activePlugin === "ALIPAY_BILL" && <CollectorStatus id={channel.id} />}
 
     <form onSubmit={event => void submit(event)}>
       <fieldset className="bill-settings-fields" disabled={saving}>
@@ -55,9 +64,16 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
         <section className="bill-settings-section">
           <div className="bill-settings-section-head">
             <h3>基础配置</h3>
-            <p>设置通道名称和是否接收新的支付订单。</p>
+            <p>选择对接的支付插件，并给通道一个全局唯一的 ID。</p>
           </div>
           <div className="bill-settings-grid">
+            <label>对接插件<select value={activePlugin} required disabled={!creating} onChange={event => setSelectedPlugin(event.target.value)}>
+              <option value="" disabled>请选择支付插件</option>
+              {plugins.map(item => <option key={item.code} value={item.code}>{item.name}（{item.code}）</option>)}
+            </select></label>
+            {creating
+              ? <label>通道 ID（可选）<input value={channelId} onChange={event => setChannelId(event.target.value)} maxLength={60} placeholder="留空自动生成，例如 alipay-shop1" autoComplete="off" spellCheck={false} /><span className="muted">只能用小写字母、数字与中划线；创建后不可修改，接口与对账会引用它。</span></label>
+              : <label>通道 ID<input value={channel.id} readOnly disabled /><span className="muted">通道 ID 创建后不可修改。</span></label>}
             <label>通道名称<input value={name} onChange={event => setName(event.target.value)} required maxLength={120} placeholder="例如：支付宝 · 工作室" /></label>
             <div><Toggle checked={enabled} onChange={setEnabled} label="启用新订单" /></div>
           </div>
@@ -80,7 +96,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
           <details className="bill-settings-advanced">
             <summary>密钥维护</summary>
             <div className="bill-settings-switches">
-              {(["privateKey", "publicKey", ...(plugin === "ALIPAY_BILL" ? ["watcherToken" as const] : [])] as const).map(key => <label key={key}>
+              {(["privateKey", "publicKey", ...(activePlugin === "ALIPAY_BILL" ? ["watcherToken" as const] : [])] as const).map(key => <label key={key}>
                 <input type="checkbox" checked={clear[key]} onChange={event => setClear(previous => ({ ...previous, [key]: event.target.checked }))} />
                 清除{key === "privateKey" ? "应用私钥" : key === "publicKey" ? "支付宝公钥" : "Watcher 令牌"}
               </label>)}
@@ -88,7 +104,7 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
           </details>
         </section>}
 
-        {plugin === "ALIPAY_BILL" && <section className="bill-settings-section">
+        {activePlugin === "ALIPAY_BILL" && <section className="bill-settings-section">
           <div className="bill-settings-section-head">
             <h3>账单采集</h3>
             <p>用于个人收款码到账识别与账单匹配。默认参数适合大多数部署。</p>
@@ -112,9 +128,9 @@ export function ChannelEditor({ plugin, channel, onSaved, onClose }: { plugin: s
           </details>
         </section>}
 
-        {plugin === "MOCK" && <section className="bill-settings-section"><p className="muted">模拟通道仍受服务器 Mock 开关和令牌控制，仅用于开发测试，不用于真实收款。</p></section>}
+        {activePlugin === "MOCK" && <section className="bill-settings-section"><p className="muted">模拟通道仍受服务器 Mock 开关和令牌控制，仅用于开发测试，不用于真实收款。</p></section>}
 
-        {channel && plugin === "ALIPAY_BILL" && <p className="channel-check-detail">此通道的 Watcher 地址：<code>{channel.watcherUrl}</code></p>}
+        {channel && activePlugin === "ALIPAY_BILL" && <p className="channel-check-detail">此通道的 Watcher 地址：<code>{channel.watcherUrl}</code></p>}
         <p className="muted">保存后请重新检测。已有交易的通道不能更换账号或网关；如需切换收款账号，请创建新通道后重新分配。</p>
         <div className="bill-settings-actions"><button className="button" type="submit">{saving ? "保存中…" : "保存通道"}</button><button className="button secondary" type="button" onClick={onClose}>取消</button></div>
       </fieldset>

@@ -156,7 +156,11 @@ export async function alipayBillCollectorStatus(accountId = ALIPAY_BILL_ACCOUNT_
 }
 
 export async function runAllBillCollectors(): Promise<void> {
+  // 只为「真实存在的通道」跑采集，不再无条件带上历史默认账号：
+  // 默认通道已不再自动创建，对新装环境来说那个 id 根本不存在，每跳都为它开一次事务是纯浪费。
+  // 注意这里**故意不过滤 archivedAt**：通道归档只阻断新支付，如果它还有在途的账单收款单，
+  // 采集器必须继续把到账流水匹配上，否则那笔钱永远确认不了。
   const rows = await db.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL" }, select: { id: true } });
-  const ids = new Set([ALIPAY_BILL_ACCOUNT_ID, ...rows.map(row => row.id)]);
+  const ids = new Set(rows.map(row => row.id));
   await Promise.allSettled([...ids].map(async id => { try { await runAlipayBillCollector(id); } catch { log("error", "alipay_bill.collector_failed", { channelId: id }); } }));
 }

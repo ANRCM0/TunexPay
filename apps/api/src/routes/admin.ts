@@ -17,8 +17,7 @@ import { queryRefund } from "../services/refund-service.js";
 import { importAlipayBill, matchReceipt } from "../services/reconciliation-service.js";
 import { collectSystemStatus } from "../lib/system-status.js";
 import { channelInstanceRoutes } from "./channel-instances.js";
-import { assignChannel, ensureLegacyChannels, saveChannel, loadChannel, checkChannel } from "../services/channel-instance-service.js";
-import { legacyChannelId } from "../lib/channel-scope.js";
+import { assignChannel, saveChannel, loadChannel, checkChannel } from "../services/channel-instance-service.js";
 
 export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
@@ -125,32 +124,31 @@ adminRoutes.post("/applications/:id/delete", async (c) => {
   return c.json({ data: await deleteApplication(c.req.param("id")) });
 });
 
-adminRoutes.post("/applications/:id/default-channel", async (c) => {
-  const channel = z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).parse((await c.req.json()).channel);
-  await ensureLegacyChannels();
-  return c.json({ data: await assignChannel(c.req.param("id"), legacyChannelId(channel)) });
-});
+// 通道分配统一走 /applications/:id/channel-instance（在 channel-instances 路由里）。
+// 早期的 /applications/:id/default-channel 依赖自动创建的默认通道，默认通道概念移除后一并删除。
+//
+// 账单收款配置面板保留原有路径，但不再假定 alipay-bill-default 一定存在：
+// 改成解析「当前实际的 ALIPAY_BILL 通道」，找不到就给出明确指引。
+async function resolveBillChannel() {
+  const rows = await db.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL", archivedAt: null }, orderBy: { createdAt: "asc" }, take: 1 });
+  const row = rows[0];
+  if (!row) throw new AppError("BILL_CHANNEL_NOT_CONFIGURED", "还没有支付宝账单收款通道，请先在「支付通道」创建并检测一个 ALIPAY_BILL 通道", 409);
+  return row;
+}
 
 adminRoutes.get("/channels", async (c) => c.json({ data: await channelStatus() }));
 adminRoutes.get("/channels/alipay-bill/settings", async (c) => c.json({ data: await getPublicBillSettings() }));
 adminRoutes.post("/channels/alipay-bill/settings", async c => {
-  await ensureLegacyChannels();
   const input = await c.req.json();
-  const row = await loadChannel("alipay-bill-default");
+  const row = await resolveBillChannel();
   const bill = await getPublicBillSettings();
-  if (input.revision !== bill.revision) throw new AppError("BILL_SETTINGS_CONFLICT", "???????????", 409);
+  if (input.revision !== bill.revision) throw new AppError("BILL_SETTINGS_CONFLICT", "账单配置已被修改，请重新加载后再保存", 409);
   await saveChannel({ name: row.name, plugin: row.plugin, enabled: input.enabled, revision: row.revision, settings: input }, row.id);
   return c.json({ data: await getPublicBillSettings() });
 });
 adminRoutes.get("/channels/alipay-bill/collector", async (c) => {
   const { alipayBillCollectorStatus } = await import("../services/alipay-bill-collector-service.js");
   return c.json({ data: await alipayBillCollectorStatus() });
-});
-
-adminRoutes.post("/channels/alipay/check", async (c) => {
-  await ensureLegacyChannels();
-  const row = await loadChannel("alipay-default");
-  return c.json({ data: await checkChannel(row.id, row.revision) });
 });
 
 const liveOrder = { deletedAt: null };
