@@ -8,6 +8,7 @@ import { handleAlipayWebhook, mockSucceed, publicPayment } from "../services/pay
 import { ingestAlipayBillFlows } from "../services/receipt-flow-service.js";
 import { billRuntimeConfig } from "../services/bill-settings-service.js";
 import { loadChannel } from "../services/channel-instance-service.js";
+import { PAYMENT_WAKE_FALLBACK_MS, waitForPaymentChange } from "../lib/payment-wake.js";
 
 export const channelRoutes = new Hono<AppEnv>();
 
@@ -60,9 +61,12 @@ channelRoutes.get("/public/payments/:paymentNo", async (c) => {
   c.header("X-Robots-Tag", "noindex, nofollow");
   const waitSeconds = z.coerce.number().min(0).max(20).default(0).parse(c.req.query("wait"));
   const deadline = Date.now() + waitSeconds * 1000;
+  const paymentNo = c.req.param("paymentNo");
   for (;;) {
-    const view = await publicPayment(c.req.param("paymentNo"));
+    const view = await publicPayment(paymentNo);
     if (!waitSeconds || ["SUCCESS", "FAILED", "CLOSED"].includes(view.status) || Date.now() >= deadline) return c.json({ data: view });
-    await new Promise(resolve => setTimeout(resolve, 400));
+    // 先登记等待者再等：支付状态落库提交时支付核心会发一条唤醒消息，等待中的长轮询立刻回来重查。
+    // 万一错过（Redis 不可用，或状态被不发布唤醒的路径改动），兜底计时器到点仍会重查，行为只会变慢不会错。
+    await waitForPaymentChange(paymentNo, Math.min(PAYMENT_WAKE_FALLBACK_MS, Math.max(0, deadline - Date.now())));
   }
 });

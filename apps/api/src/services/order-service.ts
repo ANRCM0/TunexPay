@@ -44,6 +44,11 @@ export async function createOrder(
   }
 
   try {
+    // 这里可以安全去掉 Serializable：本事务只有两条 INSERT、没有任何 SELECT，隔离级别不影响
+    // 可见性判断，去掉可省掉 Prisma 在每个事务前发的 SET TRANSACTION ISOLATION LEVEL。
+    // 幂等仍由两个唯一索引 + 下面的 P2002 分支兜底。
+    // 注意：支付、退款、通道保存这些事务不能用同样的理由降级 —— 它们在取到行锁之后还要靠普通
+    // SELECT 重读状态，那正是 Serializable 把 SELECT 升级成加锁读、从而避免读到旧快照的地方。
     const order = await db.$transaction(async (tx) => {
       const expiresAt = new Date(Date.now() + input.expiresInSeconds * 1_000);
       const created = await tx.order.create({
@@ -76,7 +81,7 @@ export async function createOrder(
         },
       });
       return created;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
     return { order, reused: false };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

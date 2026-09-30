@@ -17,16 +17,32 @@ export const channelInput = z.object({
   revision: z.number().int().positive().optional(), settings: z.record(z.string(), z.unknown()),
 }).strict();
 
+const LEGACY_PLUGINS = ["ALIPAY", "ALIPAY_BILL", "MOCK"] as const;
+
+// 默认通道要的只是「存在」。稳定态下用一次主键集合读就够，以前无条件 upsert 等于每次调用
+// 都写三条 channel_instances 并在三行上取写锁 —— 而这个函数在发起支付、查看通道、后台操作的
+// 路径上都会被调用。只补缺失的行，并发建表由唯一主键兜底。
 export async function ensureLegacyChannels() {
   const cfg = config();
+  const ids = LEGACY_PLUGINS.map(plugin => legacyChannelId(plugin));
+  const existing = await db.channelInstance.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  const known = new Set(existing.map(row => row.id));
+  if (known.size === ids.length) return;
   const bill = await loadBillSettings();
-  for (const plugin of ["ALIPAY", "ALIPAY_BILL", "MOCK"] as const) {
+  for (const plugin of LEGACY_PLUGINS) {
+    const id = legacyChannelId(plugin);
+    if (known.has(id)) continue;
     const settings = plugin === "ALIPAY_BILL" ? bill.settings : initialBillSettings();
     const enabled = plugin === "ALIPAY_BILL" ? bill.settings.enabled : plugin === "MOCK" ? cfg.MOCK_CHANNEL_ENABLED : Boolean(cfg.ALIPAY_APP_ID && cfg.ALIPAY_PRIVATE_KEY && cfg.ALIPAY_PUBLIC_KEY);
-    await db.channelInstance.upsert({ where: { id: legacyChannelId(plugin) }, update: {}, create: {
-      id: legacyChannelId(plugin), plugin, name: `${paymentPlugins[plugin].name} · 默认`, enabled,
-      payloadEncrypted: seal(JSON.stringify(settings)),
-    } });
+    try {
+      await db.channelInstance.create({ data: {
+        id, plugin, name: `${paymentPlugins[plugin].name} · 默认`, enabled,
+        payloadEncrypted: seal(JSON.stringify(settings)),
+      } });
+    } catch (error) {
+      // 另一个进程/请求刚刚建好同一行，等价于「已存在」。
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    }
   }
 }
 
@@ -103,6 +119,8 @@ export async function saveChannel(raw: unknown, id?: string) {
   const input = channelInput.parse(raw);
   const channelId = id || generateId("chn");
   await ensureLegacyChannels();
+  // 保留 Serializable：revision 冲突检查依赖「锁住通道行之后再重读」，这次重读必须是加锁读才能看到
+  // 最新已提交的 revision，否则并发保存可能都通过校验、互相覆盖配置。
   const row = await db.$transaction(async tx => {
     if (id) await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${id} FOR UPDATE`;
     const current = id ? await tx.channelInstance.findUnique({ where: { id } }) : null;

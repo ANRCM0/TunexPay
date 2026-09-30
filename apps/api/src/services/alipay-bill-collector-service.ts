@@ -13,6 +13,8 @@ import { paymentChannelScope } from "../lib/channel-scope.js";
 
 const LEASE_MS = 60_000;
 const PAGE_SIZE = 100;
+/** 空闲时的心跳刷新间隔：状态页在无需求时显示 IDLE，不读心跳，没必要每一跳都写一次。 */
+const IDLE_HEARTBEAT_MS = 30_000;
 
 // Keep a bounded tail for ledger entries delayed beyond QR expiry.
 async function collectionDemand(client: Pick<typeof db, "payment">, now: Date, overlap: number, lag: number, accountId: string) {
@@ -28,12 +30,29 @@ async function collectionDemand(client: Pick<typeof db, "payment">, now: Date, o
 
 export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID): Promise<void> {
   const result = await db.$transaction(async (tx) => {
-    const cfg = await billRuntimeConfig(tx, true, accountId);
-    if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) return null;
+    // 这里只需要一个配置快照，不需要在共享的配置行上取写锁：锁在提交时就释放，而真正的采集
+    // 发生在事务之外，中途的配置变更由下面按 billRevision 的复查负责。每一跳对
+    // bill_channel_settings 取一次 FOR UPDATE 只会给面板保存配置制造无谓的锁等待。
+    const cfg = await billRuntimeConfig(tx, false, accountId);
     const now = new Date();
+    if (!cfg.ALIPAY_BILL_COLLECTOR_ENABLED) {
+      // 采集关闭时把下次检查推后（条件更新：已经推过的一跳不会再写），否则每一跳都要重新
+      // 读一次配置。面板保存配置会把 nextRunAt 拉回当前时间，所以重新打开采集仍会被
+      // 紧接着的一跳发现，不会因为这里的退避而漏掉。
+      await tx.billCollectorState.updateMany({
+        where: { id: accountId, nextRunAt: { lte: now } },
+        data: { nextRunAt: new Date(now.getTime() + Math.max(cfg.ALIPAY_BILL_POLL_SECONDS, 30) * 1_000) },
+      });
+      return null;
+    }
     const demand = await collectionDemand(tx, now, cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS, accountId);
     if (!demand) {
-      await tx.billCollectorState.updateMany({ where: { id: accountId }, data: { heartbeatAt: now } });
+      // 无待收流水时状态页显示 IDLE、不读心跳；因此只在心跳确实过期时才刷新，
+      // 不再每一跳都对同一行做一次空写。
+      await tx.billCollectorState.updateMany({
+        where: { id: accountId, OR: [{ heartbeatAt: null }, { heartbeatAt: { lte: new Date(now.getTime() - IDLE_HEARTBEAT_MS) } }] },
+        data: { heartbeatAt: now },
+      });
       return null;
     }
     const binding = sha256(JSON.stringify([cfg.ALIPAY_APP_ID, cfg.ALIPAY_BILL_USER_ID, cfg.ALIPAY_GATEWAY, cfg.ALIPAY_BILL_QR_CONTENT]));
@@ -81,14 +100,23 @@ export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID)
         page_no: pageNo, page_size: PAGE_SIZE,
       });
       const page = accountLogPage(response, pageNo, PAGE_SIZE);
+      // 先整页校验、再整页批量投递（原来是"逐条校验 + 逐条投递"交替进行）。
+      // 顺序变化只影响"发现越界流水之前已经投递了多少条"：现在一页里只要有任意一条
+      // paidAt 落在 [windowStart, windowEnd) 之外，这一页一条都不会投递，而不是投递到那条
+      // 越界记录为止的前半页。这是安全的，因为页在崩溃/失败后会被原样重放：回执指纹的唯一
+      // 约束与支付核心（eventKey 幂等 + 支付单状态机）保证重放不会产生重复回执或重复成功。
+      // 校验仍逐条进行，语义不变（越界即抛 ALIPAY_BILL_OUTSIDE_QUERY_WINDOW，游标不前进）。
+      const flows: Record<string, unknown>[] = [];
       for (const record of page.records) {
         const flow = paymentFlowFromAccountLog(record);
-        if (flow) {
-          const paidAt = normalizeReceiptFlow(flow).paidAt;
-          if (paidAt < current.windowStart! || paidAt >= current.windowEnd!) throw new Error("ALIPAY_BILL_OUTSIDE_QUERY_WINDOW");
-          await ingestAlipayBillFlows({ record: flow }, accountId);
-        }
+        if (!flow) continue;
+        const paidAt = normalizeReceiptFlow(flow).paidAt;
+        if (paidAt < current.windowStart! || paidAt >= current.windowEnd!) throw new Error("ALIPAY_BILL_OUTSIDE_QUERY_WINDOW");
+        flows.push(flow);
       }
+      // PAGE_SIZE 与 ingestAlipayBillFlows 的 100 条上限一致，因此整页可以一次投递；
+      // 服务内部的批内有界并发（FLOW_CONCURRENCY）负责把这一页真正并行起来。
+      if (flows.length) await ingestAlipayBillFlows({ records: flows }, accountId);
       // Receipts are durable before advancing the page. A crash replays this page;
       // receipt fingerprint + the payment core make replay idempotent.
       const committed = await db.billCollectorState.updateMany({
