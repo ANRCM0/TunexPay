@@ -2,13 +2,22 @@
 
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, PageHead, Status, Toast, money, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Status, Toast, money, time } from "./common";
 
 type Refund = {
   id: string; refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string;
   queryAttempts: number; nextQueryAt: string | null; lastQueriedAt: string | null; errorMessage: string | null;
   application: { name: string; archivedAt: string | null }; payment: { paymentNo: string; order: { subject: string; deletedAt: string | null } };
 };
+
+// 状态列的恢复进度与失败原因默认收起，悬浮或聚焦徽章才展开。
+function refundRecovery(item: Refund): string {
+  return [
+    item.queryAttempts > 0 ? `已自动查询 ${item.queryAttempts} 次` : null,
+    item.queryAttempts > 0 ? (item.nextQueryAt ? `下次查询 ${time(item.nextQueryAt)}` : "查单已达上限，等待人工处理") : null,
+    item.errorMessage,
+  ].filter(Boolean).join("\n");
+}
 
 export function Refunds() {
   const { data, loading, error, reload } = useApi<Refund[]>("/refunds?pageSize=100", 8_000);
@@ -48,7 +57,7 @@ export function Refunds() {
             <div className="muted">{item.application.name}{item.application.archivedAt && <span className="tag-archived">已归档</span>}</div>
           </td>
           <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
-          <td data-label="状态"><Status value={item.status} />{item.queryAttempts > 0 && <div className="recovery-note">已查询 {item.queryAttempts} 次<br />{item.nextQueryAt ? `下次 ${time(item.nextQueryAt)}` : "等待人工处理"}</div>}{item.errorMessage && <div className="row-error">{item.errorMessage}</div>}</td>
+          <td data-label="状态"><HoverDetail text={refundRecovery(item)} tone={item.errorMessage ? "danger" : "muted"}><Status value={item.status} /></HoverDetail></td>
           <td data-label="创建时间">{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>
           <td data-label="操作">{item.status !== "SUCCESS" && <button className="button secondary" disabled={querying !== ""} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</button>}</td>
         </tr>)}</tbody>

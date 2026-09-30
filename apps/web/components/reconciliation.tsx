@@ -3,7 +3,7 @@
 import { FileUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, PageHead, Section, Status, Toast, money, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Section, Status, Toast, money, time } from "./common";
 
 type Run = {
   id: string; statementDate: string; status: string; fileName: string | null; importedCount: number; duplicateCount: number;
@@ -76,7 +76,7 @@ export function Reconciliation() {
           <thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead>
           <tbody>{runs?.map(run => <tr key={run.id}>
             <td><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td>
-            <td data-label="状态"><Status value={run.status} />{run.errorMessage && <div className="row-error">{run.errorMessage}</div>}</td>
+            <td data-label="状态"><HoverDetail text={run.errorMessage} tone="danger"><Status value={run.status} /></HoverDetail></td>
             <td data-label="导入">新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
             <td data-label="匹配结果"><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
             <td data-label="完成时间">{time(run.completedAt)}</td>
@@ -97,7 +97,7 @@ export function Reconciliation() {
 </td>
             <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
             <td data-label="系统记录">{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="id-line"><span className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</span><CopyValue value={item.refund?.refundNo ?? item.payment.paymentNo} label="复制系统单号" /></div></> : "—"}</td>
-            <td data-label="匹配状态"><Status value={item.matchStatus} />{item.mismatchReason && <div className="row-error">{item.mismatchReason}</div>}</td>
+            <td data-label="匹配状态"><HoverDetail text={item.mismatchReason} tone="danger"><Status value={item.matchStatus} /></HoverDetail></td>
             <td data-label="操作">{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
           </tr>)}</tbody>
         </table></div>

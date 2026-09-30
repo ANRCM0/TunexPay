@@ -1,5 +1,5 @@
 import { AlertCircle, Check, CheckCircle2, Copy, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { channelLabel } from "../lib/labels";
 
 // 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
@@ -184,6 +184,57 @@ const STATUS_TONE: Record<string, Tone> = {
 export function Status({ value }: { value: string }) {
   const tone = STATUS_TONE[value] ?? "neutral";
   return <span className={`badge badge-${tone}`} title={value}>{statusText(value)}</span>;
+}
+
+// 单元格里的次要信息（失败原因、验证说明）默认不占版面，悬浮或键盘聚焦时才浮出。
+// 浮层用 fixed 定位：.table-wrap 是 overflow: auto，绝对定位的浮层会被裁掉。
+export function HoverDetail({ text, tone = "muted", children }: { text?: string | null; tone?: "muted" | "danger"; children: React.ReactNode }) {
+  const [position, setPosition] = useState<React.CSSProperties | null>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
+
+  const show = useCallback(() => {
+    const node = anchor.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const width = Math.min(340, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    // 下方放不下就翻到上方；用 bottom 定位就不必预先知道浮层高度
+    setPosition(window.innerHeight - rect.bottom > 180
+      ? { left, width, top: rect.bottom + 8 }
+      : { left, width, bottom: window.innerHeight - rect.top + 8 });
+  }, []);
+
+  const hide = useCallback(() => setPosition(null), []);
+
+  useEffect(() => {
+    if (!position) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setPosition(null); };
+    // 浮层是 fixed 的，页面滚动或改尺寸后会脱离锚点，直接收起而不是跟随错位
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [position, hide]);
+
+  if (!text) return <>{children}</>;
+
+  return <span
+    ref={anchor}
+    className={`hover-detail tone-${tone}`}
+    tabIndex={0}
+    aria-label={text}
+    onMouseEnter={show}
+    onMouseLeave={hide}
+    onFocus={show}
+    onBlur={hide}
+  >
+    {children}
+    {position && <span className="hover-detail-pop" role="tooltip" style={position}>{text}</span>}
+  </span>;
 }
 
 export function LoadingState({ loading, error, empty, emptyText = "暂无数据", children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {

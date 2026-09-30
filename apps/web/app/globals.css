@@ -55,7 +55,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .button.danger:hover { background: #fbdcdb; box-shadow: none; }
 .button:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
 
-.badge { display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #eef1f6; color: #5b6b80; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.badge { display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #eef1f6; color: #5b6b80; font-size: 10px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 .badge-success { background: var(--success-soft); color: #15794f; }
 .badge-warning { background: var(--warning-soft); color: var(--warning); }
 .badge-danger { background: var(--danger-soft); color: #c73e36; }

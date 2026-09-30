@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Section, Status, Toast, Toggle, time } from "./common";
+import { HoverDetail, LoadingState, Section, Status, Toast, Toggle, time } from "./common";
 import { notificationChannelLabel } from "../lib/labels";
 
 type Draft = { revision: number; emailEnabled: boolean; feishuEnabled: boolean; smtpHost: string; smtpPort: 465 | 587; smtpUser: string; from: string; to: string; paymentSuccess: boolean; anomalies: boolean; webhookFailure: boolean; collectorFailure: boolean };
@@ -122,8 +122,8 @@ export function OwnerNotificationsPanel() {
           <tbody>{deliveries?.map(row => <tr key={row.id}>
             <td>{time(row.createdAt)}</td>
             <td data-label="渠道">{notificationChannelLabel(row.channel)}</td>
-            <td data-label="标题"><strong>{row.title}</strong>{row.lastError && <div className="row-error">{row.lastError}</div>}</td>
-            <td data-label="状态"><Status value={row.status} /></td>
+            <td data-label="标题"><strong>{row.title}</strong></td>
+            <td data-label="状态"><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
             <td data-label="尝试">{row.attempts}</td>
           </tr>)}</tbody>
         </table></div>
