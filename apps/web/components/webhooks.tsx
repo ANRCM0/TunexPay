@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, PageHead, Status, Toast, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Status, Toast, time } from "./common";
 import { protocolLabel, webhookEventLabel } from "../lib/labels";
 
 type Delivery = { id: string; eventType: string; protocol: string; url: string; status: string; attempts: number; lastError: string | null; nextAttemptAt: string; application: { name: string }; order: { orderNo: string; externalOrderNo: string } };
@@ -37,11 +37,10 @@ export function Webhooks() {
             <strong>{webhookEventLabel(item.eventType.split(":")[0])}</strong>
             <div className="mono muted">{item.eventType}</div>
             <div className="id-line"><span className="mono muted">{item.order.externalOrderNo}</span><CopyValue value={item.order.externalOrderNo} label="复制业务订单号" /></div>
-            {item.lastError && <div className="row-error">{item.lastError}</div>}
           </td>
           <td data-label="目标地址"><div className="id-line"><span className="mono break-all">{item.url}</span><CopyValue value={item.url} label="复制 Webhook 地址" /></div></td>
           <td data-label="协议">{protocolLabel(item.protocol)}</td>
-          <td data-label="状态"><Status value={item.status} /></td>
+          <td data-label="状态"><HoverDetail text={item.lastError} tone="danger"><Status value={item.status} /></HoverDetail></td>
           <td data-label="尝试">{item.attempts}</td>
           <td data-label="下次执行">{time(item.nextAttemptAt)}</td>
           <td data-label="操作">{item.status === "DEAD" && <button className="button secondary" disabled={retrying !== ""} onClick={() => void retry(item.id)}>{retrying === item.id ? "重试中…" : "重新投递"}</button>}</td>
