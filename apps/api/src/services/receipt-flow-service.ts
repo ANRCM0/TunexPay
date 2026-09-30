@@ -17,6 +17,13 @@ import { ALIPAY_BILL_ACCOUNT_ID } from "./receipt-reservation-service.js";
 import { paymentChannelScope } from "../lib/channel-scope.js";
 
 const FLOW_LOCK_MS = 60_000;
+/**
+ * 单批流水的并发上限。每条流水要跑 8~12 条 SQL（指纹去重 → 租约认领 → 定位支付单 →
+ * markPaymentSucceeded 事务 → 回执更新事务），串行处理 100 条会把整批的墙钟时间压成
+ * 100 倍的往返延迟。这里取 4 是保守值：既能利用多个连接并行等待数据库往返，又不会让
+ * 单个 Worker 一次性占满连接池或把行锁竞争放大。不引入新依赖（不引 p-limit 之类）。
+ */
+const FLOW_CONCURRENCY = 4;
 
 type PaymentWithOrder = Prisma.PaymentGetPayload<{ include: { order: true } }>;
 type MatchChoice =
@@ -36,9 +43,53 @@ export type ReceiptFlowOutcome = {
 export async function ingestAlipayBillFlows(input: unknown, accountId = ALIPAY_BILL_ACCOUNT_ID): Promise<ReceiptFlowOutcome[]> {
   const records = receiptFlowRecords(input);
   if (records.length > 100) throw new AppError("TOO_MANY_RECEIPT_FLOWS", "单次最多提交 100 条流水", 422);
-  const outcomes: ReceiptFlowOutcome[] = [];
-  for (const record of records) outcomes.push(await ingestAlipayBillFlow(normalizeReceiptFlow(record), accountId));
-  return outcomes;
+  // 归一化留在每条流水自己的处理步骤里，与原来的逐条循环一致：某条流水格式不合法时，排在它
+  // 前面的合法流水已经入库，不会因为一条坏数据把整批变成「什么都没发生」而卡住调用方重试。
+  //
+  // 与串行版本相比，并发会让「失败之前的那些流水」推进得更多（串行版本在一批里遇到第一条
+  // 失败时，后面的记录根本不会碰；并发版本已经有一批流水在飞，它们会各自跑到自己的终态）。
+  // 这是安全的：整批重放时，回执指纹 fingerprint 的数据库唯一约束保证同一条流水只会有一行
+  // 回执，PROCESSING 租约（matchStatus + lockedUntil 的条件更新）保证同一行回执同一时刻只有
+  // 一个执行者，markPaymentSucceeded 也按 eventKey 幂等。因此「多推进了」只会表现为重放时命中
+  // duplicate / 租约未过期而直接返回既有回执，不会产生重复回执、重复支付成功事件或重复异常。
+  return runBounded(records, FLOW_CONCURRENCY, record => ingestAlipayBillFlow(normalizeReceiptFlow(record), accountId));
+}
+
+/**
+ * 有界并发工作池，严格保持「结果顺序 === 输入顺序」，并且失败语义贴近原来的串行版本。
+ *
+ * 1) 并发上限：至多 `limit` 个 task 同时在飞，不会因为一批 100 条就打出 100 路并发。
+ * 2) 顺序：每条流水的结果写入它自己的下标 `results[index]`，与完成先后无关，因此调用方仍然
+ *    可以按输入顺序读 outcomes；不会出现完成早的流水结果跑到前面去。
+ *    （为了做到这一点，工作池按下标递增领取任务，而不是用"谁先空出来谁领下一条"的
+ *    自由队列 —— 后者会让慢流水拖住后面的下标，但对输出顺序没有影响；按下标领取同时
+ *    保证了不会跳过任何一条。）
+ * 3) 失败收敛：一旦某个 task 抛错，就记下第一个错误并让所有工作协程停止领取新任务，
+ *    等在飞的 task 各自结算完毕后，由发起方抛出第一个错误。不用 Promise.allSettled 静默
+ *    吞错，也不会有悬空的 rejection（每个在飞任务都被某个协程 await 过）。
+ */
+async function runBounded<T, R>(items: readonly T[], limit: number, task: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failure: { error: unknown } | null = null;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (!failure && next < items.length) {
+      const index = next++;
+      try {
+        results[index] = await task(items[index]!, index);
+      } catch (error) {
+        // 只保留第一个错误，后续（在飞任务）的失败不再覆盖它；同时置位失败标记，
+        // 让其余协程在下一轮循环条件处退出，不再领取新记录。
+        failure ??= { error };
+      }
+    }
+  });
+  await Promise.all(workers);
+  if (failure) {
+    const { error } = failure;
+    throw error;
+  }
+  return results;
 }
 
 export async function rematchAlipayBillReceipt(id: string): Promise<Receipt> {
