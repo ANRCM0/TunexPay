@@ -44,7 +44,8 @@ function textResult(value: unknown) {
 }
 
 function argsOf(params: unknown): { name: string; arguments: unknown } {
-  return z.object({ name: z.string(), arguments: z.unknown().optional() }).parse(params);
+  const parsed = z.object({ name: z.string(), arguments: z.unknown().optional() }).parse(params);
+  return { name: parsed.name, arguments: parsed.arguments ?? {} };
 }
 
 function limitOf(value: unknown) {
