@@ -11,7 +11,9 @@
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "app:create": "tsx src/scripts/create-app.ts"
+    "app:create": "tsx src/scripts/create-app.ts",
+    "perf:verify-indexes": "tsx src/scripts/verify-indexes.ts",
+    "perf:verify-concurrency": "tsx src/scripts/verify-concurrency.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",
