@@ -61,8 +61,15 @@ function report(status: "PASS" | "FAIL" | "SKIP", title: string, detail = ""): v
   console.log(`[${status}] ${title}${detail ? `\n        ${detail}` : ""}`);
 }
 
+/**
+ * 把错误渲染成「code + message」。必须带上 code：产品里的 AppError 只把中文说明放在
+ * message 里，错误码（CHANNEL_CONFIG_CONFLICT / REFUND_AMOUNT_EXCEEDED）只在 error.code 上，
+ * 早先的断言只匹配 message 文本，因此永远匹配不到，把正确行为误判成失败。
+ */
 function describe(error: unknown): string {
-  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : "";
+  const message = error instanceof Error ? error.message : String(error);
+  const text = code ? `${code}: ${message}` : message;
   if (deadlockPattern.test(text)) lockIssues.push(text.slice(0, 200));
   return text.slice(0, 300);
 }
@@ -91,6 +98,9 @@ async function ensureApplication(): Promise<Application> {
 /** 并发创建同一订单：唯一索引 + P2002 分支必须收敛成一行。 */
 async function scenarioOrderIdempotency(app: Application): Promise<void> {
   const input = { externalOrderNo: `${prefix}-order`, amount: 1234, currency: "CNY" as const, subject: "并发下单验收", expiresInSeconds: 1_800 };
+  // 注意：这里会在日志里打出若干条 prisma:error / P2002（唯一索引竞争），那是**预期路径**，
+  // 不是失败——createOrder 正是靠「唯一约束 + P2002 分支」来收敛幂等，而不是靠先查后插。
+  console.log("  （下面可能出现 prisma:error P2002 唯一键冲突，属于并发下单的预期路径，不是失败）");
   const settled = await Promise.allSettled(Array.from({ length: 8 }, () => createOrder(app, input, `${prefix}-idem`)));
   const rejected = settled.filter((item): item is PromiseRejectedResult => item.status === "rejected");
   const orderNos = new Set(settled.filter(item => item.status === "fulfilled").map(item => item.value.order.orderNo));

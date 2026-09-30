@@ -6,9 +6,11 @@
  *
  * 安全性：**本脚本只做 SELECT 与 EXPLAIN，不写任何数据**，因此可以在生产库上直接跑。
  *
- * 为什么需要 --min-rows：表很小时 MySQL 会直接全表扫描（哪怕索引完全正确），
- * EXPLAIN 会给出 type=ALL 的假阴性。行数低于阈值时脚本给 SKIP 而不是 FAIL，
- * 提示先用真实数据（或压测数据）再跑。
+ * 两级判定：
+ *   1) 表行数 >= --min-rows：判断优化器是否真的选了期望索引（PLAN 判定）。
+ *   2) 表行数较小：优化器会（正确地）选择全表扫描，此时判定无意义，于是退化为
+ *      `FORCE INDEX` 探针 —— 只验证「该索引对这种查询形态可用、且不需要 filesort」。
+ *      列序写错、索引与谓词不匹配这类错误在这一级就能暴露。
  */
 import { db } from "../db.js";
 
@@ -37,8 +39,9 @@ const EXPECTED_INDEXES: Record<string, Record<string, string>> = {
   receipts: { receipts_occurredAt_id_idx: "occurredAt,id" },
 };
 
-type ExplainRow = { table: string | null; type: string; key: string | null; rows: unknown; Extra: string };
+type RawRow = Record<string, unknown>;
 type IndexRow = { TABLE_NAME: string; INDEX_NAME: string; cols: string };
+type Plan = { plain: Promise<RawRow[]>; forced?: Promise<RawRow[]> };
 
 let failures = 0;
 let skipped = 0;
@@ -53,26 +56,44 @@ function toNumber(value: unknown): number {
   return Number(value ?? 0) || 0;
 }
 
-function report(status: "PASS" | "FAIL" | "SKIP", title: string, detail: string): void {
+function report(status: "PASS" | "FAIL" | "SKIP", title: string, detail = ""): void {
   if (status === "FAIL") failures += 1;
   if (status === "SKIP") skipped += 1;
-  console.log(`[${status}] ${title}\n        ${detail}`);
+  console.log(`[${status}]  ${title}${detail ? `\n        ${detail}` : ""}`);
+}
+
+/**
+ * EXPLAIN 结果的列名大小写不一定和小写文档一致（实测 MySQL 8.4 + Prisma 下
+ * 直接取 `row.type` 得到的是 undefined），所以统一按不区分大小写读取。
+ */
+function hasColumn(row: RawRow, name: string): boolean {
+  const wanted = name.toLowerCase();
+  return Object.keys(row).some(key => key.toLowerCase() === wanted);
+}
+
+function field(row: RawRow, name: string): unknown {
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(row)) {
+    if (key.toLowerCase() === wanted) return value;
+  }
+  return undefined;
 }
 
 /** 表名是本文件内的常量，不接受外部输入，因此不需要动态拼 SQL。 */
-const countQuery: Record<string, () => Promise<Array<{ n: unknown }>>> = {
-  orders: () => db.$queryRaw<Array<{ n: unknown }>>`SELECT COUNT(*) AS n FROM orders`,
-  payments: () => db.$queryRaw<Array<{ n: unknown }>>`SELECT COUNT(*) AS n FROM payments`,
-  refunds: () => db.$queryRaw<Array<{ n: unknown }>>`SELECT COUNT(*) AS n FROM refunds`,
-  webhook_deliveries: () => db.$queryRaw<Array<{ n: unknown }>>`SELECT COUNT(*) AS n FROM webhook_deliveries`,
-  receipts: () => db.$queryRaw<Array<{ n: unknown }>>`SELECT COUNT(*) AS n FROM receipts`,
+const countQuery: Record<string, () => Promise<RawRow[]>> = {
+  orders: () => db.$queryRaw<RawRow[]>`SELECT COUNT(*) AS n FROM orders`,
+  payments: () => db.$queryRaw<RawRow[]>`SELECT COUNT(*) AS n FROM payments`,
+  refunds: () => db.$queryRaw<RawRow[]>`SELECT COUNT(*) AS n FROM refunds`,
+  webhook_deliveries: () => db.$queryRaw<RawRow[]>`SELECT COUNT(*) AS n FROM webhook_deliveries`,
+  receipts: () => db.$queryRaw<RawRow[]>`SELECT COUNT(*) AS n FROM receipts`,
 };
 
 async function countRows(table: string): Promise<number> {
   const query = countQuery[table];
   if (!query) throw new Error(`未登记的检查表名：${table}`);
   const rows = await query();
-  return toNumber(rows[0]?.n);
+  const row = rows[0] ?? {};
+  return toNumber(hasColumn(row, "n") ? field(row, "n") : Object.values(row)[0]);
 }
 
 async function checkIndexes(): Promise<void> {
@@ -97,21 +118,57 @@ async function checkIndexes(): Promise<void> {
   }
 }
 
+function readPlan(rows: RawRow[], table: string): RawRow | undefined {
+  return rows.find(item => field(item, "table") === table) ?? rows[0];
+}
+
+function summarize(row: RawRow): string {
+  const type = String(field(row, "type") ?? "");
+  const key = field(row, "key");
+  const extra = String(field(row, "Extra") ?? "");
+  return `type=${type || "NULL"} key=${key == null ? "NULL" : String(key)} rows≈${toNumber(field(row, "rows"))} Extra=${extra || "-"}`;
+}
+
 /**
- * 跑一次 EXPLAIN 并判断是否走了期望索引。
- * 表行数不足 minRows 时给 SKIP，避免小表全表扫描造成的假阴性。
+ * 表行数足够时：判断优化器是否真的选了期望索引。
+ * 表行数不足时：退化为 FORCE INDEX 可用性探针（只证明索引对这种查询形态可用）。
  */
-async function explain(title: string, table: string, expectedIndex: string, plan: Promise<ExplainRow[]>, expectOrdered = false): Promise<void> {
+async function explain(title: string, table: string, expectedIndex: string, plan: Plan, expectOrdered = false): Promise<void> {
   const total = await countRows(table);
-  const rows = await plan;
-  const row = rows.find(item => item.table === table) ?? rows[0];
-  if (!row) return report("FAIL", title, "EXPLAIN 没有返回该表的执行计划");
-  const summary = `type=${row.type} key=${row.key ?? "NULL"} rows≈${toNumber(row.rows)} Extra=${row.Extra || "-"}`;
-  if (total < minRows) return report("SKIP", title, `表 ${table} 只有 ${total} 行（< ${minRows}），EXPLAIN 结论不可信。${summary}`);
-  if (row.type === "ALL") return report("FAIL", title, `退化为全表扫描。${summary}`);
-  if (expectOrdered && /Using filesort/i.test(row.Extra)) return report("FAIL", title, `仍需要 filesort。${summary}`);
-  if (normalize(row.key ?? "") !== normalize(expectedIndex)) return report("FAIL", title, `没有使用期望索引 ${expectedIndex}。${summary}`);
+  const row = readPlan(await plan.plain, table);
+  if (!row) return report("FAIL", title, "EXPLAIN 没有返回执行计划");
+  // 解析失败必须说清楚：以前把 undefined 直接拼进字符串，看起来像「计划里没用索引」，
+  // 实际是结果列名没对上。
+  if (!hasColumn(row, "key") || !hasColumn(row, "type")) {
+    return report("FAIL", title, `无法解析 EXPLAIN 结果列，实际列名：${Object.keys(row).join(", ")}`);
+  }
+  if (total < minRows) return probeForcedIndex(title, table, expectedIndex, plan, expectOrdered, total, row);
+  const type = String(field(row, "type") ?? "");
+  const key = field(row, "key");
+  const extra = String(field(row, "Extra") ?? "");
+  const summary = summarize(row);
+  if (type === "ALL") return report("FAIL", title, `退化为全表扫描。${summary}`);
+  if (expectOrdered && /Using filesort/i.test(extra)) return report("FAIL", title, `仍需要 filesort。${summary}`);
+  if (normalize(String(key ?? "")) !== normalize(expectedIndex)) return report("FAIL", title, `没有使用期望索引 ${expectedIndex}。${summary}`);
   report("PASS", title, summary);
+}
+
+/** 小表退化路径：优化器不选索引是正常的，所以只证明索引可用。 */
+async function probeForcedIndex(title: string, table: string, expectedIndex: string, plan: Plan, expectOrdered: boolean, total: number, plainRow: RawRow): Promise<void> {
+  const hint = `表 ${table} 只有 ${total} 行（< ${minRows}），优化器选全表扫描是正常的：${summarize(plainRow)}`;
+  if (!plan.forced) return report("SKIP", title, `${hint}（本项没有 FORCE INDEX 探针）`);
+  const row = readPlan(await plan.forced, table);
+  if (!row) return report("FAIL", title, "FORCE INDEX 的 EXPLAIN 没有返回执行计划");
+  const key = field(row, "key");
+  const extra = String(field(row, "Extra") ?? "");
+  const summary = summarize(row);
+  if (normalize(String(key ?? "")) !== normalize(expectedIndex)) {
+    return report("FAIL", title, `FORCE INDEX ${expectedIndex} 未被采用，索引与查询形态不匹配。${summary}`);
+  }
+  if (expectOrdered && /Using filesort/i.test(extra)) {
+    return report("FAIL", title, `FORCE INDEX ${expectedIndex} 后仍需要 filesort，列序可能不对。${summary}`);
+  }
+  report("PASS", title, `索引对该查询形态可用（FORCE INDEX 探针）。${summary}`);
 }
 
 try {
@@ -127,23 +184,37 @@ try {
   // 与 lib/dashboard-stats.ts 一致：Prisma 对 MySQL 的 DATETIME 按 UTC 存取。
   const sinceText = since.toISOString().replace("T", " ").replace("Z", "");
 
-  await explain("总览·今日实收（orders.paidAt）", "orders", "orders_deletedAt_paidAt_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT COUNT(*) FROM orders WHERE deletedAt IS NULL AND paidAt >= ${sinceText}`);
-  await explain("总览·今日订单（orders.createdAt）", "orders", "orders_deletedAt_createdAt_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT COUNT(*) FROM orders WHERE deletedAt IS NULL AND createdAt >= ${sinceText}`);
-  await explain("总览·今日成功金额（payments.status + paidAt）", "payments", "payments_status_paidAt_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT SUM(amount) FROM payments WHERE status = 'SUCCESS' AND paidAt >= ${sinceText}`);
-  await explain("订单列表（deletedAt + createdAt 倒序）", "orders", "orders_deletedAt_createdAt_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT id FROM orders WHERE deletedAt IS NULL ORDER BY createdAt DESC, id DESC LIMIT 25`, true);
-  await explain("退款列表（createdAt 倒序）", "refunds", "refunds_createdAt_id_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT id FROM refunds ORDER BY createdAt DESC, id DESC LIMIT 25`, true);
-  await explain("通知列表（createdAt 倒序）", "webhook_deliveries", "webhook_deliveries_createdAt_id_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT id FROM webhook_deliveries ORDER BY createdAt DESC, id DESC LIMIT 25`, true);
-  await explain("对账流水（occurredAt 倒序，不筛状态）", "receipts", "receipts_occurredAt_id_idx",
-    db.$queryRaw<ExplainRow[]>`EXPLAIN SELECT id FROM receipts ORDER BY occurredAt DESC, id DESC LIMIT 25`, true);
+  await explain("总览·今日实收（orders.paidAt）", "orders", "orders_deletedAt_paidAt_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT COUNT(*) FROM orders WHERE deletedAt IS NULL AND paidAt >= ${sinceText}`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT COUNT(*) FROM orders FORCE INDEX (orders_deletedAt_paidAt_idx) WHERE deletedAt IS NULL AND paidAt >= ${sinceText}`,
+  });
+  await explain("总览·今日订单（orders.createdAt）", "orders", "orders_deletedAt_createdAt_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT COUNT(*) FROM orders WHERE deletedAt IS NULL AND createdAt >= ${sinceText}`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT COUNT(*) FROM orders FORCE INDEX (orders_deletedAt_createdAt_idx) WHERE deletedAt IS NULL AND createdAt >= ${sinceText}`,
+  });
+  await explain("总览·今日成功金额（payments.status + paidAt）", "payments", "payments_status_paidAt_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT SUM(amount) FROM payments WHERE status = 'SUCCESS' AND paidAt >= ${sinceText}`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT SUM(amount) FROM payments FORCE INDEX (payments_status_paidAt_idx) WHERE status = 'SUCCESS' AND paidAt >= ${sinceText}`,
+  });
+  await explain("订单列表（deletedAt + createdAt 倒序）", "orders", "orders_deletedAt_createdAt_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM orders WHERE deletedAt IS NULL ORDER BY createdAt DESC, id DESC LIMIT 25`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM orders FORCE INDEX (orders_deletedAt_createdAt_idx) WHERE deletedAt IS NULL ORDER BY createdAt DESC, id DESC LIMIT 25`,
+  }, true);
+  await explain("退款列表（createdAt 倒序）", "refunds", "refunds_createdAt_id_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM refunds ORDER BY createdAt DESC, id DESC LIMIT 25`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM refunds FORCE INDEX (refunds_createdAt_id_idx) ORDER BY createdAt DESC, id DESC LIMIT 25`,
+  }, true);
+  await explain("通知列表（createdAt 倒序）", "webhook_deliveries", "webhook_deliveries_createdAt_id_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM webhook_deliveries ORDER BY createdAt DESC, id DESC LIMIT 25`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM webhook_deliveries FORCE INDEX (webhook_deliveries_createdAt_id_idx) ORDER BY createdAt DESC, id DESC LIMIT 25`,
+  }, true);
+  await explain("对账流水（occurredAt 倒序，不筛状态）", "receipts", "receipts_occurredAt_id_idx", {
+    plain: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM receipts ORDER BY occurredAt DESC, id DESC LIMIT 25`,
+    forced: db.$queryRaw<RawRow[]>`EXPLAIN SELECT id FROM receipts FORCE INDEX (receipts_occurredAt_id_idx) ORDER BY occurredAt DESC, id DESC LIMIT 25`,
+  }, true);
 
   console.log(`\n结果：失败 ${failures} 项，跳过 ${skipped} 项。`);
-  if (skipped) console.log("跳过的项是因为表行数不足；请在有真实数据的库上重跑。");
+  if (skipped) console.log("跳过的项表示连 FORCE INDEX 探针也拿不到结论，请在表变大后重跑。");
   if (failures) process.exitCode = 1;
 } catch (error) {
   console.error("检查无法完成：", error instanceof Error ? error.message : error);
