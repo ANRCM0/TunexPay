@@ -76,6 +76,13 @@ export async function ensureLegacyNotificationMigration(): Promise<void> {
           subscriptions: { create: events.map(eventType => ({ eventType, enabled: true })) },
         },
       });
+      const legacyChannel = candidate.plugin === "SMTP" ? "EMAIL" : candidate.plugin === "FEISHU_BOT" ? "FEISHU" : null;
+      if (legacyChannel) {
+        await tx.ownerNotificationDelivery.updateMany({
+          where: { instanceId: null, channel: legacyChannel, status: { in: ["PENDING", "PROCESSING"] } },
+          data: { instanceId: candidate.id, channel: candidate.plugin, status: "PENDING", lockedUntil: null, leaseOwner: null },
+        });
+      }
     }
   });
 }
@@ -100,6 +107,7 @@ export async function getNotificationInstance(id: string) {
 }
 
 export async function createNotificationInstance(raw: unknown) {
+  await ensureLegacyNotificationMigration();
   const input = inputSchema.parse(raw);
   const plugin = notificationPlugin(input.plugin);
   const normalized = plugin.normalizeConfig(input.config);

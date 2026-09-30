@@ -12,9 +12,14 @@ function decode(payloadEncrypted: string): Record<string, unknown> {
   return JSON.parse(openSealed(payloadEncrypted)) as Record<string, unknown>;
 }
 
-async function activeInstances(tx: Prisma.TransactionClient, eventType: NotificationEventType) {
+async function activeInstances(tx: Prisma.TransactionClient, eventType: NotificationEventType, occurredAt?: Date) {
   return tx.notificationInstance.findMany({
-    where: { enabled: true, archivedAt: null, subscriptions: { some: { eventType, enabled: true } } },
+    where: {
+      enabled: true,
+      archivedAt: null,
+      ...(occurredAt ? { createdAt: { lte: occurredAt } } : {}),
+      subscriptions: { some: { eventType, enabled: true, ...(occurredAt ? { createdAt: { lte: occurredAt } } : {}) } },
+    },
     select: { id: true, plugin: true },
   });
 }
@@ -31,8 +36,12 @@ async function enqueue(tx: Prisma.TransactionClient, instance: { id: string; plu
 }
 
 async function collectPaymentEvents() {
+  // Notification delivery is forward-only. Creating the first instance must not replay
+  // historical payment events from before notification infrastructure was configured.
+  const firstInstance = await db.notificationInstance.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: "asc" }, select: { createdAt: true } });
+  if (!firstInstance) return;
   const events = await db.paymentEvent.findMany({
-    where: { type: { in: paymentEventTypes }, ownerSeen: { is: null } },
+    where: { type: { in: paymentEventTypes }, createdAt: { gte: firstInstance.createdAt }, ownerSeen: { is: null } },
     include: { order: { include: { application: { select: { name: true } } } }, payment: true },
     orderBy: { id: "asc" }, take: 50,
   });
@@ -43,7 +52,7 @@ async function collectPaymentEvents() {
       await tx.ownerNotificationSeen.create({ data: { eventId: event.id } });
       if (event.payment?.channel === "MOCK") continue;
       const eventType = event.type as NotificationEventType;
-      const instances = await activeInstances(tx, eventType);
+      const instances = await activeInstances(tx, eventType, event.createdAt);
       if (!instances.length) continue;
       const title = eventType === "ORDER_SUCCEEDED" ? "TuneXPay 收款成功" : eventType === "BUSINESS_WEBHOOK_DEAD" ? "TuneXPay 业务回调失败" : "TuneXPay 支付异常";
       const amount = ((event.payment?.receivedAmount ?? event.payment?.amount ?? event.order?.amount ?? 0) / 100).toFixed(2);
