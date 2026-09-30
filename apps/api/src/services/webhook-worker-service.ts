@@ -9,9 +9,20 @@ export function retryDelaySeconds(attempts: number, random = Math.random()): num
   return Math.max(5, Math.round(base * (0.8 + random * 0.4)));
 }
 
-export async function recoverExpiredDeliveries(): Promise<number> {
-  const result = await db.webhookDelivery.updateMany({
+export async function recoverExpiredDeliveries(limit = 100): Promise<number> {
+  // 先取一批再按 id 更新，而不是一条 updateMany 无条件全表更新：
+  // Worker 停机很久后重启时过期租约可能上万条，一次全量更新会把「恢复后的第一跳」压得很重。
+  // 批量与 listDueDeliveryIds 保持一致，积压按同样的节奏分批消化。
+  const expired = await db.webhookDelivery.findMany({
     where: { status: "PROCESSING", lockedUntil: { lt: new Date() } },
+    select: { id: true },
+    orderBy: [{ lockedUntil: "asc" }, { id: "asc" }],
+    take: limit,
+  });
+  if (!expired.length) return 0;
+  const result = await db.webhookDelivery.updateMany({
+    // 条件里重新校验一次状态与租约，避免与其它 Worker 实例抢同一批
+    where: { id: { in: expired.map(item => item.id) }, status: "PROCESSING", lockedUntil: { lt: new Date() } },
     data: { status: "PENDING", lockedUntil: null, nextAttemptAt: new Date(), lastError: "上一个 Worker 租约过期，任务已自动恢复" },
   });
   return result.count;
