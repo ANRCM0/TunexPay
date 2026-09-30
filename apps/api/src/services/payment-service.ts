@@ -1,7 +1,6 @@
 import { Prisma, type Application, type Payment, type PaymentChannelCode, type PaymentStatus } from "@prisma/client";
 import { z } from "zod";
-import { adapterForPayment, ensureLegacyChannels, assertChannelVerified } from "./channel-instance-service.js";
-import { legacyChannelId } from "../lib/channel-scope.js";
+import { adapterForPayment, assertChannelVerified } from "./channel-instance-service.js";
 import type { ChannelWebhookResult } from "../channels/types.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
@@ -26,18 +25,21 @@ export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export async function createPayment(application: Application, orderNo: string, input: CreatePaymentInput, idempotencyKey?: string) {
   const key = idempotencyKey?.trim() || null;
   if (key && key.length > 120) throw new AppError("INVALID_IDEMPOTENCY_KEY", "Idempotency-Key 不能超过 120 个字符");
+  // 通道必须由运营显式分配：不再有隐式创建/回落的默认通道。未分配就直接报错，
+  // 而不是猜一个通道出来 —— 猜错等于让钱进错账号。
   const channel = input.channel ?? application.defaultChannel;
-  if (application.defaultChannelId && channel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
-  const channelId = application.defaultChannelId || legacyChannelId(channel);
-  if (!application.defaultChannelId) await ensureLegacyChannels();
+  if (!application.defaultChannelId) throw new AppError("CHANNEL_NOT_ASSIGNED", "应用尚未分配收款通道，请先在「支付通道 → 通道分配」里分配一个通过检测的通道", 409);
+  if (channel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
+  const channelId = application.defaultChannelId;
   // 保留 Serializable：本事务在取到订单行写锁之后还要用普通 SELECT 重读订单状态，而 MySQL 在
   // Serializable 下会把普通 SELECT 隐式升级为加锁读，保证读到最新已提交版本。降到 REPEATABLE READ
   // 时这些重读可能命中事务开始时的旧快照，从而在已经支付成功的订单上再建一笔支付单。
   const dispatch = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channelId} FOR UPDATE`;
     const instance = await tx.channelInstance.findUniqueOrThrow({ where: { id: channelId } });
+    if (instance.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能再发起新支付，请为应用重新分配通道", 409);
     if (!instance.enabled || instance.plugin !== channel) throw new AppError("CHANNEL_DISABLED", "所选通道未启用或插件不匹配", 409);
-    if (application.defaultChannelId && application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
+    if (application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
     if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true, channelId);
     await tx.$queryRaw`SELECT id FROM orders WHERE orderNo = ${orderNo} FOR UPDATE`;
     const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id, deletedAt: null } });

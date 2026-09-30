@@ -11,39 +11,23 @@ import { AlipayChannel } from "../channels/alipay.js";
 import { paymentPlugins } from "../channels/plugins.js";
 import { billIdentity, initialBillSettings, loadBillSettings, mergeBillSettings, publicBillSettings, type BillSettings } from "./bill-settings-service.js";
 
+/**
+ * 通道 ID 由运营在创建时填写：它是支付单、回执线索与采集进度共同引用的稳定标识，
+ * 一旦承载过资金数据就不能再改，因此创建时校验格式、创建后不可修改。
+ */
+export const channelIdSchema = z.string().trim().min(3).max(60)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, "通道 ID 只能包含小写字母、数字与中划线，且必须以字母或数字开头");
+
 export const channelInput = z.object({
+  id: channelIdSchema.optional(),
   name: z.string().trim().min(1).max(120), enabled: z.boolean(),
   plugin: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]),
   revision: z.number().int().positive().optional(), settings: z.record(z.string(), z.unknown()),
 }).strict();
 
-const LEGACY_PLUGINS = ["ALIPAY", "ALIPAY_BILL", "MOCK"] as const;
-
-// 默认通道要的只是「存在」。稳定态下用一次主键集合读就够，以前无条件 upsert 等于每次调用
-// 都写三条 channel_instances 并在三行上取写锁 —— 而这个函数在发起支付、查看通道、后台操作的
-// 路径上都会被调用。只补缺失的行，并发建表由唯一主键兜底。
-export async function ensureLegacyChannels() {
-  const cfg = config();
-  const ids = LEGACY_PLUGINS.map(plugin => legacyChannelId(plugin));
-  const existing = await db.channelInstance.findMany({ where: { id: { in: ids } }, select: { id: true } });
-  const known = new Set(existing.map(row => row.id));
-  if (known.size === ids.length) return;
-  const bill = await loadBillSettings();
-  for (const plugin of LEGACY_PLUGINS) {
-    const id = legacyChannelId(plugin);
-    if (known.has(id)) continue;
-    const settings = plugin === "ALIPAY_BILL" ? bill.settings : initialBillSettings();
-    const enabled = plugin === "ALIPAY_BILL" ? bill.settings.enabled : plugin === "MOCK" ? cfg.MOCK_CHANNEL_ENABLED : Boolean(cfg.ALIPAY_APP_ID && cfg.ALIPAY_PRIVATE_KEY && cfg.ALIPAY_PUBLIC_KEY);
-    try {
-      await db.channelInstance.create({ data: {
-        id, plugin, name: `${paymentPlugins[plugin].name} · 默认`, enabled,
-        payloadEncrypted: seal(JSON.stringify(settings)),
-      } });
-    } catch (error) {
-      // 另一个进程/请求刚刚建好同一行，等价于「已存在」。
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    }
-  }
+/** 插件是内置的固定集合；创建通道时必须选一个真实存在的插件作为对接。 */
+function assertKnownPlugin(plugin: PaymentChannelCode): void {
+  if (!paymentPlugins[plugin]) throw new AppError("PLUGIN_NOT_FOUND", "所选支付插件不存在，请在「支付插件」页面确认可用插件", 422);
 }
 
 export function decodeChannel(row: ChannelInstance): BillSettings {
@@ -62,13 +46,30 @@ export async function loadChannel(id: string) {
   return row;
 }
 
+/**
+ * 解析一张支付单应该用哪个通道：优先用它自己绑定的 channelId；历史数据里 channelId 为空时，
+ * 回落到同插件的既有默认通道（保持历史支付单仍可查单/退款）。
+ *
+ * 注意：归档通道允许在这里被解析出来 —— 归档只阻断新支付，不能让已经动过钱的历史支付单
+ * 失去查单、关闭与原路退款的能力，否则保留密钥就没有意义了。
+ */
 export async function adapterForPayment(payment: { channel: PaymentChannelCode; channelId?: string | null }) {
   const id = payment.channelId || legacyChannelId(payment.channel);
-  let row = await db.channelInstance.findUnique({ where: { id } });
-  if (!row && !payment.channelId) { await ensureLegacyChannels(); row = await loadChannel(id); }
+  const row = await db.channelInstance.findUnique({ where: { id } });
   if (!row || row.plugin !== payment.channel) throw new AppError("CHANNEL_BINDING_INVALID", "支付单通道绑定异常", 409);
   // Disabling new orders must not prevent callbacks, queries, closure or refunds.
   return paymentPlugins[row.plugin].create(row.id, channelRuntime(decodeChannel(row)));
+}
+
+/**
+ * 取一个「可用于新建支付」的通道：必须存在、插件匹配、未归档、已启用。
+ * 归档通道在这里被明确拒绝，错误信息指向运营该做什么。
+ */
+export async function requireActiveChannel(channelId: string, plugin: PaymentChannelCode): Promise<ChannelInstance> {
+  const row = await db.channelInstance.findUnique({ where: { id: channelId } });
+  if (!row || row.plugin !== plugin) throw new AppError("CHANNEL_BINDING_INVALID", "支付单通道绑定异常", 409);
+  if (row.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能再发起新支付，请为应用重新分配通道", 409);
+  return row;
 }
 
 export async function publicChannel(row: ChannelInstance) {
@@ -76,6 +77,7 @@ export async function publicChannel(row: ChannelInstance) {
   const test = row.testPaymentNo ? await db.payment.findUnique({ where: { paymentNo: row.testPaymentNo }, select: { paymentNo: true, status: true, channelId: true, paidAt: true } }) : null;
   const status = verificationStatus(row, test);
   return { id: row.id, name: row.name, plugin: row.plugin, enabled: row.enabled, revision: row.revision,
+    archivedAt: row.archivedAt,
     settings: publicBillSettings(settings, row.revision, row.updatedAt),
     checkStatus: status, checkMessage: row.checkRevision === row.revision ? row.checkMessage : "配置尚未检测", checkedAt: row.checkedAt,
     testPayment: test ? { ...test, currentRevision: row.testRevision === row.revision, cashierUrl: `${config().WEB_PUBLIC_URL}/cashier/${test.paymentNo}` } : null,
@@ -97,9 +99,63 @@ export async function assertChannelVerified(row: ChannelInstance, client: Pick<P
   if (!row.enabled || !["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(verificationStatus(row, test))) throw new AppError("CHANNEL_NOT_CHECKED", "通道尚未启用或当前配置未通过检测，请在后台重新检测", 409);
 }
 
-export async function listChannels() {
-  await ensureLegacyChannels();
-  return Promise.all((await db.channelInstance.findMany({ orderBy: { createdAt: "asc" } })).map(publicChannel));
+/**
+ * 通道列表。默认只显示在用通道；归档通道（承载过资金数据后被删除的）不再出现，
+ * 需要追溯时用 includeArchived 显式查看。
+ */
+export async function listChannels(includeArchived = false) {
+  const rows = await db.channelInstance.findMany({
+    where: includeArchived ? {} : { archivedAt: null },
+    orderBy: { createdAt: "asc" },
+  });
+  return Promise.all(rows.map(publicChannel));
+}
+
+export type DeletedChannel = {
+  id: string;
+  name: string;
+  archived: boolean;
+  /** 该通道承载过的资金数据计数；archived=false 时全为 0。 */
+  retained: { payments: number; refunds: number };
+};
+
+/**
+ * 删除通道。通道行里存着对接密钥，硬删会让历史支付单的查单、关闭与原路退款永久失效，
+ * 所以分两条路径（与应用删除同构）：
+ *
+ *  - 有资金数据（支付单、退款、回执线索、采集进度）→ **归档**：打 archivedAt、停用、
+ *    从列表与分配选项移除、不能再建新支付；行与密钥保留，历史单据仍可查单/退款，DBA 可还原。
+ *  - 从未产生过资金数据 → 真删行。
+ *
+ * 被任何一个应用指定为收款通道时一律拒绝：否则应用会指向一个已消失的通道，新支付全部失败。
+ */
+export async function deleteChannel(id: string): Promise<DeletedChannel> {
+  const row = await loadChannel(id);
+  if (row.archivedAt) return { id: row.id, name: row.name, archived: true, retained: { payments: 0, refunds: 0 } };
+
+  const assigned = await db.application.count({ where: { defaultChannelId: id, archivedAt: null } });
+  if (assigned) {
+    throw new AppError("CHANNEL_IN_USE", `仍有 ${assigned} 个应用使用该通道，请先在「支付通道 → 通道分配」里把它们改派到其他通道`, 409);
+  }
+
+  const scope = paymentChannelScope(id, row.plugin);
+  const [payments, refunds, receipts, collector] = await Promise.all([
+    db.payment.count({ where: scope }),
+    // 退款要按同一口径统计（含历史 channelId 为空、归属原账号的支付单），
+    // 否则提示里的「保留 N 笔退款」会少报，运营会误以为可以安全删除。
+    db.refund.count({ where: { payment: scope } }),
+    db.receipt.count({ where: { accountKey: id } }),
+    db.billCollectorState.count({ where: { id } }),
+  ]);
+  const retained = { payments, refunds };
+
+  if (!payments && !refunds && !receipts && !collector) {
+    await db.channelInstance.delete({ where: { id } });
+    return { id: row.id, name: row.name, archived: false, retained };
+  }
+
+  await db.channelInstance.update({ where: { id }, data: { archivedAt: new Date(), enabled: false } });
+  return { id: row.id, name: row.name, archived: true, retained };
 }
 
 export function mergeChannelSettings(plugin: PaymentChannelCode, previous: BillSettings, raw: Record<string, unknown>, enabled: boolean) {
@@ -117,14 +173,16 @@ export function mergeChannelSettings(plugin: PaymentChannelCode, previous: BillS
 
 export async function saveChannel(raw: unknown, id?: string) {
   const input = channelInput.parse(raw);
-  const channelId = id || generateId("chn");
-  await ensureLegacyChannels();
+  assertKnownPlugin(input.plugin);
+  // 通道 ID 只允许在创建时指定；修改时一律沿用路径里的 id，避免把一张通道改成另一张的身份。
+  const channelId = id || input.id || generateId("chn");
   // 保留 Serializable：revision 冲突检查依赖「锁住通道行之后再重读」，这次重读必须是加锁读才能看到
   // 最新已提交的 revision，否则并发保存可能都通过校验、互相覆盖配置。
   const row = await db.$transaction(async tx => {
     if (id) await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${id} FOR UPDATE`;
     const current = id ? await tx.channelInstance.findUnique({ where: { id } }) : null;
     if (id && !current) throw new AppError("CHANNEL_NOT_FOUND", "通道不存在", 404);
+    if (current?.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能修改配置", 409);
     if (current && (input.revision !== current.revision || input.plugin !== current.plugin)) throw new AppError("CHANNEL_CONFIG_CONFLICT", "配置版本已变更或插件不匹配，请重新加载", 409);
     if (current?.checkLockedUntil && current.checkLockedUntil > new Date()) throw new AppError("CHANNEL_CHECK_RUNNING", "检测进行中，请完成后再保存", 409);
     const previous = current ? (current.plugin === "ALIPAY_BILL" ? (await loadBillSettings(tx, true, id)).settings : decodeChannel(current)) : initialBillSettings(false);
@@ -136,7 +194,7 @@ export async function saveChannel(raw: unknown, id?: string) {
     }
     if (input.plugin === "ALIPAY_BILL") {
       // Do not represent one receiving account as two independent amount pools.
-      const siblings = await tx.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL", id: { not: channelId } } });
+      const siblings = await tx.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL", id: { not: channelId }, archivedAt: null } });
       for (const sibling of siblings) {
         const other = (await loadBillSettings(tx, false, sibling.id)).settings;
         if ((next.userId && next.userId === other.userId) || (next.qrContent && next.qrContent === other.qrContent)) throw new AppError("BILL_ACCOUNT_DUPLICATED", "同一收款账号应共用一个通道，再分配给多个应用", 409);
@@ -153,7 +211,7 @@ export async function saveChannel(raw: unknown, id?: string) {
 
 export async function checkChannel(id: string, revision: number) {
   const lease = randomUUID();
-  const claimed = await db.channelInstance.updateMany({ where: { id, revision, OR: [{ checkLockedUntil: null }, { checkLockedUntil: { lte: new Date() } }] }, data: { checkLease: lease, checkLockedUntil: new Date(Date.now() + 60_000) } });
+  const claimed = await db.channelInstance.updateMany({ where: { id, revision, archivedAt: null, OR: [{ checkLockedUntil: null }, { checkLockedUntil: { lte: new Date() } }] }, data: { checkLease: lease, checkLockedUntil: new Date(Date.now() + 60_000) } });
   if (!claimed.count) throw new AppError("CHANNEL_CHECK_CONFLICT", "配置已变更或检测正在进行，请刷新后重试", 409);
   let status = "FAILED", message = "检测失败";
   try {
@@ -190,6 +248,7 @@ export async function checkChannel(id: string, revision: number) {
 
 export async function assignChannel(applicationId: string, channelId: string) {
   const row = await loadChannel(channelId);
+  if (row.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能分配给应用", 409);
   if (!row.enabled) throw new AppError("CHANNEL_DISABLED", "请先启用通道", 409);
   const view = await publicChannel(row);
   if (!["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(view.checkStatus)) throw new AppError("CHANNEL_NOT_CHECKED", "请先通过接口检测或实付验收后再分配通道", 409);
