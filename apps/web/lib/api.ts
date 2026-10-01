@@ -11,7 +11,7 @@ export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
   if (requestInit.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
   const response = await fetch(`/api/backend${path}`, { ...requestInit, headers });
   const text = await response.text();
-  let payload: any = {};
+  let payload: any;
   if (text) {
     try { payload = JSON.parse(text); }
     catch { payload = {}; }
@@ -20,7 +20,7 @@ export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
     const next = `${window.location.pathname}${window.location.search}`;
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   }
-  if (!response.ok) throw new Error(payload.error?.message || response.statusText || "请求失败");
+  if (!response.ok) throw new Error(payload?.error?.message || response.statusText || "请求失败");
   return payload as T;
 }
 
