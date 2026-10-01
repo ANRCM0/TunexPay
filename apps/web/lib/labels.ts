@@ -36,6 +36,8 @@ export const EVENT_LABELS: Record<string, string> = {
   PAYMENT_EXCEPTION_IGNORED: "异常已忽略",
   BUSINESS_WEBHOOK_DELIVERED: "业务回调投递成功",
   BUSINESS_WEBHOOK_DEAD: "业务回调投递耗尽",
+  COLLECTOR_FAILURE: "账单采集连续失败",
+  TEST: "测试通知",
 };
 
 const EVENT_TONES: Record<string, EventTone> = {
@@ -78,8 +80,13 @@ export const PROTOCOL_LABELS: Record<string, string> = {
 };
 
 export const NOTIFICATION_CHANNEL_LABELS: Record<string, string> = {
-  EMAIL: "邮件",
-  FEISHU: "飞书",
+  EMAIL: "邮件（旧版）",
+  FEISHU: "飞书（旧版）",
+  SMTP: "邮箱 SMTP",
+  FEISHU_BOT: "飞书机器人",
+  FEISHU_APP: "飞书应用",
+  TELEGRAM: "Telegram",
+  WEBHOOK: "通知 Webhook",
 };
 
 export const EXCEPTION_TYPE_LABELS: Record<string, string> = {
@@ -127,6 +134,12 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   PAYMENT_CLOSE: "关闭支付单",
   REFUND_QUERY: "退款主动查单",
   WEBHOOK_RETRY: "重试 Webhook 投递",
+  NOTIFICATION_INSTANCE_CREATE: "创建通知实例",
+  NOTIFICATION_INSTANCE_UPDATE: "更新通知实例",
+  NOTIFICATION_INSTANCE_SUBSCRIPTIONS: "更新通知订阅",
+  NOTIFICATION_INSTANCE_TEST: "测试通知实例",
+  NOTIFICATION_INSTANCE_DELETE: "删除通知实例",
+  NOTIFICATION_DELIVERY_RETRY: "重试通知投递",
   ALIPAY_BILL_IMPORT: "导入支付宝账单",
   RECEIPT_REMATCH: "重新匹配账单",
   PAYMENT_EXCEPTION_UPDATE: "更新支付异常",

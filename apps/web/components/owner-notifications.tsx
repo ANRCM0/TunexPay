@@ -1,130 +1,259 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { eventLabel, notificationChannelLabel } from "../lib/labels";
 import { HoverDetail, LoadingState, Section, Status, Toast, Toggle, time } from "./common";
-import { notificationChannelLabel } from "../lib/labels";
 
-type Draft = { revision: number; emailEnabled: boolean; feishuEnabled: boolean; smtpHost: string; smtpPort: 465 | 587; smtpUser: string; from: string; to: string; paymentSuccess: boolean; anomalies: boolean; webhookFailure: boolean; collectorFailure: boolean };
-type View = Draft & { smtpPasswordConfigured: boolean; feishuWebhookConfigured: boolean; feishuSecretConfigured: boolean };
-type Delivery = { id: string; channel: string; title: string; status: string; attempts: number; lastError: string | null; createdAt: string };
-
-const empty = { smtpPassword: "", feishuWebhook: "", feishuSecret: "" };
+type Field = {
+  key: string;
+  label: string;
+  type: "text" | "password" | "number" | "select";
+  required?: boolean;
+  secret?: boolean;
+  placeholder?: string;
+  options?: Array<{ value: string; label: string }>;
+};
+type Plugin = { code: string; name: string; description: string; capabilities: string[]; fields: Field[] };
+type Instance = {
+  id: string; plugin: string; name: string; enabled: boolean; revision: number;
+  config: Record<string, unknown>; events: string[]; archivedAt: string | null; createdAt: string; updatedAt: string;
+};
+type Delivery = {
+  id: string; channel: string; eventType: string | null; title: string; status: string; attempts: number;
+  lastError: string | null; createdAt: string; instance: { id: string; name: string; plugin: string } | null;
+};
 
 const EVENTS = [
-  ["paymentSuccess", "收款成功", "订单确认到账时提醒"],
-  ["anomalies", "支付 / 流水异常", "晚到重复、多候选、状态冲突"],
-  ["webhookFailure", "业务回调重试耗尽", "通知投递进入 DEAD 时提醒"],
-  ["collectorFailure", "采集连续失败", "相同故障每 15 分钟最多一次"],
+  ["ORDER_SUCCEEDED", "收款成功", "业务订单确认到账"],
+  ["PAYMENT_LATE_DUPLICATE", "晚到重复支付", "同一订单出现第二笔可信到账"],
+  ["RECEIPT_MISMATCH", "流水差错", "账单标识或金额存在冲突"],
+  ["BUSINESS_WEBHOOK_DEAD", "业务回调耗尽", "业务系统可能尚未完成入账"],
+  ["COLLECTOR_FAILURE", "采集连续失败", "账单采集连续失败至少三次"],
 ] as const;
+const ALL_EVENTS = EVENTS.map(([value]) => value);
+
+function defaultsFor(plugin: Plugin | undefined): Record<string, unknown> {
+  if (!plugin) return {};
+  const value: Record<string, unknown> = {};
+  for (const field of plugin.fields) {
+    if (field.key === "port") value[field.key] = 465;
+    else if (field.type === "select") value[field.key] = field.options?.[0]?.value ?? "";
+    else value[field.key] = "";
+  }
+  return value;
+}
+
+function formValue(field: Field, raw: string): unknown {
+  if (!raw && !field.required) return undefined;
+  if (field.type === "number" || (field.type === "select" && field.options?.every(option => /^\d+$/.test(option.value)))) {
+    return raw ? Number(raw) : undefined;
+  }
+  return raw;
+}
+
+function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, clearSecrets, onClearSecret }: {
+  plugin: Plugin; config: Record<string, unknown>; onChange: (key: string, value: unknown) => void;
+  secretValues: Record<string, string>; onSecretChange: (key: string, value: string) => void;
+  clearSecrets?: Set<string>; onClearSecret?: (key: string, clear: boolean) => void;
+}) {
+  return <div className="settings-grid">{plugin.fields.map(field => {
+    const configured = Boolean(config[`${field.key}Configured`]);
+    const value = field.secret ? (secretValues[field.key] ?? "") : String(config[field.key] ?? "");
+    const control = field.type === "select"
+      ? <select value={value} onChange={event => onChange(field.key, formValue(field, event.target.value))}>{field.options?.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
+      : <input type={field.secret ? "password" : field.type === "number" ? "number" : "text"} value={value} placeholder={field.placeholder} autoComplete={field.secret ? "new-password" : "off"} onChange={event => field.secret ? onSecretChange(field.key, event.target.value) : onChange(field.key, formValue(field, event.target.value))} />;
+    return <label key={field.key}>
+      {field.label}{field.secret && configured ? "（已配置，留空保留）" : ""}
+      {control}
+      {field.secret && configured && onClearSecret && <span className="field-clear"><input type="checkbox" checked={clearSecrets?.has(field.key) ?? false} onChange={event => onClearSecret(field.key, event.target.checked)} />清除已保存的值</span>}
+    </label>;
+  })}</div>;
+}
+
+function EventPicker({ selected, onChange, disabled }: { selected: string[]; onChange: (events: string[]) => void; disabled?: boolean }) {
+  const set = new Set(selected);
+  return <div className="settings-events">{EVENTS.map(([value, label, description]) => <label className="event-option" key={value}>
+    <input type="checkbox" disabled={disabled} checked={set.has(value)} onChange={event => {
+      const next = new Set(selected); if (event.target.checked) next.add(value); else next.delete(value); onChange([...next]);
+    }} />
+    <span><strong>{label}</strong><em>{description}</em></span>
+  </label>)}</div>;
+}
+
+function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reloadDeliveries }: {
+  instance: Instance; plugin: Plugin; busy: boolean; onBusy: (busy: boolean) => void;
+  onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
+  reload: () => Promise<void>; reloadDeliveries: () => Promise<void>;
+}) {
+  const [name, setName] = useState(instance.name);
+  const [enabled, setEnabled] = useState(instance.enabled);
+  const [config, setConfig] = useState<Record<string, unknown>>(instance.config);
+  const [events, setEvents] = useState(instance.events);
+  const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [clearSecrets, setClearSecrets] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setName(instance.name); setEnabled(instance.enabled); setConfig(instance.config); setEvents(instance.events);
+    setSecrets({}); setClearSecrets(new Set());
+  }, [instance]);
+
+  function payloadConfig() {
+    const value: Record<string, unknown> = {};
+    for (const field of plugin.fields) {
+      if (field.secret) {
+        if (clearSecrets.has(field.key)) value[field.key] = null;
+        else if (secrets[field.key]) value[field.key] = secrets[field.key];
+      } else if (config[field.key] !== undefined) value[field.key] = config[field.key];
+    }
+    return value;
+  }
+
+  async function save() {
+    onBusy(true); onNotice(null);
+    try {
+      await api(`/notification-instances/${instance.id}`, { method: "POST", body: JSON.stringify({ name, plugin: instance.plugin, enabled, revision: instance.revision, config: payloadConfig() }) });
+      await api(`/notification-instances/${instance.id}/subscriptions`, { method: "POST", body: JSON.stringify({ events }) });
+      await reload();
+      onNotice({ type: "ok", text: `${name} 已保存。` });
+    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "保存失败" }); }
+    finally { onBusy(false); }
+  }
+
+  async function test() {
+    onBusy(true); onNotice(null);
+    try {
+      await api(`/notification-instances/${instance.id}/test`, { method: "POST", body: "{}" });
+      await reloadDeliveries();
+      onNotice({ type: "ok", text: "测试任务已排队；SUCCESS 才表示上游已接受。" });
+    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "测试失败" }); }
+    finally { onBusy(false); }
+  }
+
+  async function remove() {
+    if (!window.confirm(`删除通知实例「${instance.name}」？有历史投递时会归档并停止未发送任务。`)) return;
+    onBusy(true); onNotice(null);
+    try {
+      await api(`/notification-instances/${instance.id}/delete`, { method: "POST", body: "{}" });
+      await reload();
+      onNotice({ type: "ok", text: "通知实例已删除或归档。" });
+    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "删除失败" }); }
+    finally { onBusy(false); }
+  }
+
+  return <fieldset className="settings-group" disabled={busy}>
+    <div className="settings-group-head">
+      <div><h3>{instance.name}</h3><p>{plugin.name} · {instance.id} · {plugin.description}</p></div>
+      <Toggle checked={enabled} onChange={setEnabled} label="启用通知实例" />
+    </div>
+    <div className="settings-grid"><label>实例名称<input value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label></div>
+    <ConfigFields plugin={plugin} config={config} onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))} secretValues={secrets} onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))} clearSecrets={clearSecrets} onClearSecret={(key, clear) => setClearSecrets(current => { const next = new Set(current); if (clear) next.add(key); else next.delete(key); return next; })} />
+    <div className="settings-group-head"><div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div></div>
+    <EventPicker selected={events} onChange={setEvents} />
+    <div className="settings-actions">
+      <button className="button" type="button" onClick={() => void save()}>保存</button>
+      <button className="button secondary" type="button" disabled={!instance.enabled} onClick={() => void test()}>发送测试</button>
+      <button className="link-button" type="button" onClick={() => void remove()}>删除</button>
+    </div>
+  </fieldset>;
+}
 
 export function OwnerNotificationsPanel() {
-  const { data, loading, error, reload } = useApi<View>("/owner-notifications/settings");
-  const { data: deliveries, loading: deliveriesLoading, error: deliveriesError, reload: reloadDeliveries } = useApi<Delivery[]>("/owner-notifications/deliveries", 10000);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [secrets, setSecrets] = useState(empty);
-  const [clear, setClear] = useState({ smtpPassword: false, feishuWebhook: false, feishuSecret: false });
+  const { data: plugins, loading: pluginsLoading, error: pluginsError } = useApi<Plugin[]>("/notification-plugins");
+  const { data: instances, loading, error, reload } = useApi<Instance[]>("/notification-instances");
+  const { data: deliveries, loading: deliveriesLoading, error: deliveriesError, reload: reloadDeliveries } = useApi<Delivery[]>("/notification-deliveries", 10000);
+  const [pluginCode, setPluginCode] = useState("");
+  const selectedPlugin = useMemo(() => plugins?.find(plugin => plugin.code === pluginCode) ?? plugins?.[0], [plugins, pluginCode]);
+  const [newId, setNewId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newEnabled, setNewEnabled] = useState(false);
+  const [newConfig, setNewConfig] = useState<Record<string, unknown>>({});
+  const [newSecrets, setNewSecrets] = useState<Record<string, string>>({});
+  const [newEvents, setNewEvents] = useState<string[]>(ALL_EVENTS);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    if (!data) return;
-    const { smtpPasswordConfigured: _p, feishuWebhookConfigured: _w, feishuSecretConfigured: _s, ...rest } = data;
-    setDraft(rest);
-    setSecrets(empty);
-    setClear({ smtpPassword: false, feishuWebhook: false, feishuSecret: false });
-  }, [data]);
+    if (!selectedPlugin) return;
+    setPluginCode(selectedPlugin.code);
+    setNewName(selectedPlugin.name);
+    setNewConfig(defaultsFor(selectedPlugin));
+    setNewSecrets({});
+    setNewEvents(ALL_EVENTS);
+  }, [selectedPlugin?.code]);
 
-  function update<K extends keyof Draft>(key: K, value: Draft[K]) { setDraft(v => v ? { ...v, [key]: value } : v); }
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault(); if (!draft) return;
+  async function create(event: React.FormEvent) {
+    event.preventDefault(); if (!selectedPlugin) return;
     setBusy(true); setNotice(null);
     try {
-      await api("/owner-notifications/settings", { method: "POST", body: JSON.stringify({ ...draft, ...Object.fromEntries(Object.entries(secrets).map(([k, v]) => [k, clear[k as keyof typeof clear] ? null : v])) }) });
-      setSecrets(empty);
+      const config: Record<string, unknown> = {};
+      for (const field of selectedPlugin.fields) {
+        const value = field.secret ? newSecrets[field.key] : newConfig[field.key];
+        if (value !== undefined && value !== "") config[field.key] = value;
+      }
+      await api("/notification-instances", { method: "POST", body: JSON.stringify({ ...(newId ? { id: newId } : {}), name: newName, plugin: selectedPlugin.code, enabled: newEnabled, config, events: newEvents }) });
+      setNewId(""); setNewEnabled(false); setNewConfig(defaultsFor(selectedPlugin)); setNewSecrets({});
       await reload();
-      setNotice({ type: "ok", text: "已保存，后续通知动态使用新配置。" });
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "保存失败" }); }
+      setNotice({ type: "ok", text: "通知实例已创建。" });
+    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "创建失败" }); }
     finally { setBusy(false); }
   }
 
-  async function test(channel: "EMAIL" | "FEISHU") {
+  async function retry(id: string) {
     setBusy(true); setNotice(null);
     try {
-      await api("/owner-notifications/test", { method: "POST", body: JSON.stringify({ channel }) });
-      setNotice({ type: "ok", text: "测试任务已排队，请查看下方投递状态（SUCCESS 才代表发送成功）。" });
+      await api(`/notification-deliveries/${id}/retry`, { method: "POST", body: "{}" });
       await reloadDeliveries();
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "测试失败" }); }
+      setNotice({ type: "ok", text: "通知已重新进入待发送队列。" });
+    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "重试失败" }); }
     finally { setBusy(false); }
-  }
-
-  function secretField(key: keyof typeof empty, label: string, configured: boolean) {
-    return <label key={key}>{label}（{configured ? "已配置，留空保留" : "未配置"}）
-      <input type="password" value={secrets[key]} autoComplete="new-password" onChange={event => setSecrets(current => ({ ...current, [key]: event.target.value }))} />
-      {configured && <span className="field-clear"><input type="checkbox" checked={clear[key]} onChange={event => setClear(current => ({ ...current, [key]: event.target.checked }))} />清除已保存的值</span>}
-    </label>;
   }
 
   return <>
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
-    <Section title="通知渠道与事件" action={<button className="link-button" type="button" disabled={busy} onClick={() => void reload()}>重新加载</button>}>
-      <LoadingState loading={loading} error={error}>{draft && data && <form onSubmit={event => void save(event)}>
-        <fieldset className="settings-group" disabled={busy}>
-          <div className="settings-group-head">
-            <div><h3>邮箱通知</h3><p>通过 SMTP 发送，只允许公网主机与安全 TLS。</p></div>
-            <Toggle checked={draft.emailEnabled} onChange={value => update("emailEnabled", value)} label="启用邮箱通知" />
-          </div>
-          <div className="settings-grid">
-            <label>SMTP 主机<input value={draft.smtpHost} onChange={event => update("smtpHost", event.target.value)} autoComplete="off" placeholder="smtp.example.com" /></label>
-            <label>SMTP 加密方式<select value={draft.smtpPort} onChange={event => update("smtpPort", Number(event.target.value) as 465 | 587)}><option value={465}>465 · TLS</option><option value={587}>587 · 强制 STARTTLS</option></select></label>
-            <label>SMTP 登录账号<input value={draft.smtpUser} onChange={event => update("smtpUser", event.target.value)} autoComplete="off" /></label>
-            {secretField("smtpPassword", "SMTP 密码 / 授权码", data.smtpPasswordConfigured)}
-            <label>发件邮箱<input value={draft.from} onChange={event => update("from", event.target.value)} autoComplete="off" /></label>
-            <label>收件邮箱<input value={draft.to} onChange={event => update("to", event.target.value)} autoComplete="off" /></label>
-          </div>
-        </fieldset>
-
-        <fieldset className="settings-group" disabled={busy}>
-          <div className="settings-group-head">
-            <div><h3>飞书通知</h3><p>只允许官方自定义机器人地址，建议使用私密群。</p></div>
-            <Toggle checked={draft.feishuEnabled} onChange={value => update("feishuEnabled", value)} label="启用飞书机器人通知" />
-          </div>
-          <div className="settings-grid">
-            {secretField("feishuWebhook", "飞书 Webhook", data.feishuWebhookConfigured)}
-            {secretField("feishuSecret", "飞书签名校验密钥（选填）", data.feishuSecretConfigured)}
-          </div>
-        </fieldset>
-
-        <fieldset className="settings-group" disabled={busy}>
-          <div className="settings-group-head">
-            <div><h3>通知事件</h3><p>Mock 收款不发送本人通知。</p></div>
-          </div>
-          <div className="settings-events">{EVENTS.map(([key, label, description]) => <label className="event-option" key={key}>
-            <input type="checkbox" checked={draft[key]} onChange={event => update(key, event.target.checked)} />
-            <span><strong>{label}</strong><em>{description}</em></span>
-          </label>)}</div>
-        </fieldset>
-
-        <div className="settings-actions">
-          <button className="button" type="submit" disabled={busy}>{busy ? "保存中…" : "保存通知配置"}</button>
-          <button className="button secondary" type="button" disabled={busy || !data.emailEnabled} onClick={() => void test("EMAIL")}>发送测试邮件</button>
-          <button className="button secondary" type="button" disabled={busy || !data.feishuEnabled} onClick={() => void test("FEISHU")}>发送飞书测试</button>
-          <span className="muted">配置需先保存，发送结果见下方投递记录</span>
-        </div>
-      </form>}</LoadingState>
+    <Section title="通知插件" action={<span className="muted">业务 Webhook 不在这里配置</span>}>
+      <LoadingState loading={pluginsLoading} error={pluginsError} empty={!plugins?.length} emptyText="没有可用的通知插件">
+        <form onSubmit={event => void create(event)}>
+          <fieldset className="settings-group" disabled={busy || !selectedPlugin}>
+            <div className="settings-group-head">
+              <div><h3>创建通知实例</h3><p>一个插件可以创建多个独立实例，例如不同 TG 群或飞书应用。</p></div>
+              <Toggle checked={newEnabled} onChange={setNewEnabled} label="创建后立即启用" />
+            </div>
+            <div className="settings-grid">
+              <label>插件<select value={selectedPlugin?.code ?? ""} onChange={event => setPluginCode(event.target.value)}>{plugins?.map(plugin => <option value={plugin.code} key={plugin.code}>{plugin.name}</option>)}</select></label>
+              <label>实例名称<input value={newName} maxLength={120} onChange={event => setNewName(event.target.value)} /></label>
+              <label>实例 ID（可留空自动生成）<input value={newId} maxLength={60} placeholder="notify-ops-tg" onChange={event => setNewId(event.target.value.toLowerCase())} /></label>
+            </div>
+            {selectedPlugin && <ConfigFields plugin={selectedPlugin} config={newConfig} onChange={(key, value) => setNewConfig(current => ({ ...current, [key]: value }))} secretValues={newSecrets} onSecretChange={(key, value) => setNewSecrets(current => ({ ...current, [key]: value }))} />}
+            <div className="settings-group-head"><div><h3>默认订阅</h3><p>创建后仍可逐实例调整。</p></div></div>
+            <EventPicker selected={newEvents} onChange={setNewEvents} />
+            <div className="settings-actions"><button className="button" type="submit" disabled={busy || !selectedPlugin}>{busy ? "创建中…" : "创建通知实例"}</button></div>
+          </fieldset>
+        </form>
+      </LoadingState>
     </Section>
 
-    <Section title="投递记录" action={<span className="muted">最近 50 条 · 自动刷新</span>} className="detail-section">
-      <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录；保存配置后可发送一条测试通知验证">
+    <Section title="通知实例" action={<button className="link-button" type="button" disabled={busy} onClick={() => void reload()}>重新加载</button>}>
+      <LoadingState loading={loading} error={error} empty={!instances?.length} emptyText="还没有通知实例；先从上方选择一个插件创建">
+        {instances?.map(instance => {
+          const plugin = plugins?.find(item => item.code === instance.plugin);
+          return plugin ? <InstanceCard key={instance.id} instance={instance} plugin={plugin} busy={busy} onBusy={setBusy} onNotice={setNotice} reload={reload} reloadDeliveries={reloadDeliveries} /> : null;
+        })}
+      </LoadingState>
+    </Section>
+
+    <Section title="通知投递" action={<span className="muted">最近 50 条 · 自动刷新</span>} className="detail-section">
+      <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录">
         <div className="table-wrap"><table>
-          <thead><tr><th>时间</th><th>渠道</th><th>标题</th><th>状态</th><th>尝试</th></tr></thead>
+          <thead><tr><th>时间</th><th>实例</th><th>事件</th><th>标题</th><th>状态</th><th>尝试</th><th></th></tr></thead>
           <tbody>{deliveries?.map(row => <tr key={row.id}>
             <td>{time(row.createdAt)}</td>
-            <td data-label="渠道">{notificationChannelLabel(row.channel)}</td>
-            <td data-label="标题"><strong>{row.title}</strong></td>
+            <td data-label="实例"><strong>{row.instance?.name ?? notificationChannelLabel(row.channel)}</strong><div className="muted">{notificationChannelLabel(row.instance?.plugin ?? row.channel)}</div></td>
+            <td data-label="事件">{eventLabel(row.eventType ?? "—")}</td>
+            <td data-label="标题">{row.title}</td>
             <td data-label="状态"><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
             <td data-label="尝试">{row.attempts}</td>
+            <td>{row.status === "DEAD" && row.instance && <button className="link-button" type="button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>}</td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>
