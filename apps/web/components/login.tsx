@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { safeLocalRedirectPath } from "../lib/navigation";
 
 export function Login() {
   const [loading, setLoading] = useState(false);
@@ -15,8 +16,8 @@ export function Login() {
       const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: form.get("password") }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? "登录失败");
-      const requested = new URLSearchParams(window.location.search).get("next") ?? "/";
-      window.location.assign(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/");
+      const requested = new URLSearchParams(window.location.search).get("next");
+      window.location.assign(safeLocalRedirectPath(requested));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "登录失败");
       setLoading(false);
