@@ -467,22 +467,59 @@ model OwnerNotificationSeen {
   @@map("owner_notification_seen")
 }
 
+model NotificationInstance {
+  id               String                     @id @db.VarChar(80)
+  plugin           String                     @db.VarChar(32)
+  name             String                     @db.VarChar(120)
+  enabled          Boolean                    @default(false)
+  revision         Int                        @default(1)
+  payloadEncrypted String                     @db.LongText
+  archivedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  subscriptions    NotificationSubscription[]
+  deliveries       OwnerNotificationDelivery[]
+
+  @@index([plugin, createdAt])
+  @@index([archivedAt, createdAt])
+  @@map("notification_instances")
+}
+
+model NotificationSubscription {
+  id         String               @id @default(cuid())
+  instanceId String               @db.VarChar(80)
+  eventType  String               @db.VarChar(64)
+  enabled    Boolean              @default(true)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  instance   NotificationInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, eventType])
+  @@index([eventType, enabled])
+  @@map("notification_subscriptions")
+}
+
 model OwnerNotificationDelivery {
-  id            String    @id @default(cuid())
-  dedupeKey     String    @unique @db.VarChar(160)
-  channel       String    @db.VarChar(16)
-  title         String    @db.VarChar(160)
-  message       String    @db.Text
-  status        String    @default("PENDING") @db.VarChar(16)
-  attempts      Int       @default(0)
-  nextAttemptAt DateTime  @default(now())
-  leaseOwner    String?   @db.VarChar(40)
+  id            String                @id @default(cuid())
+  dedupeKey     String                @unique @db.VarChar(160)
+  channel       String                @db.VarChar(32)
+  instanceId    String?               @db.VarChar(80)
+  eventType     String?               @db.VarChar(64)
+  title         String                @db.VarChar(160)
+  message       String                @db.Text
+  payload       Json?
+  status        String                @default("PENDING") @db.VarChar(16)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now())
+  leaseOwner    String?               @db.VarChar(40)
   lockedUntil   DateTime?
-  lastError     String?   @db.VarChar(80)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  lastError     String?               @db.VarChar(80)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  instance      NotificationInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
 
   @@index([status, nextAttemptAt])
+  @@index([instanceId, createdAt])
   @@map("owner_notification_deliveries")
 }
 
@@ -590,4 +627,71 @@ model AdminAuditLog {
   @@index([action, createdAt])
   @@index([resourceType, resourceId, createdAt])
   @@map("admin_audit_logs")
+}
+
+
+model McpClient {
+  id           String        @id @db.VarChar(64)
+  name         String        @db.VarChar(120)
+  tokenHash    String        @unique @db.Char(64)
+  tokenPrefix  String        @db.VarChar(20)
+  scope        String        @default("READ") @db.VarChar(16)
+  allowedTools Json
+  enabled      Boolean       @default(true)
+  revision     Int           @default(1)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  audits       McpAuditLog[]
+
+  @@index([enabled, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_clients")
+}
+
+model McpAuditLog {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  clientId         String?    @db.VarChar(64)
+  clientName       String     @db.VarChar(120)
+  scope            String     @db.VarChar(16)
+  tool             String     @db.VarChar(100)
+  argumentsSummary Json?
+  success          Boolean
+  durationMs       Int        @db.UnsignedInt
+  errorCode        String?    @db.VarChar(80)
+  requestId        String?    @db.VarChar(64)
+  ipAddress        String?    @db.VarChar(64)
+  userAgent        String?    @db.VarChar(500)
+  createdAt        DateTime   @default(now())
+  client           McpClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([tool, createdAt])
+  @@index([success, createdAt])
+  @@map("mcp_audit_logs")
+}
+
+model McpActionApproval {
+  id          String   @id @db.VarChar(64)
+  clientId    String?  @db.VarChar(64)
+  action      String   @db.VarChar(40)
+  arguments   Json
+  summary     String   @db.VarChar(500)
+  requestedBy String   @db.VarChar(120)
+  approvedBy  String?  @db.VarChar(120)
+  status      String   @default("PENDING") @db.VarChar(16)
+  expiresAt   DateTime
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  executedAt  DateTime?
+  result      Json?
+  lastError   String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId, createdAt])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_action_approvals")
 }

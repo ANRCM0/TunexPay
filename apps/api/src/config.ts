@@ -8,6 +8,8 @@ const envSchema = z.object({
   API_PUBLIC_URL: z.string().url().default("http://localhost:3001"),
   WEB_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_TOKEN: z.string().min(24).default("development-admin-token-change-me"),
+  MCP_ENABLED: z.string().default("false").transform((value) => value === "true"),
+  MCP_TOKEN: z.string().default(""),
   SECRETS_ENCRYPTION_KEY: z.string().default("0000000000000000000000000000000000000000000000000000000000000000"),
   ALIPAY_APP_ID: z.string().default(""),
   ALIPAY_PRIVATE_KEY: z.string().default(""),
@@ -43,6 +45,7 @@ export function config(): Config {
     if (decodedKey.length !== 32) throw new Error("SECRETS_ENCRYPTION_KEY must encode exactly 32 bytes");
     if (parsed.NODE_ENV === "production") {
       if (parsed.ADMIN_TOKEN === "development-admin-token-change-me" || parsed.ADMIN_TOKEN.startsWith("replace-with")) throw new Error("ADMIN_TOKEN must be changed in production");
+      if (parsed.MCP_ENABLED && (parsed.MCP_TOKEN.length < 32 || parsed.MCP_TOKEN.startsWith("replace-with"))) throw new Error("MCP_TOKEN must be a separate random token of at least 32 characters when MCP is enabled");
       if (/^0{64}$/.test(encodedKey) || encodedKey.startsWith("replace-with")) throw new Error("SECRETS_ENCRYPTION_KEY must be changed in production");
       if (parsed.MOCK_CHANNEL_ENABLED && !parsed.MOCK_CHANNEL_TOKEN) throw new Error("MOCK_CHANNEL_TOKEN is required when the mock channel is enabled");
       if (parsed.MOCK_CHANNEL_ENABLED && parsed.MOCK_CHANNEL_TOKEN === "local-development-only") throw new Error("MOCK_CHANNEL_TOKEN must be changed in production");

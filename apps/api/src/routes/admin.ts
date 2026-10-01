@@ -18,6 +18,8 @@ import { importAlipayBill, matchReceipt } from "../services/reconciliation-servi
 import { collectSystemStatus } from "../lib/system-status.js";
 import { routingGroupRoutes } from "./routing-groups.js";
 import { channelInstanceRoutes } from "./channel-instances.js";
+import { notificationRoutes } from "./notifications.js";
+import { mcpAdminRoutes } from "./mcp-admin.js";
 import { assignChannel, saveChannel, loadChannel, checkChannel } from "../services/channel-instance-service.js";
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -25,6 +27,8 @@ adminRoutes.use("*", adminAuth);
 adminRoutes.use("*", adminAudit);
 adminRoutes.route("/", channelInstanceRoutes);
 adminRoutes.route("/", routingGroupRoutes);
+adminRoutes.route("/", notificationRoutes);
+adminRoutes.route("/", mcpAdminRoutes);
 
 adminRoutes.get("/owner-notifications/settings", async c => c.json({ data: await getOwnerSettings() }));
 adminRoutes.post("/owner-notifications/settings", async c => c.json({ data: await saveOwnerSettings(await c.req.json()) }));
