@@ -81,7 +81,7 @@
             <div class="card stat stat-red"><div class="stat-label">对账差错</div><div class="stat-value">0</div><div class="stat-note">金额或流水号冲突</div></div>
             <div class="card stat stat-orange"><div class="stat-label">过期关闭异常</div><div class="stat-value">0</div><div class="stat-note">Worker 将自动退避重试</div></div>
             <div class="card stat stat-red"><div class="stat-label">今日管理失败</div><div class="stat-value">0</div><div class="stat-note">可在操作审计中查看</div></div>
-            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">3</div><div class="stat-note">2 支付 · 1 退款</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">2</div><div class="stat-note">仅支付单自动查单</div></div>
             <div class="card stat stat-blue"><div class="stat-label">通知待处理</div><div class="stat-value">1</div><div class="stat-note">3 个活跃应用</div></div>
           </div>
           <div class="preview-sub">下面的业务事件直接吐后端事件码，靠人脑翻译：</div>
@@ -96,14 +96,15 @@
           <div class="grid stats">
             <div class="card stat stat-blue"><div class="stat-label">今日订单</div><div class="stat-value">18</div><div class="stat-note">12 笔支付成功</div></div>
             <div class="card stat stat-green"><div class="stat-label">今日实收</div><div class="stat-value">¥3,486.00</div><div class="stat-note">仅统计成功支付</div></div>
-            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">3</div><div class="stat-note">2 支付 · 1 退款</div></div>
+            <div class="card stat stat-blue"><div class="stat-label">自动恢复中</div><div class="stat-value">2</div><div class="stat-note">仅支付单自动查单</div></div>
             <div class="card stat stat-blue"><div class="stat-label">通知待处理</div><div class="stat-value">1</div><div class="stat-note">3 个活跃应用</div></div>
           </div>
           <div class="alert-strip">
-            <div class="alert-strip-head">需要关注<span class="alert-count">3 项</span></div>
+            <div class="alert-strip-head">需要关注<span class="alert-count">4 项</span></div>
             <div class="grid alert-grid">
               <div class="card stat stat-red"><div class="stat-label">支付异常</div><div class="stat-value">1</div><div class="stat-note">待核实、退款或人工关闭</div></div>
               <div class="card stat stat-orange"><div class="stat-label">结果未知</div><div class="stat-value">2</div><div class="stat-note">需要主动查单</div></div>
+              <div class="card stat stat-orange"><div class="stat-label">待人工查单退款</div><div class="stat-value">1</div><div class="stat-note">退款不再自动查单</div></div>
               <div class="card stat stat-orange"><div class="stat-label">未匹配账单</div><div class="stat-value">4</div><div class="stat-note">等待订单或退款单出现</div></div>
             </div>
           </div>

@@ -7,7 +7,6 @@ import { AppError } from "../lib/errors.js";
 import { centsToYuan, yuanToCents } from "../lib/money.js";
 import { createOrder } from "../services/order-service.js";
 import { createPayment } from "../services/payment-service.js";
-import { createRefund } from "../services/refund-service.js";
 
 export const epayRoutes = new Hono<AppEnv>();
 
@@ -138,18 +137,10 @@ async function api(c: Context<AppEnv>) {
         return { trade_no: payment?.paymentNo ?? "", out_trade_no: order.externalOrderNo, type: payment?.method ?? "alipay", pid: application.epayPid, addtime: Math.floor(order.createdAt.getTime() / 1000), endtime: order.paidAt ? Math.floor(order.paidAt.getTime() / 1000) : null, name: order.subject, money: centsToYuan(order.amount), status: ["SUCCESS", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.status) ? 1 : 0 };
       }) });
     }
+    // ePay V1 的退款动作已停用：它曾经一调用就直接向通道打款退款。
+    // 保留分支以便老接入方拿到明确错误信息（而不是掉进「不支持的操作类型」）。
     if (act === "refund") {
-      const payment = params.trade_no
-        ? await db.payment.findFirst({ where: { paymentNo: params.trade_no, order: { applicationId: application.id, deletedAt: null } } })
-        : await db.payment.findFirst({ where: { order: { applicationId: application.id, externalOrderNo: required(params, "out_trade_no"), deletedAt: null }, status: "SUCCESS" } });
-      if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
-      const refund = await createRefund(application, {
-        paymentNo: payment.paymentNo,
-        externalRefundNo: params.out_refund_no || `epay-${payment.paymentNo}-${params.money}`,
-        amount: yuanToCents(required(params, "money")),
-        reason: "ePay V1 refund",
-      });
-      return c.json({ code: refund.status === "SUCCESS" ? 1 : 0, msg: refund.status === "SUCCESS" ? "退款成功" : `退款状态：${refund.status}`, refund_no: refund.refundNo, money: centsToYuan(refund.amount) });
+      throw new AppError("EPAY_REFUND_DISABLED", "退款接口已停用：系统不再自动执行退款，请由管理员人工发起", 410);
     }
     throw new AppError("EPAY_UNSUPPORTED_ACTION", "不支持的操作类型");
   } catch (error) {

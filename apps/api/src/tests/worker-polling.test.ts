@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   queueAdd: vi.fn(), queueClose: vi.fn(), workerClose: vi.fn(),
   dbDisconnect: vi.fn(),
   recoverExpired: vi.fn(), listDue: vi.fn(), deliver: vi.fn(),
-  paymentRecoveries: vi.fn(), refundRecoveries: vi.fn(), expirations: vi.fn(), receiptFlows: vi.fn(),
+  paymentRecoveries: vi.fn(), expirations: vi.fn(), receiptFlows: vi.fn(),
   collectors: vi.fn(), ownerNotifications: vi.fn(),
 }));
 
@@ -23,8 +23,9 @@ vi.mock("../lib/system-status.js", () => ({ WORKER_HEARTBEAT_KEY: "tuoxin:worker
 vi.mock("../services/webhook-worker-service.js", () => ({
   deliverWebhook: mocks.deliver, listDueDeliveryIds: mocks.listDue, recoverExpiredDeliveries: mocks.recoverExpired,
 }));
+// 退款不参与自动扫描：Worker 只跑支付查单恢复（runDueRefundRecoveries 已删除）。
 vi.mock("../services/recovery-service.js", () => ({
-  runDuePaymentRecoveries: mocks.paymentRecoveries, runDueRefundRecoveries: mocks.refundRecoveries,
+  runDuePaymentRecoveries: mocks.paymentRecoveries,
 }));
 vi.mock("../services/expiration-service.js", () => ({ runDueOrderExpirations: mocks.expirations }));
 vi.mock("../services/receipt-flow-service.js", () => ({ recoverStaleAlipayBillFlows: mocks.receiptFlows }));
@@ -38,7 +39,6 @@ function idleAll() {
   mocks.recoverExpired.mockResolvedValue(0);
   mocks.listDue.mockResolvedValue([]);
   mocks.paymentRecoveries.mockResolvedValue({ claimed: 0 });
-  mocks.refundRecoveries.mockResolvedValue({ claimed: 0 });
   mocks.expirations.mockResolvedValue({ claimed: 0 });
   mocks.receiptFlows.mockResolvedValue({ found: 0 });
   mocks.collectors.mockResolvedValue(undefined);

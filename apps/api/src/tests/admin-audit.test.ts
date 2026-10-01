@@ -40,4 +40,13 @@ describe("admin audit descriptors", () => {
       action: "PAYMENT_EXCEPTION_UPDATE", resourceType: "PAYMENT_EXCEPTION", resourceId: "exc_1",
     });
   });
+
+  it("tracks manually initiated refunds separately from refund queries", () => {
+    expect(describeAdminAction("POST", "/admin/v1/refunds")).toEqual({
+      action: "REFUND_CREATE", resourceType: "REFUND", resourceId: null,
+    });
+    expect(describeAdminAction("POST", "/admin/v1/refunds/ref_1/query")).toEqual({
+      action: "REFUND_QUERY", resourceType: "REFUND", resourceId: "ref_1",
+    });
+  });
 });

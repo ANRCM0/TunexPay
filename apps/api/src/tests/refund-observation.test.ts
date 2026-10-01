@@ -25,7 +25,7 @@ vi.mock("../db.js", () => {
   };
   return { db: { ...tx, $transaction: async (fn: (tx: unknown) => unknown, options?: unknown) => { mocks.transactionOptions(options); return fn(tx); } } };
 });
-import { createRefund, markRefundSucceededFromReceipt, queryRefund } from "../services/refund-service.js";
+import { createRefund, queryRefund } from "../services/refund-service.js";
 import { ChannelUncertainError } from "../lib/errors.js";
 
 function deferred<T>() {
@@ -39,15 +39,10 @@ beforeEach(() => {
   mocks.exists = true;
   mocks.state = { id: "r1", refundNo: "ref_1", paymentId: "p1", amount: 100, status: "UNKNOWN", queryAttempts: 2, nextQueryAt: null };
   mocks.update.mockImplementation(async ({ data }) => { Object.assign(mocks.state, data); return { ...mocks.state }; });
-  mocks.updateMany.mockImplementation(async ({ where, data }) => {
-    if (mocks.state.status !== where.status || mocks.state.nextQueryAt !== where.nextQueryAt || mocks.state.queryAttempts !== where.queryAttempts) return { count: 0 };
-    Object.assign(mocks.state, data);
-    return { count: 1 };
-  });
 });
 
 describe("refund observations after concurrent success", () => {
-  it.each(["failure-result", "uncertain-error"])("keeps receipt-confirmed success when the original refund finishes with %s", async mode => {
+  it.each(["failure-result", "uncertain-error"])("keeps a concurrent success when the original refund request finishes with %s", async mode => {
     mocks.exists = false;
     mocks.state.status = "CREATED";
     const observation = deferred<{ status: string; raw: object }>();
@@ -60,7 +55,9 @@ describe("refund observations after concurrent success", () => {
     });
     const creating = createRefund({ id: "a1" } as never, { paymentNo: "pay_1", externalRefundNo: "external_ref_1", amount: 100 });
     await started.promise;
-    await markRefundSucceededFromReceipt(mocks.state.refundNo, 100, {}, "trade_refund");
+    // 原始退款请求还在飞的时候，另一个人工查单已经把它确认为成功。
+    mocks.query.mockResolvedValueOnce({ status: "SUCCESS", raw: {}, channelRefundNo: "trade_refund" });
+    await queryRefund(null, "ref_1");
     observation.resolve({ status: "FAILED", raw: { stale: true } });
     expect((await creating).status).toBe("SUCCESS");
     expect(mocks.state).toMatchObject({ status: "SUCCESS", nextQueryAt: null, channelRefundNo: "trade_refund" });
@@ -85,7 +82,7 @@ describe("refund observations after concurrent success", () => {
     expect(mocks.raw).toHaveBeenCalledTimes(2);
   });
 
-  it("does not reschedule a success after a delayed unchanged observation", async () => {
+  it("does not schedule a follow-up query after a delayed unchanged observation", async () => {
     const observation = deferred<{ status: string; raw: object }>();
     const started = deferred<void>();
     mocks.query.mockImplementationOnce(() => { started.resolve(); return observation.promise; });
@@ -94,16 +91,18 @@ describe("refund observations after concurrent success", () => {
     await started.promise;
     await queryRefund(null, "ref_1");
     observation.resolve({ status: "UNKNOWN", raw: {} });
+    // 结论来自并发成功的确认，而不是这次陈旧的 UNKNOWN 观察。
     expect((await staleQuery).status).toBe("SUCCESS");
     expect(mocks.state.nextQueryAt).toBeNull();
-    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "r1", status: "UNKNOWN", nextQueryAt: null, queryAttempts: 2 } }));
+    // 关键回归点：系统不再自动查退款，任何路径都不该写回 nextQueryAt。
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
-  it("updates a valid current observation and schedules recovery", async () => {
+  it("updates a valid current observation without scheduling recovery", async () => {
     mocks.query.mockResolvedValue({ status: "PROCESSING", raw: {} });
     const refund = await queryRefund(null, "ref_1");
     expect(refund.status).toBe("PROCESSING");
-    expect(refund.nextQueryAt).toBeInstanceOf(Date);
+    expect(refund.nextQueryAt).toBeNull();
     expect(mocks.transactionOptions).toHaveBeenLastCalledWith({ isolationLevel: "ReadCommitted" });
     expect(mocks.raw).toHaveBeenCalledTimes(1);
     expect(mocks.event).toHaveBeenCalledTimes(1);

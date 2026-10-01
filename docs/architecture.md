@@ -62,7 +62,7 @@ BEGIN
     COMMIT
 ```
 
-晚到重复支付会创建独立 `PaymentException`，阻断第二次业务成功通知。管理员可进入处理、解决或忽略；对该重复 Payment 完成全额 API 退款时异常单自动解决，但不会改变原业务订单的退款状态，也不会发送业务退款通知。账单收款不具备 API 原路退款能力，需要人工退款并填写凭证后关闭异常。
+晚到重复支付会创建独立 `PaymentException`，阻断第二次业务成功通知。管理员可进入处理、解决或忽略；对该重复 Payment 完成全额退款后异常单自动解决，但不会改变原业务订单的退款状态，也不会发送业务退款通知。退款本身只能由管理员人工发起（管理台退款页，或经 MCP 审批）；账单收款不具备 API 原路退款能力，需要人工退款并填写凭证后关闭异常。
 
 ## Webhook 可靠性
 
@@ -73,7 +73,7 @@ BEGIN
 - 失败采用带抖动的指数退避，默认最多 8 次；超过后进入 DEAD，可从后台手动重试。
 - 业务 Webhook 与通用 Webhook 通知插件使用统一安全传输：DNS 校验后将实际连接固定到已验证 IP，同时保留原 Host、TLS SNI 和证书校验；禁止 URL 凭据和 30x 重定向，默认只允许公网 HTTPS。每次请求从 DNS 开始到完整响应体共用 10 秒截止时间，响应体上限 64 KiB；只使用首个已验证地址，双栈可达性仍需部署验收。
 
-## 支付与退款恢复
+## 支付恢复（退款不自动查单）
 
 - 外部请求发出前先写入 `PROCESSING + nextQueryAt`，即使进程随后崩溃，Worker 也能重新发现。
 - Worker 使用 `status + nextQueryAt + queryAttempts` 条件更新认领记录，多实例不会重复执行同一次查询。
@@ -81,6 +81,7 @@ BEGIN
 - 通道返回旧状态时不得让本地状态回退；可信 `SUCCESS` 仍可恢复 `FAILED`、`CLOSED` 或 `UNKNOWN`。
 - 达到上限后清空 `nextQueryAt` 并写入 `*_RECOVERY_EXHAUSTED` 事件，保留原状态等待人工处理。
 - Mock 支付不自动查询，避免开发环境的待点击付款被无意义轮询。
+- **退款没有自动查单路径**：`createRefund` 不写 `nextQueryAt`，Worker 不认领 `refunds` 表，退款服务也不再重排查单计划。状态未知的退款保留原状态，只能由管理员在退款页手动查单推进；升级前遗留的 `refunds.nextQueryAt` 不参与调度。
 
 ## 账单对账
 
@@ -88,7 +89,7 @@ BEGIN
 - `fingerprint` 对渠道、日期、方向、各类单号、金额和发生时间做 SHA-256，同一流水重复上传不会重复处理。
 - Matcher 只匹配 ALIPAY 支付；商户单号与渠道流水号指向不同记录时立即标记 `MISMATCH`。
 - 金额必须以整数分完全一致。差一分也不会推进资金状态。
-- 收入通过 `markPaymentSucceeded()`，退款通过退款服务的统一成功事务；Matcher 不直接更新 Order、Payment 或 Refund 状态。
+- 收入通过 `markPaymentSucceeded()` 推进；Matcher 不直接更新 Order、Payment 或 Refund 状态，退款流水只写“待人工确认”事件，退款状态由人工查单推进。
 - `UNMATCHED` 表示对应业务单可能尚未入库，可人工重跑；`MISMATCH` 表示存在标识或金额冲突，需要先调查。
 - `ReconciliationRun` 记录每个账单日的导入、重复、跳过、匹配和差错数量。当前由管理员上传文件，后续自动下载仍复用同一 Parser 和 Matcher。
 

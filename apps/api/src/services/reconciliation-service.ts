@@ -5,7 +5,6 @@ import { parseAlipayBill, type ParsedReceipt } from "../lib/alipay-bill.js";
 import { sha256, stableJson } from "../lib/crypto.js";
 import { AppError, errorMessage } from "../lib/errors.js";
 import { markPaymentSucceeded } from "./payment-service.js";
-import { markRefundSucceededFromReceipt } from "./refund-service.js";
 import { rematchAlipayBillReceipt } from "./receipt-flow-service.js";
 
 const importSchema = z.object({
@@ -132,11 +131,12 @@ async function matchRefund(receipt: Receipt): Promise<Receipt> {
   if (refund.channelRefundNo && receipt.providerRefundNo && refund.channelRefundNo !== receipt.providerRefundNo) {
     return markMismatch(receipt, `支付宝退款号不一致：系统 ${refund.channelRefundNo}，账单 ${receipt.providerRefundNo}`, refund.paymentId, refund.id, refund.payment.orderId);
   }
-  await markRefundSucceededFromReceipt(refund.refundNo, receipt.amount, receipt.rawPayload as Prisma.InputJsonValue, receipt.providerRefundNo);
-  return markMatched(receipt, refund.paymentId, refund.id, refund.payment.orderId);
+  // 对账只做「匹配 + 差错」：账单出现退款流水不再直接把本地退款单改成 SUCCESS。
+  // 退款是否到账由管理员在退款页人工查单确认，对账不会推进任何资金状态。
+  return markMatched(receipt, refund.paymentId, refund.id, refund.payment.orderId, { refundNo: refund.refundNo, amount: refund.amount });
 }
 
-async function markMatched(receipt: Receipt, paymentId: string, refundId: string | null, orderId: string): Promise<Receipt> {
+async function markMatched(receipt: Receipt, paymentId: string, refundId: string | null, orderId: string, pendingRefund?: { refundNo: string; amount: number }): Promise<Receipt> {
   return db.$transaction(async (tx) => {
     const updated = await tx.receipt.update({ where: { id: receipt.id }, data: {
       matchStatus: "MATCHED", paymentId, refundId, mismatchReason: null,
@@ -145,6 +145,13 @@ async function markMatched(receipt: Receipt, paymentId: string, refundId: string
       await tx.paymentEvent.create({ data: {
         aggregateType: "RECEIPT", aggregateId: receipt.id, orderId, paymentId,
         type: "RECEIPT_MATCHED", source: "ALIPAY_BILL", payload: { receiptId: receipt.id, direction: receipt.direction, refundId },
+      } });
+    }
+    if (pendingRefund) {
+      await tx.paymentEvent.create({ data: {
+        aggregateType: "REFUND", aggregateId: pendingRefund.refundNo, orderId, paymentId,
+        type: "REFUND_RECEIPT_AWAITING_CONFIRMATION", source: "ALIPAY_BILL",
+        payload: { receiptId: receipt.id, amount: pendingRefund.amount, providerRefundNo: receipt.providerRefundNo },
       } });
     }
     return updated;

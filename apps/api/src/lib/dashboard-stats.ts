@@ -43,7 +43,7 @@ export type DashboardStatsRow = [
   pendingWebhooks: unknown,
   amountToday: unknown,
   recoveringPayments: unknown,
-  recoveringRefunds: unknown,
+  pendingRefunds: unknown,
   exhaustedRecoveries: unknown,
   unmatchedReceipts: unknown,
   mismatchedReceipts: unknown,
@@ -60,7 +60,7 @@ export type DashboardStats = {
   pendingWebhooks: number;
   amountToday: number;
   recoveringPayments: number;
-  recoveringRefunds: number;
+  pendingRefunds: number;
   exhaustedRecoveries: number;
   unmatchedReceipts: number;
   mismatchedReceipts: number;
@@ -118,9 +118,9 @@ export async function loadDashboardStats(start: Date): Promise<DashboardStats> {
         WHERE p.channel = 'ALIPAY' AND p.status IN ('PROCESSING', 'UNKNOWN')
           AND p.nextQueryAt IS NOT NULL) AS recoveringPayments,
       (SELECT COUNT(*) FROM refunds r
-        JOIN payments p ON p.id = r.paymentId AND p.channel = 'ALIPAY'
+        JOIN payments p ON p.id = r.paymentId
         JOIN orders o ON o.id = p.orderId AND o.deletedAt IS NULL
-        WHERE r.status IN ('PROCESSING', 'UNKNOWN') AND r.nextQueryAt IS NOT NULL) AS recoveringRefunds,
+        WHERE r.status IN ('PROCESSING', 'UNKNOWN')) AS pendingRefunds,
       (
         (SELECT COUNT(*) FROM payments p
           JOIN orders o ON o.id = p.orderId AND o.deletedAt IS NULL
@@ -163,7 +163,7 @@ export async function loadDashboardStats(start: Date): Promise<DashboardStats> {
     pendingWebhooks: toNumber(row[4]),
     amountToday: toNumber(row[5]),
     recoveringPayments: toNumber(row[6]),
-    recoveringRefunds: toNumber(row[7]),
+    pendingRefunds: toNumber(row[7]),
     exhaustedRecoveries: toNumber(row[8]),
     unmatchedReceipts: toNumber(row[9]),
     mismatchedReceipts: toNumber(row[10]),

@@ -11,7 +11,7 @@ type SystemStatus = {
   redis: Subsystem;
   worker: { status: string; heartbeatAt: string | null; ageSeconds: number | null };
   webhookQueue: { ok: boolean; waiting?: number; active?: number; delayed?: number; failed?: number };
-  tasks: { pendingWebhooks: number; deadWebhooks: number; recoveringPayments: number; recoveringRefunds: number; openPaymentExceptions: number; nextTaskAt: string | null };
+  tasks: { pendingWebhooks: number; deadWebhooks: number; recoveringPayments: number; pendingRefunds: number; openPaymentExceptions: number; nextTaskAt: string | null };
 };
 
 export function System() {
@@ -56,7 +56,7 @@ export function System() {
             <Row label="待处理 Webhook 投递" value={`${data.tasks.pendingWebhooks} 条`} warn={data.tasks.pendingWebhooks > 100} />
             <Row label="重试耗尽（DEAD）" value={`${data.tasks.deadWebhooks} 条`} warn={data.tasks.deadWebhooks > 0} />
             <Row label="恢复中支付" value={`${data.tasks.recoveringPayments} 笔`} />
-            <Row label="恢复中退款" value={`${data.tasks.recoveringRefunds} 笔`} />
+            <Row label="待人工查单退款" value={`${data.tasks.pendingRefunds} 笔`} />
             <Row label="待处理支付异常" value={`${data.tasks.openPaymentExceptions} 条`} warn={data.tasks.openPaymentExceptions > 0} />
           </div>
         </Section>

@@ -39,7 +39,7 @@ const ROW = [
   { toNumber: () => 5 }, // pendingWebhooks
   { toNumber: () => 12345 }, // amountToday —— SUM 在 MySQL 下是 Decimal
   3n, // recoveringPayments
-  1n, // recoveringRefunds
+  1n, // pendingRefunds
   4n, // exhaustedRecoveries（payment 侧 2 + refund 侧 2，SQL 里已相加）
   6n, // unmatchedReceipts
   8n, // mismatchedReceipts
@@ -80,7 +80,7 @@ describe("GET /admin/v1/dashboard", () => {
       pendingWebhooks: 5,
       amountToday: 12345,
       recoveringPayments: 3,
-      recoveringRefunds: 1,
+      pendingRefunds: 1,
       exhaustedRecoveries: 4,
       unmatchedReceipts: 6,
       mismatchedReceipts: 8,
@@ -94,7 +94,7 @@ describe("GET /admin/v1/dashboard", () => {
     expect(Object.keys(body.data)).toHaveLength(15);
     for (const field of [
       "applications", "ordersToday", "successfulToday", "unknownPayments", "pendingWebhooks", "amountToday",
-      "recoveringPayments", "recoveringRefunds", "exhaustedRecoveries", "unmatchedReceipts", "mismatchedReceipts",
+      "recoveringPayments", "pendingRefunds", "exhaustedRecoveries", "unmatchedReceipts", "mismatchedReceipts",
       "openPaymentExceptions", "expirationFailures", "failedAdminActionsToday",
     ]) {
       expect(typeof body.data[field], field).toBe("number");

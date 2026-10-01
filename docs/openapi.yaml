@@ -84,25 +84,19 @@ paths:
           description: 最新支付状态
   /refunds:
     post:
-      summary: 创建退款
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [paymentNo, externalRefundNo, amount]
-              properties:
-                paymentNo: { type: string }
-                externalRefundNo: { type: string, maxLength: 80 }
-                amount: { type: integer, minimum: 1, description: 整数分 }
-                reason: { type: string, maxLength: 300 }
+      summary: 已停用（410）—— 系统不再自动执行退款
+      description: |
+        这个入口曾经一调用就直接向通道打款退款，现已停用。
+        调用一律返回 `410 Gone` 与错误码 `REFUND_API_DISABLED`，不会创建退款单、也不会调用通道。
+        退款只能由管理员人工发起：管理台「退款记录 → 人工发起退款」（`POST /admin/v1/refunds`），
+        或 MCP 审批 `tunexpay_request_refund`（15 分钟内人工确认）。
       responses:
-        '201':
-          description: 退款单
+        '410':
+          description: 退款接口已停用：系统不再自动执行退款，请由管理员人工发起
   /refunds/{refundNo}/query:
     post:
-      summary: 向支付通道主动查询退款结果并推进状态
+      summary: 人工查单：向支付通道查询退款结果并推进状态
+      description: 退款不自动查单，状态未知的退款保持原状态，直到调用此接口人工确认。
       parameters:
         - $ref: '#/components/parameters/RefundNo'
       responses:

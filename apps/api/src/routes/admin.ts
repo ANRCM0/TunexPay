@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { config } from "../config.js";
@@ -13,7 +14,7 @@ import { adminAudit } from "../middleware/admin-audit.js";
 import { createApplication, deleteApplication, rotateApplicationApiKey, rotateApplicationCredentials, updateApplicationStatus } from "../services/application-service.js";
 import { closePayment, queryPayment } from "../services/payment-service.js";
 import { updatePaymentException } from "../services/payment-exception-service.js";
-import { queryRefund } from "../services/refund-service.js";
+import { createRefund, queryRefund } from "../services/refund-service.js";
 import { importAlipayBill, matchReceipt } from "../services/reconciliation-service.js";
 import { collectSystemStatus } from "../lib/system-status.js";
 import { routingGroupRoutes } from "./routing-groups.js";
@@ -196,6 +197,40 @@ adminRoutes.get("/refunds", async (c) => {
 adminRoutes.post("/refunds/:refundNo/query", async (c) => {
   const refundNo = z.string().max(40).parse(c.req.param("refundNo"));
   return c.json({ data: await queryRefund(null, refundNo) });
+});
+
+const adminRefundSchema = z.object({
+  paymentNo: z.string().trim().min(1).max(40),
+  amount: z.number().int().positive().max(999_999_999),
+  reason: z.string().trim().min(2).max(300),
+  // 幂等键由调用方（管理台）生成：重试同一次提交会命中同一张退款单，而不是再退一笔。
+  idempotencyKey: z.string().trim().min(8).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
+});
+
+/**
+ * 管理员人工发起退款——系统里唯一能创建退款单的常规入口（另一条是 MCP 审批）。
+ *
+ * 取消自动退款之后必须有人工入口，否则默认配置（MCP 关闭）下无法退款。
+ * 这里刻意不做任何默认值：金额必须显式填写，不接受「默认全额」，避免误操作直接打款。
+ * 复用 `createRefund`，因此累计可退金额校验、状态机、事件、业务 Webhook 与通道调用完全一致。
+ */
+adminRoutes.post("/refunds", async (c) => {
+  const input = adminRefundSchema.parse(await c.req.json());
+  const payment = await db.payment.findUnique({
+    where: { paymentNo: input.paymentNo },
+    include: { order: { include: { application: true } } },
+  });
+  // 归档应用的订单不在退款范围内：凭证已失效、列表与对账都已摘除，退款会没有留痕的地方。
+  // 先给出准确错误，避免落到 createRefund 内部的归属校验上报「支付单不存在」。
+  if (!payment || payment.order.deletedAt) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在或所属应用已归档", 404);
+  if (payment.status !== "SUCCESS") throw new AppError("PAYMENT_NOT_REFUNDABLE", "只有成功支付单可以退款", 409);
+  const refund = await createRefund(payment.order.application, {
+    paymentNo: payment.paymentNo,
+    externalRefundNo: `admin_${input.idempotencyKey ?? randomUUID()}`,
+    amount: input.amount,
+    reason: input.reason,
+  });
+  return c.json({ data: refund }, 201);
 });
 
 adminRoutes.get("/exceptions", async (c) => {
