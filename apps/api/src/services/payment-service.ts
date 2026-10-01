@@ -11,6 +11,7 @@ import { assertPaymentTransition, canPaymentTransition } from "../lib/state-mach
 import { createPaymentSucceededDelivery } from "./outbox-service.js";
 import { openLateDuplicateException } from "./payment-exception-service.js";
 import { prepareReceiptPayment } from "./receipt-reservation-service.js";
+import { selectRoutingChannel } from "./routing-group-service.js";
 import { billRuntimeConfig } from "./bill-settings-service.js";
 import { cashierAccess, safeReturnUrl } from "../lib/cashier-security.js";
 import { publishPaymentChange } from "../lib/payment-wake.js";
@@ -25,31 +26,46 @@ export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export async function createPayment(application: Application, orderNo: string, input: CreatePaymentInput, idempotencyKey?: string) {
   const key = idempotencyKey?.trim() || null;
   if (key && key.length > 120) throw new AppError("INVALID_IDEMPOTENCY_KEY", "Idempotency-Key 不能超过 120 个字符");
-  // 通道必须由运营显式分配：不再有隐式创建/回落的默认通道。未分配就直接报错，
-  // 而不是猜一个通道出来 —— 猜错等于让钱进错账号。
-  const channel = input.channel ?? application.defaultChannel;
-  if (!application.defaultChannelId) throw new AppError("CHANNEL_NOT_ASSIGNED", "应用尚未分配收款通道，请先在「支付通道 → 通道分配」里分配一个通过检测的通道", 409);
-  if (channel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
-  const channelId = application.defaultChannelId;
-  // 保留 Serializable：本事务在取到订单行写锁之后还要用普通 SELECT 重读订单状态，而 MySQL 在
-  // Serializable 下会把普通 SELECT 隐式升级为加锁读，保证读到最新已提交版本。降到 REPEATABLE READ
-  // 时这些重读可能命中事务开始时的旧快照，从而在已经支付成功的订单上再建一笔支付单。
+  const routingGroupId = application.routingGroupId || null;
+  const requestedChannel = input.channel ?? application.defaultChannel;
+  const unassigned = !routingGroupId && !application.defaultChannelId;
+  if (unassigned && !key) throw new AppError("CHANNEL_NOT_ASSIGNED", "应用尚未绑定轮询组或收款通道，请先在后台分配", 409);
+  if (!routingGroupId && input.channel && requestedChannel !== application.defaultChannel && !key) {
+    throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
+  }
+  // 先锁订单，再选路：同一订单的幂等检查和 attemptNo 分配串行进行。
+  // READ COMMITTED 下，取得行锁后的普通 SELECT 读取最新提交值，不会命中旧快照；
+  // 避免 Serializable 将所有候选通道加共享读锁后，随机选择的排他锁升级发生死锁。
   const dispatch = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channelId} FOR UPDATE`;
-    const instance = await tx.channelInstance.findUniqueOrThrow({ where: { id: channelId } });
-    if (instance.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能再发起新支付，请为应用重新分配通道", 409);
-    if (!instance.enabled || instance.plugin !== channel) throw new AppError("CHANNEL_DISABLED", "所选通道未启用或插件不匹配", 409);
-    if (application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
-    if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true, channelId);
     await tx.$queryRaw`SELECT id FROM orders WHERE orderNo = ${orderNo} FOR UPDATE`;
     const order = await tx.order.findFirst({ where: { orderNo, applicationId: application.id, deletedAt: null } });
     if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
-    if (order.expiresAt && order.expiresAt <= new Date()) throw new AppError("ORDER_EXPIRED", "订单已过期", 409);
-    if (!["CREATED", "PENDING"].includes(order.status)) throw new AppError("ORDER_NOT_PAYABLE", `订单状态 ${order.status} 不允许发起支付`, 409);
     if (key) {
       const existing = await tx.payment.findUnique({ where: { orderId_idempotencyKey: { orderId: order.id, idempotencyKey: key } } });
+      // 不再抽签；幂等重试不受组停用、成员移除、应用改派或订单成功/过期影响。
       if (existing) return { payment: existing, shouldDispatch: false };
     }
+    if (order.expiresAt && order.expiresAt <= new Date()) throw new AppError("ORDER_EXPIRED", "订单已过期", 409);
+    if (!["CREATED", "PENDING"].includes(order.status)) throw new AppError("ORDER_NOT_PAYABLE", `订单状态 ${order.status} 不允许发起支付`, 409);
+    if (unassigned) throw new AppError("CHANNEL_NOT_ASSIGNED", "应用尚未绑定轮询组或收款通道，请先在后台分配", 409);
+    let routingStrategy: string | null = null;
+    let instance;
+    if (routingGroupId) {
+      const selection = await selectRoutingChannel(tx, routingGroupId, input.channel);
+      instance = selection.channel;
+      routingStrategy = selection.strategy;
+    } else {
+      if (requestedChannel !== application.defaultChannel) throw new AppError("CHANNEL_NOT_ASSIGNED", "请使用应用已分配的通道", 403);
+      const assignedId = application.defaultChannelId!;
+      await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${assignedId} FOR UPDATE`;
+      instance = await tx.channelInstance.findUniqueOrThrow({ where: { id: assignedId } });
+      if (instance.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能再发起新支付，请为应用重新分配通道", 409);
+      if (!instance.enabled || instance.plugin !== requestedChannel) throw new AppError("CHANNEL_DISABLED", "所选通道未启用或插件不匹配", 409);
+      if (application.appId !== "channel-diagnostics") await assertChannelVerified(instance, tx);
+    }
+    const channel = instance.plugin;
+    const channelId = instance.id;
+    if (channel === "ALIPAY_BILL") await billRuntimeConfig(tx, true, channelId);
     const count = await tx.payment.count({ where: { orderId: order.id } });
     const created = await tx.payment.create({
       data: {
@@ -59,6 +75,7 @@ export async function createPayment(application: Application, orderNo: string, i
         idempotencyKey: key,
         channel,
         channelId,
+        routingGroupId,
         method: input.method,
         amount: order.amount,
         channelAmount: order.amount,
@@ -69,7 +86,7 @@ export async function createPayment(application: Application, orderNo: string, i
     await tx.paymentEvent.create({ data: {
       aggregateType: "PAYMENT", aggregateId: prepared.paymentNo, orderId: order.id, paymentId: prepared.id,
       type: "PAYMENT_CREATED", source: "API", payload: {
-        channel, attemptNo: prepared.attemptNo, channelAmount: prepared.channelAmount,
+        channel, channelId, routingGroupId, routingStrategy, attemptNo: prepared.attemptNo, channelAmount: prepared.channelAmount,
         receiptMatchMode: prepared.receiptMatchMode, receiptMatchReference: prepared.receiptMatchReference,
       },
     } });
@@ -78,10 +95,10 @@ export async function createPayment(application: Application, orderNo: string, i
     } });
     await tx.paymentEvent.create({ data: {
       aggregateType: "PAYMENT", aggregateId: created.paymentNo, orderId: order.id, paymentId: created.id,
-      type: "CHANNEL_CREATE_REQUESTED", source: "API", payload: { channel },
+      type: "CHANNEL_CREATE_REQUESTED", source: "API", payload: { channel, channelId, routingGroupId, routingStrategy },
     } });
     return { payment: processing, shouldDispatch: true };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 
   const payment = dispatch.payment;
   if (!dispatch.shouldDispatch) return presentPayment(payment);
@@ -93,7 +110,7 @@ export async function createPayment(application: Application, orderNo: string, i
       businessAmount: payment.amount,
       subject: order.subject,
       description: order.description,
-      notifyUrl: `${config().API_PUBLIC_URL}/api/v1/channels/${channel.toLowerCase()}/webhook`,
+      notifyUrl: `${config().API_PUBLIC_URL}/api/v1/channels/${payment.channel.toLowerCase()}/webhook`,
       matchReference: payment.receiptMatchMode === "REMARK" ? payment.receiptMatchReference : null,
       validUntil: payment.receiptValidUntil,
     });

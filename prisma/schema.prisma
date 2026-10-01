@@ -41,6 +41,11 @@ enum PaymentChannelCode {
   MOCK
 }
 
+enum RoutingStrategy {
+  RANDOM
+  WEIGHTED_RANDOM
+}
+
 enum RefundStatus {
   CREATED
   PROCESSING
@@ -112,6 +117,8 @@ model Application {
   epayKeyEncrypted       String             @db.Text
   defaultChannel         PaymentChannelCode @default(MOCK)
   defaultChannelId       String?            @db.VarChar(80)
+  routingGroupId         String?            @db.VarChar(80)
+  routingGroup           RoutingGroup?      @relation(fields: [routingGroupId], references: [id], onDelete: SetNull)
   // 归档软删除标记：非空表示该应用已被管理端移除。行保留是因为历史订单、事件、退款推进与异常
   // 记录仍挂在它上面；应用列表不再展示，凭证立即失效，pausedAt 记录归档时刻用于区分新增与历史数据。
   archivedAt             DateTime?
@@ -122,6 +129,7 @@ model Application {
   refunds                Refund[]
   webhookDeliveries      WebhookDelivery[]
 
+  @@index([routingGroupId])
   @@index([status, createdAt])
   @@index([archivedAt, createdAt])
   @@map("applications")
@@ -183,6 +191,8 @@ model Payment {
   idempotencyKey        String?                  @db.VarChar(120)
   channel               PaymentChannelCode
   channelId             String?                  @db.VarChar(80)
+  // 历史选路来源快照，不参与查单或退款选路，组删除后仍保留。
+  routingGroupId        String?                  @db.VarChar(80)
   method                String                   @db.VarChar(32)
   status                PaymentStatus            @default(CREATED)
   amount                Int                      @db.UnsignedInt
@@ -218,6 +228,7 @@ model Payment {
   @@index([status, nextQueryAt, id])
   @@index([channel, receiptMatchReference])
   @@index([channelId, status])
+  @@index([routingGroupId, createdAt])
   @@index([channel, channelAmount, receiptValidUntil])
   @@index([status, paidAt])
   @@map("payments")
@@ -245,9 +256,39 @@ model ChannelInstance {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
 
+  routingMembers   RoutingGroupMember[]
+
   @@index([plugin, createdAt])
   @@index([archivedAt, createdAt])
   @@map("channel_instances")
+}
+
+model RoutingGroup {
+  id           String               @id @default(cuid()) @db.VarChar(80)
+  name         String               @db.VarChar(120)
+  strategy     RoutingStrategy      @default(RANDOM)
+  enabled      Boolean              @default(true)
+  revision     Int                  @default(1)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  members      RoutingGroupMember[]
+  applications Application[]
+
+  @@index([enabled, createdAt])
+  @@map("routing_groups")
+}
+
+model RoutingGroupMember {
+  groupId   String          @db.VarChar(80)
+  channelId String          @db.VarChar(80)
+  weight    Int             @default(1) @db.UnsignedInt
+  enabled   Boolean         @default(true)
+  group     RoutingGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  channel   ChannelInstance @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, channelId])
+  @@index([channelId])
+  @@map("routing_group_members")
 }
 
 model Refund {

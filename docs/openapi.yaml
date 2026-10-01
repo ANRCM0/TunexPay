@@ -49,13 +49,15 @@ paths:
                 channel:
                   type: string
                   enum: [ALIPAY, ALIPAY_BILL, MOCK]
-                  description: 插件类型；已分配通道实例的应用必须与该实例插件一致，省略时使用应用默认实例。具体实例由管理员分配，客户端不能任意选择。
+                  description: 可选插件筛选。单通道应用必须与已分配实例一致；轮询组应用仅在绑定组内筛选该插件的可用成员。省略时按绑定组规则随机选路，旧单通道绑定保持兼容；客户端不能指定组外实例。
                 method:
                   type: string
                   default: alipay
       responses:
         '201':
-          description: 支付尝试与 cashierUrl
+          description: 支付尝试与 cashierUrl；包含实际 channel/channelId 和可空 routingGroupId。相同幂等键复用原支付，不重新随机选路。
+        '409':
+          description: 订单不可支付、收款路由未绑定、轮询组停用或组内没有可用通道。
   /payments/{paymentNo}:
     get:
       summary: 读取本地支付状态

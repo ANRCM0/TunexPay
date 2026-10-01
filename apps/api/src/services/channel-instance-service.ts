@@ -259,7 +259,7 @@ export async function assignChannel(applicationId: string, channelId: string) {
     await assertChannelVerified(latest, tx);
     const app = await tx.application.findUnique({ where: { id: applicationId } });
     if (!app) throw new AppError("APPLICATION_NOT_FOUND", "应用不存在", 404);
-    await tx.application.update({ where: { id: applicationId }, data: { defaultChannel: row.plugin, defaultChannelId: row.id } });
-    return { id: applicationId, defaultChannel: row.plugin, defaultChannelId: row.id };
+    await tx.application.update({ where: { id: applicationId }, data: { defaultChannel: row.plugin, defaultChannelId: row.id, routingGroupId: null } });
+    return { id: applicationId, defaultChannel: row.plugin, defaultChannelId: row.id, routingGroupId: null };
   });
 }
