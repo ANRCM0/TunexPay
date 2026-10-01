@@ -76,6 +76,16 @@
 .table-wrap { overflow-x: auto; position: relative; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th { position: sticky; top: 0; z-index: 2; background: #f7f8fa; color: var(--muted); font-size: 11px; letter-spacing: .04em; text-align: left; font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+
+/* 可排序表头：整格是按钮，但视觉上仍像表头文字，不改变行高 */
+.th-sort { padding: 0; }
+.th-sort-button { display: inline-flex; align-items: center; gap: 5px; width: 100%; padding: 10px 12px; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; border-radius: 6px; transition: color .12s ease, background .12s ease; }
+.th-sort-button:hover { color: var(--ink); background: #eef1f6; }
+.th-sort-button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.th-sort-button.active { color: var(--primary); }
+.th-sort-icon { display: inline-flex; opacity: .45; transition: opacity .12s ease; }
+.th-sort-button:hover .th-sort-icon, .th-sort-button.active .th-sort-icon { opacity: 1; }
+.th-sort-right .th-sort-button { justify-content: flex-end; }
 .amount-cell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 td { padding: 12px; border-bottom: 1px solid #eef1f6; vertical-align: top; transition: background .12s ease; }
 tbody tr:hover td { background: #f8faff; }
