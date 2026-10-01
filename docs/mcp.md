@@ -1,57 +1,150 @@
-# TuneXPay MCP（只读）
+# TuneXPay MCP / Agent Access
 
-TuneXPay 提供一个可选的 MCP HTTP endpoint，让 DSH、ChatGPT、Claude 等 Agent 查询支付系统。第一阶段严格只读，不能退款、关单、改状态、改配置或读取任何密钥。
+TuneXPay 是 **MCP Tool Server**，不是 Agent Runtime。
 
-## 开启
+Codex、Hermes、OpenClaw、DSH 等外部 Agent 负责理解用户意图、规划和对话；TuneXPay 只负责暴露受控工具、验证权限、记录审计，并把资金动作送入人工审批。
 
-默认关闭：
-
-```env
-MCP_ENABLED=false
-MCP_TOKEN=
+```text
+Codex / Hermes / OpenClaw / DSH
+              |
+      Streamable HTTP MCP
+              |
+        TuneXPay /mcp
+              |
+       McpClient Policy
+     Scope + Tool Allowlist
+              |
+        MCP Tool Registry
+              |
+     TuneXPay Core Services
+              |
+ FINANCIAL → Human Approval
 ```
 
-生产环境开启时：
-
-```env
-MCP_ENABLED=true
-MCP_TOKEN=<至少 32 字符的独立随机 token>
-```
-
-**不要复用 `ADMIN_TOKEN`。** MCP Token 只授予 MCP 查询面，便于后续单独轮换和进一步做 scope。
-
-Appliance 对外 endpoint：
+## Endpoint
 
 ```text
 POST https://pay.example.com/mcp
-Authorization: Bearer <MCP_TOKEN>
+Authorization: Bearer <TOKEN>
 Content-Type: application/json
 ```
 
-Gateway 会把 `/mcp` 直接路由到 Hono API。服务采用无 session 的 Streamable HTTP JSON-RPC 形态，支持 `initialize`、`notifications/initialized`、`ping`、`tools/list` 和 `tools/call`，当前协议版本为 `2026-07-28`，并兼容常见 2025 协议版本的 initialize 协商。
+使用管理后台 **系统 → MCP / Agent Access** 为每个外部 Agent 单独创建 Token。
 
-## 工具
+旧的环境变量 `MCP_TOKEN` 继续作为向后兼容的 READ-only 凭证。新客户端不应共用它。
 
-| Tool | 能力 |
-|---|---|
-| `tunexpay_system_status` | API / MySQL / Redis / Worker / 队列状态 |
-| `tunexpay_dashboard` | 当日看板汇总 |
-| `tunexpay_list_applications` | 在用业务应用 |
-| `tunexpay_list_orders` | 最近订单，可按状态过滤 |
-| `tunexpay_get_order` | 单个订单完整支付/退款/事件/业务 Webhook 历史 |
-| `tunexpay_list_payments` | 最近支付尝试 |
-| `tunexpay_list_refunds` | 最近退款 |
-| `tunexpay_list_exceptions` | 支付异常 |
-| `tunexpay_list_channels` | 支付通道与检测状态，不返回凭据 |
-| `tunexpay_list_notifications` | 管理员通知投递 |
+## 客户端权限
+
+每个 `McpClient` 都有：
+
+- 独立 Token（只显示一次，数据库只保存 SHA-256）
+- 名称，例如 Hermes / Codex / OpenClaw
+- `READ / OPERATE / FINANCIAL` 最大 Scope
+- 精确 Tool Allowlist
+- 启用 / 停用
+- 可选过期时间
+- Last Used
+- 独立调用审计
+
+Scope 是权限上限，Tool Allowlist 是第二层限制。例如 Hermes 可以是 `OPERATE`，但只开放：
+
+```text
+tunexpay_system_status
+tunexpay_get_order
+tunexpay_list_exceptions
+tunexpay_query_payment
+tunexpay_retry_business_webhook
+```
+
+即使它具有 OPERATE Scope，也无法调用未加入 Allowlist 的其它 OPERATE 工具。
+
+## Scope
+
+### READ
+
+查询：
+
+- 系统状态 / Dashboard
+- 应用
+- 订单及完整订单详情
+- 支付
+- 退款
+- 支付异常
+- 支付通道
+- 管理员通知
+- MCP 人工审批状态
+
+### OPERATE
+
+包含 READ，并可按 Allowlist 开放：
+
+- 主动查询支付状态
+- 主动查询退款状态
+- 检测支付通道
+- 重试业务 Webhook
+- 重试管理员通知
+- 启停通知实例
+
+这些动作仍调用 TuneXPay 原有 service / state machine，不提供任意 SQL 或任意内部函数调用。
+
+### FINANCIAL
+
+包含 OPERATE，但资金相关工具仍然 **不能直接执行**：
+
+- `tunexpay_request_refund`
+- `tunexpay_request_payment_close`
+- `tunexpay_request_exception_resolution`
+
+调用只会创建一个 15 分钟有效的 `McpActionApproval`。管理员必须到 **MCP / Agent Access** 页面确认后，TuneXPay 才通过现有退款、关闭支付或异常处理服务执行。
+
+## 审计
+
+每一次 `tools/call` 都记录：
+
+- MCP 客户端
+- Scope
+- Tool
+- 截断并脱敏后的参数摘要
+- 成功 / 失败
+- 错误码
+- 耗时
+- Request ID
+- 来源 IP / User-Agent
+- 时间
+
+不会记录 Bearer Token、密码、Secret、API Key 或私钥。
+
+## Token 轮换与吊销
+
+- **轮换 Token**：立即生成新 Token，旧 Token 立即失效。
+- **停用客户端**：该客户端 Token 立即无法认证。
+- Token 明文只在创建或轮换时返回一次。
+- 建议 Codex、Hermes、OpenClaw 等各自使用独立客户端，不共享 Token。
+
+## 外部 Agent 接入
+
+TuneXPay 不关心 Agent 是通过 Telegram、飞书、CLI、Web 还是其它界面和你交互。
+
+例如：
+
+```text
+Telegram → Hermes → TuneXPay MCP
+CLI      → Codex  → TuneXPay MCP
+Feishu   → OpenClaw → TuneXPay MCP
+```
+
+在外部 Agent 的 Streamable HTTP MCP 配置中填入：
+
+- URL：管理台显示的 `/mcp` Endpoint
+- Header：`Authorization: Bearer <该 Agent 的独立 Token>`
+
+具体配置文件格式由 Codex / Hermes / OpenClaw 自身决定，TuneXPay 不在内部运行这些 Agent。
 
 ## 安全边界
 
-MCP 层不会暴露以下能力：
-
-- `markPaymentSucceeded` 或任何直接资金状态写入；
-- 创建退款、关闭支付、异常处置；
-- API Key、Webhook Secret、支付通道密钥、通知插件 Secret；
-- 任意 SQL / 任意 URL fetch。
-
-后续如果增加操作型 MCP，应将 READ / OPERATE / FINANCIAL 分层，并让资金动作经过显式人工确认，而不是扩大当前 Token 的权限。
+- 没有模型 API Key、对话历史或 LLM runtime 存在 TuneXPay 中。
+- 外部 Agent 无法直接访问数据库。
+- Tool Scope 和 Allowlist 同时通过才可调用。
+- FINANCIAL 工具只能申请人工审批。
+- `markPaymentSucceeded` 等核心资金不变量不会暴露为 MCP Tool。
+- 每个外部 Agent 可以单独轮换、停用和审计。
