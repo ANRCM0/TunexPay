@@ -38,6 +38,7 @@ async function completion(baseUrl: string, apiKey: string, model: string, messag
     }),
   });
   const text = await response.text();
+  if (Buffer.byteLength(text) > 1_000_000) throw new Error("AGENT_MODEL_RESPONSE_TOO_LARGE");
   if (!response.ok) throw new Error(`AGENT_MODEL_HTTP_${response.status}: ${text.slice(0,200)}`);
   return responseSchema.parse(JSON.parse(text)).choices[0]!.message;
 }

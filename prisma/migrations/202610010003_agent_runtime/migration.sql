@@ -24,7 +24,7 @@ CREATE TABLE `agent_inbox` (
   `lastError` VARCHAR(500) NULL,
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL,
-  UNIQUE INDEX `agent_inbox_provider_eventId_key`(`provider`,`eventId`),
+  UNIQUE INDEX `agent_inbox_provider_instanceId_eventId_key`(`provider`,`instanceId`,`eventId`),
   INDEX `agent_inbox_status_nextAttemptAt_idx`(`status`,`nextAttemptAt`),
   INDEX `agent_inbox_conversationKey_createdAt_idx`(`conversationKey`,`createdAt`),
   PRIMARY KEY (`id`)

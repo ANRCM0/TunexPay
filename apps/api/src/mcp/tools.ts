@@ -7,7 +7,7 @@ import { checkChannel } from "../services/channel-instance-service.js";
 import { retryNotificationDelivery, setNotificationInstanceEnabled } from "../services/notification-instance-service.js";
 import { queryPayment } from "../services/payment-service.js";
 import { queryRefund } from "../services/refund-service.js";
-import { requestAgentAction } from "../services/agent-approval-service.js";
+import { listAgentActions, requestAgentAction } from "../services/agent-approval-service.js";
 import { AppError } from "../lib/errors.js";
 
 export type ToolScope = "READ" | "OPERATE" | "FINANCIAL";
@@ -106,7 +106,7 @@ const tools: Definition[] = [
     name: "tunexpay_list_agent_approvals", scope: "READ",
     description: "List recent human-approval requests created by agents or MCP clients.",
     inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false },
-    execute: async input => db.agentActionApproval.findMany({ select: { id: true, action: true, summary: true, requestedBy: true, status: true, expiresAt: true, approvedAt: true, rejectedAt: true, executedAt: true, lastError: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: limitOf(input.limit) }),
+    execute: async input => listAgentActions(limitOf(input.limit)),
   },
   {
     name: "tunexpay_retry_business_webhook", scope: "OPERATE",

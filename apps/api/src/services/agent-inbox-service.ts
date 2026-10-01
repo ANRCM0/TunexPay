@@ -19,6 +19,7 @@ export async function listAgentInbox(limit=50){
 }
 
 export async function runAgentInbox(){
+  await db.agentInbox.updateMany({where:{status:"PROCESSING",lockedUntil:{lt:new Date()}},data:{status:"PENDING",lockedUntil:null,nextAttemptAt:new Date(),lastError:"AGENT_WORKER_LEASE_EXPIRED"}});
   const task=await db.agentInbox.findFirst({where:{status:"PENDING",nextAttemptAt:{lte:new Date()}},orderBy:{createdAt:"asc"}});
   if(!task) return {claimed:0};
   const lockedUntil=new Date(Date.now()+120_000);

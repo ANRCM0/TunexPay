@@ -40,6 +40,7 @@ export async function loadAgentRuntimeSettings() {
 }
 export async function saveAgentSettings(raw: unknown) {
   const input = agentSettingsInput.parse(raw);
+  await row();
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM agent_settings WHERE id = ${ID} FOR UPDATE`;
     const current = await tx.agentSettings.findUnique({ where: { id: ID } });

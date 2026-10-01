@@ -640,7 +640,7 @@ model AgentInbox {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@unique([provider, eventId])
+  @@unique([provider, instanceId, eventId])
   @@index([status, nextAttemptAt])
   @@index([conversationKey, createdAt])
   @@map("agent_inbox")
