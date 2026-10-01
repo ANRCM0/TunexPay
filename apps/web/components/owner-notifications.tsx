@@ -130,21 +130,6 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
     finally { onBusy(false); }
   }
 
-  async function setupAgentIngress() {
-    onBusy(true); onNotice(null);
-    try {
-      if (instance.plugin === "TELEGRAM") {
-        const result = await api<{ data: { url: string } }>(`/agent/telegram/${instance.id}/register`, { method: "POST", body: "{}" });
-        onNotice({ type: "ok", text: `Telegram Webhook 已注册：${result.data.url}` });
-      } else if (instance.plugin === "FEISHU_APP") {
-        const result = await api<{ data: { url: string } }>(`/agent/ingress/${instance.id}`);
-        await navigator.clipboard?.writeText(result.data.url);
-        onNotice({ type: "ok", text: `飞书事件回调地址已复制：${result.data.url}` });
-      }
-    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "Agent 入口配置失败" }); }
-    finally { onBusy(false); }
-  }
-
   async function remove() {
     if (!window.confirm(`删除通知实例「${instance.name}」？有历史投递时会归档并停止未发送任务。`)) return;
     onBusy(true); onNotice(null);
@@ -168,7 +153,6 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
     <div className="settings-actions">
       <button className="button" type="button" onClick={() => void save()}>保存</button>
       <button className="button secondary" type="button" disabled={!instance.enabled} onClick={() => void test()}>发送测试</button>
-      {(instance.plugin === "TELEGRAM" || instance.plugin === "FEISHU_APP") && Boolean(config.agentEnabled) && <button className="button secondary" type="button" onClick={() => void setupAgentIngress()}>{instance.plugin === "TELEGRAM" ? "注册 Agent Webhook" : "复制 Agent 回调地址"}</button>}
       <button className="link-button" type="button" onClick={() => void remove()}>删除</button>
     </div>
   </fieldset>;

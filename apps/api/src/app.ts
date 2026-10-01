@@ -13,7 +13,6 @@ import { channelRoutes } from "./routes/channels.js";
 import { epayRoutes } from "./routes/epay.js";
 import { nativeRoutes } from "./routes/native.js";
 import { mcpRoutes } from "./routes/mcp.js";
-import { agentIngressRoutes } from "./routes/agent-ingress.js";
 
 export const app = new Hono<AppEnv>();
 app.use("*", secureHeaders());
@@ -22,7 +21,6 @@ app.use("*", requestContext);
 
 app.get("/health", (c) => c.json({ status: "ok", service: "tuoxin-pay-api", version: "0.1.0" }));
 app.route("/mcp", mcpRoutes);
-app.route("/agent", agentIngressRoutes);
 app.route("/api/v1", nativeRoutes);
 app.route("/api/v1/channels", channelRoutes);
 app.route("/admin/v1", adminRoutes);

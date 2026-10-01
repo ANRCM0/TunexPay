@@ -484,6 +484,8 @@ v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守
 - 业务系统的支付成功 / 退款成功 Webhook 仍属于支付协议，不会被通知插件替代。
 
 
-### Agent（Phase 4–6）
+## MCP / 外部 Agent
 
-TuneXPay 现在支持分级 MCP（READ / OPERATE / FINANCIAL-request）、人工资金审批，以及基于同一 MCP Tool Registry 的 OpenAI-compatible Agent。Telegram Bot 和飞书应用可同时作为通知出口与 Agent 对话入口。详见 [docs/agent.md](docs/agent.md) 和 [docs/mcp.md](docs/mcp.md)。
+TuneXPay 可以作为 Codex、Hermes、OpenClaw、DSH 等外部 Agent 的 MCP Tool Server。管理后台可以为每个 Agent 创建独立 MCP Token，并配置 READ / OPERATE / FINANCIAL-request Scope、精确 Tool Allowlist、有效期、轮换/停用和调用审计。资金相关工具只创建短时人工审批，不会由 Agent 直接执行。
+
+TuneXPay 本身不运行 LLM，也不接管 Telegram / 飞书对话；这些入口属于外部 Agent。详见 [docs/mcp.md](docs/mcp.md)。

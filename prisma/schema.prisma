@@ -589,8 +589,51 @@ model AdminAuditLog {
 }
 
 
-model AgentActionApproval {
+model McpClient {
+  id           String        @id @db.VarChar(64)
+  name         String        @db.VarChar(120)
+  tokenHash    String        @unique @db.Char(64)
+  tokenPrefix  String        @db.VarChar(20)
+  scope        String        @default("READ") @db.VarChar(16)
+  allowedTools Json
+  enabled      Boolean       @default(true)
+  revision     Int           @default(1)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  audits       McpAuditLog[]
+
+  @@index([enabled, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_clients")
+}
+
+model McpAuditLog {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  clientId         String?    @db.VarChar(64)
+  clientName       String     @db.VarChar(120)
+  scope            String     @db.VarChar(16)
+  tool             String     @db.VarChar(100)
+  argumentsSummary Json?
+  success          Boolean
+  durationMs       Int        @db.UnsignedInt
+  errorCode        String?    @db.VarChar(80)
+  requestId        String?    @db.VarChar(64)
+  ipAddress        String?    @db.VarChar(64)
+  userAgent        String?    @db.VarChar(500)
+  createdAt        DateTime   @default(now())
+  client           McpClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([tool, createdAt])
+  @@index([success, createdAt])
+  @@map("mcp_audit_logs")
+}
+
+model McpActionApproval {
   id          String   @id @db.VarChar(64)
+  clientId    String?  @db.VarChar(64)
   action      String   @db.VarChar(40)
   arguments   Json
   summary     String   @db.VarChar(500)
@@ -606,54 +649,8 @@ model AgentActionApproval {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([clientId, createdAt])
   @@index([status, expiresAt])
   @@index([createdAt])
-  @@map("agent_action_approvals")
-}
-
-
-model AgentSettings {
-  id               String   @id @db.VarChar(40)
-  revision         Int      @default(1)
-  enabled          Boolean  @default(false)
-  payloadEncrypted String   @db.LongText
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@map("agent_settings")
-}
-
-model AgentInbox {
-  id              String   @id @default(cuid())
-  provider        String   @db.VarChar(16)
-  eventId         String   @db.VarChar(160)
-  instanceId      String   @db.VarChar(80)
-  conversationKey String   @db.VarChar(255)
-  chatId          String   @db.VarChar(200)
-  senderId        String   @db.VarChar(200)
-  text            String   @db.Text
-  status          String   @default("PENDING") @db.VarChar(16)
-  attempts        Int      @default(0)
-  nextAttemptAt   DateTime @default(now())
-  lockedUntil     DateTime?
-  lastError       String?  @db.VarChar(500)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([provider, instanceId, eventId])
-  @@index([status, nextAttemptAt])
-  @@index([conversationKey, createdAt])
-  @@map("agent_inbox")
-}
-
-model AgentMessage {
-  id              String   @id @default(cuid())
-  conversationKey String   @db.VarChar(255)
-  role            String   @db.VarChar(16)
-  content         String   @db.Text
-  actor           String?  @db.VarChar(200)
-  createdAt       DateTime @default(now())
-
-  @@index([conversationKey, createdAt])
-  @@map("agent_messages")
+  @@map("mcp_action_approvals")
 }

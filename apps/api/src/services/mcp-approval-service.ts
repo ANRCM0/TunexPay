@@ -8,14 +8,14 @@ import { createRefund } from "./refund-service.js";
 import { updatePaymentException } from "./payment-exception-service.js";
 
 const ACTIONS = ["CLOSE_PAYMENT", "CREATE_REFUND", "RESOLVE_EXCEPTION"] as const;
-export type AgentAction = typeof ACTIONS[number];
+export type McpAction = typeof ACTIONS[number];
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function requestAgentAction(action: AgentAction, raw: unknown, requestedBy: string) {
-  const id = `act_${randomUUID().replaceAll("-", "")}`;
+export async function requestMcpAction(action: McpAction, raw: unknown, requestedBy: string, clientId?: string | null) {
+  const id = `mcpact_${randomUUID().replaceAll("-", "")}`;
   let args: Record<string, unknown>;
   let summary: string;
 
@@ -23,7 +23,7 @@ export async function requestAgentAction(action: AgentAction, raw: unknown, requ
     const input = z.object({ paymentNo: z.string().min(1).max(40), reason: z.string().trim().min(2).max(300) }).parse(raw);
     const payment = await db.payment.findUnique({ where: { paymentNo: input.paymentNo }, include: { order: true } });
     if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
-    if (payment.status === "SUCCESS") throw new AppError("PAYMENT_ALREADY_SUCCESS", "成功支付不能通过 Agent 关闭", 409);
+    if (payment.status === "SUCCESS") throw new AppError("PAYMENT_ALREADY_SUCCESS", "成功支付不能通过 MCP 关闭", 409);
     args = input;
     summary = `关闭支付单 ${input.paymentNo}（订单 ${payment.order.orderNo}）：${input.reason}`;
   } else if (action === "CREATE_REFUND") {
@@ -31,7 +31,7 @@ export async function requestAgentAction(action: AgentAction, raw: unknown, requ
     const payment = await db.payment.findUnique({ where: { paymentNo: input.paymentNo }, include: { order: true } });
     if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
     if (payment.status !== "SUCCESS") throw new AppError("PAYMENT_NOT_REFUNDABLE", "只有成功支付单可以申请退款", 409);
-    args = { ...input, externalRefundNo: `agent_${id}` };
+    args = { ...input, externalRefundNo: `mcp_${id}` };
     summary = `退款 ${(input.amount / 100).toFixed(2)} 元：支付单 ${input.paymentNo}（订单 ${payment.order.orderNo}），原因：${input.reason}`;
   } else {
     const input = z.object({
@@ -46,50 +46,50 @@ export async function requestAgentAction(action: AgentAction, raw: unknown, requ
     summary = `${input.status === "RESOLVED" ? "解决" : "忽略"}支付异常 ${exception.exceptionNo}：${input.resolution}`;
   }
 
-  return db.agentActionApproval.create({
+  return db.mcpActionApproval.create({
     data: {
-      id, action, arguments: jsonValue(args), summary, requestedBy: requestedBy.slice(0, 120),
-      expiresAt: new Date(Date.now() + 15 * 60_000),
+      id, clientId: clientId ?? null, action, arguments: jsonValue(args), summary,
+      requestedBy: requestedBy.slice(0, 120), expiresAt: new Date(Date.now() + 15 * 60_000),
     },
   });
 }
 
 async function expirePending() {
-  await db.agentActionApproval.updateMany({
+  await db.mcpActionApproval.updateMany({
     where: { status: "PENDING", expiresAt: { lte: new Date() } },
     data: { status: "EXPIRED" },
   });
 }
 
-export async function listAgentActions(limit = 50) {
+export async function listMcpActions(limit = 50) {
   await expirePending();
-  return db.agentActionApproval.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(100, Math.max(1, limit)) });
+  return db.mcpActionApproval.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(100, Math.max(1, limit)) });
 }
 
-export async function rejectAgentAction(id: string, rejectedBy = "admin") {
+export async function rejectMcpAction(id: string, rejectedBy = "admin") {
   await expirePending();
-  const changed = await db.agentActionApproval.updateMany({
+  const changed = await db.mcpActionApproval.updateMany({
     where: { id, status: "PENDING", expiresAt: { gt: new Date() } },
     data: { status: "REJECTED", rejectedAt: new Date(), approvedBy: rejectedBy.slice(0, 120) },
   });
-  if (!changed.count) throw new AppError("AGENT_ACTION_NOT_PENDING", "该动作已处理或已过期", 409);
-  return db.agentActionApproval.findUniqueOrThrow({ where: { id } });
+  if (!changed.count) throw new AppError("MCP_ACTION_NOT_PENDING", "该动作已处理或已过期", 409);
+  return db.mcpActionApproval.findUniqueOrThrow({ where: { id } });
 }
 
-export async function approveAgentAction(id: string, approvedBy = "admin") {
+export async function approveMcpAction(id: string, approvedBy = "admin") {
   await expirePending();
-  const claimed = await db.agentActionApproval.updateMany({
+  const claimed = await db.mcpActionApproval.updateMany({
     where: { id, status: "PENDING", expiresAt: { gt: new Date() } },
     data: { status: "APPROVED", approvedAt: new Date(), approvedBy: approvedBy.slice(0, 120) },
   });
-  if (!claimed.count) throw new AppError("AGENT_ACTION_NOT_PENDING", "该动作已处理或已过期", 409);
-  const action = await db.agentActionApproval.findUniqueOrThrow({ where: { id } });
+  if (!claimed.count) throw new AppError("MCP_ACTION_NOT_PENDING", "该动作已处理或已过期", 409);
+  const action = await db.mcpActionApproval.findUniqueOrThrow({ where: { id } });
   const args = action.arguments as Record<string, unknown>;
   try {
     let result: unknown;
     if (action.action === "CLOSE_PAYMENT") {
       const input = z.object({ paymentNo: z.string(), reason: z.string() }).parse(args);
-      result = await closePayment(null, input.paymentNo, "AGENT_APPROVAL");
+      result = await closePayment(null, input.paymentNo, "MCP_APPROVAL");
     } else if (action.action === "CREATE_REFUND") {
       const input = z.object({ paymentNo: z.string(), externalRefundNo: z.string(), amount: z.number().int().positive(), reason: z.string() }).parse(args);
       const payment = await db.payment.findUnique({ where: { paymentNo: input.paymentNo }, include: { order: { include: { application: true } } } });
@@ -99,12 +99,18 @@ export async function approveAgentAction(id: string, approvedBy = "admin") {
       const input = z.object({ exceptionId: z.string(), status: z.enum(["RESOLVED", "IGNORED"]), resolution: z.string(), resolutionRef: z.string().optional() }).parse(args);
       result = await updatePaymentException(input.exceptionId, { status: input.status, resolution: input.resolution, resolutionRef: input.resolutionRef });
     } else {
-      throw new AppError("AGENT_ACTION_UNSUPPORTED", "不支持的 Agent 动作", 409);
+      throw new AppError("MCP_ACTION_UNSUPPORTED", "不支持的 MCP 动作", 409);
     }
-    return db.agentActionApproval.update({ where: { id }, data: { status: "EXECUTED", executedAt: new Date(), result: jsonValue(result), lastError: null } });
+    return db.mcpActionApproval.update({
+      where: { id },
+      data: { status: "EXECUTED", executedAt: new Date(), result: jsonValue(result), lastError: null },
+    });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    await db.agentActionApproval.update({ where: { id }, data: { status: "FAILED", executedAt: new Date(), lastError: message.slice(0, 500) } });
+    await db.mcpActionApproval.update({
+      where: { id },
+      data: { status: "FAILED", executedAt: new Date(), lastError: message.slice(0, 500) },
+    });
     throw cause;
   }
 }

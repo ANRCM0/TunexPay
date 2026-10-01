@@ -13,8 +13,6 @@ function targetFor(url = "/") {
     apiExactPaths.has(pathname) ||
     pathname === "/api/v1" ||
     pathname.startsWith("/api/v1/") ||
-    pathname === "/agent" ||
-    pathname.startsWith("/agent/") ||
     pathname === "/admin/v1" ||
     pathname.startsWith("/admin/v1/")
   ) {
