@@ -610,3 +610,50 @@ model AgentActionApproval {
   @@index([createdAt])
   @@map("agent_action_approvals")
 }
+
+
+model AgentSettings {
+  id               String   @id @db.VarChar(40)
+  revision         Int      @default(1)
+  enabled          Boolean  @default(false)
+  payloadEncrypted String   @db.LongText
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("agent_settings")
+}
+
+model AgentInbox {
+  id              String   @id @default(cuid())
+  provider        String   @db.VarChar(16)
+  eventId         String   @db.VarChar(160)
+  instanceId      String   @db.VarChar(80)
+  conversationKey String   @db.VarChar(255)
+  chatId          String   @db.VarChar(200)
+  senderId        String   @db.VarChar(200)
+  text            String   @db.Text
+  status          String   @default("PENDING") @db.VarChar(16)
+  attempts        Int      @default(0)
+  nextAttemptAt   DateTime @default(now())
+  lockedUntil     DateTime?
+  lastError       String?  @db.VarChar(500)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([provider, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([conversationKey, createdAt])
+  @@map("agent_inbox")
+}
+
+model AgentMessage {
+  id              String   @id @default(cuid())
+  conversationKey String   @db.VarChar(255)
+  role            String   @db.VarChar(16)
+  content         String   @db.Text
+  actor           String?  @db.VarChar(200)
+  createdAt       DateTime @default(now())
+
+  @@index([conversationKey, createdAt])
+  @@map("agent_messages")
+}

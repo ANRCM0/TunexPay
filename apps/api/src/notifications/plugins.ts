@@ -127,11 +127,18 @@ const feishuBot: NotificationPlugin = {
   },
 };
 
+const boolish = z.union([z.boolean(), z.enum(["true", "false"]).transform(value => value === "true")]);
 const telegramSchema = z.object({
   botToken: z.string().trim().regex(/^\d{6,12}:[A-Za-z0-9_-]{30,80}$/),
   chatId: z.string().trim().regex(/^-?\d+$/),
   threadId: z.coerce.number().int().positive().nullable().optional(),
-}).strict();
+  agentEnabled: boolish.default(false),
+  agentWebhookSecret: z.string().regex(/^[A-Za-z0-9_-]{0,256}$/).default(""),
+  agentAllowedChatIds: z.string().max(2000).default(""),
+  agentAllowedUserIds: z.string().max(2000).default(""),
+}).strict().superRefine((value, ctx) => {
+  if (value.agentEnabled && !value.agentWebhookSecret) ctx.addIssue({ code: "custom", path: ["agentWebhookSecret"], message: "启用 Agent 时必须配置 Webhook Secret" });
+});
 const telegram: NotificationPlugin = {
   code: "TELEGRAM",
   name: "Telegram Bot",
@@ -141,9 +148,13 @@ const telegram: NotificationPlugin = {
     { key: "botToken", label: "Bot Token", type: "password", required: true, secret: true },
     { key: "chatId", label: "Chat ID", type: "text", required: true },
     { key: "threadId", label: "Thread ID（选填）", type: "number" },
+    { key: "agentEnabled", label: "Agent 对话入口", type: "select", options: [{ value: "false", label: "关闭" }, { value: "true", label: "启用" }] },
+    { key: "agentWebhookSecret", label: "Agent Webhook Secret", type: "password", secret: true },
+    { key: "agentAllowedChatIds", label: "允许的 Chat ID（逗号分隔，留空=仅上方 Chat ID）", type: "text" },
+    { key: "agentAllowedUserIds", label: "允许的 User ID（逗号分隔，选填）", type: "text" },
   ],
-  normalizeConfig(raw, previous) { return telegramSchema.parse(mergeSecrets(raw, previous, ["botToken"])); },
-  publicConfig(config) { return publicConfig(config, ["botToken"]); },
+  normalizeConfig(raw, previous) { return telegramSchema.parse(mergeSecrets(raw, previous, ["botToken", "agentWebhookSecret"])); },
+  publicConfig(config) { return publicConfig(config, ["botToken", "agentWebhookSecret"]); },
   async send(input, config) {
     const value = telegramSchema.parse(config);
     const response = await fetch(`https://api.telegram.org/bot${value.botToken}/sendMessage`, {
@@ -190,7 +201,13 @@ const feishuAppSchema = z.object({
   appSecret: z.string().min(8).max(500),
   receiveIdType: z.enum(["open_id", "user_id", "union_id", "email", "chat_id"]),
   receiveId: z.string().trim().min(1).max(200),
-}).strict();
+  agentEnabled: boolish.default(false),
+  verificationToken: z.string().max(500).default(""),
+  agentAllowedChatIds: z.string().max(2000).default(""),
+  agentAllowedOpenIds: z.string().max(2000).default(""),
+}).strict().superRefine((value, ctx) => {
+  if (value.agentEnabled && !value.verificationToken) ctx.addIssue({ code: "custom", path: ["verificationToken"], message: "启用 Agent 时必须配置 Verification Token" });
+});
 const feishuApp: NotificationPlugin = {
   code: "FEISHU_APP",
   name: "飞书应用",
@@ -203,9 +220,13 @@ const feishuApp: NotificationPlugin = {
       { value: "open_id", label: "open_id" }, { value: "user_id", label: "user_id" }, { value: "union_id", label: "union_id" }, { value: "email", label: "email" }, { value: "chat_id", label: "chat_id" },
     ] },
     { key: "receiveId", label: "接收 ID", type: "text", required: true },
+    { key: "agentEnabled", label: "Agent 对话入口", type: "select", options: [{ value: "false", label: "关闭" }, { value: "true", label: "启用" }] },
+    { key: "verificationToken", label: "事件 Verification Token", type: "password", secret: true },
+    { key: "agentAllowedChatIds", label: "允许的 Chat ID（逗号分隔）", type: "text" },
+    { key: "agentAllowedOpenIds", label: "允许的用户 Open ID（逗号分隔）", type: "text" },
   ],
-  normalizeConfig(raw, previous) { return feishuAppSchema.parse(mergeSecrets(raw, previous, ["appSecret"])); },
-  publicConfig(config) { return publicConfig(config, ["appSecret"]); },
+  normalizeConfig(raw, previous) { return feishuAppSchema.parse(mergeSecrets(raw, previous, ["appSecret", "verificationToken"])); },
+  publicConfig(config) { return publicConfig(config, ["appSecret", "verificationToken"]); },
   async send(input, config) {
     const value = feishuAppSchema.parse(config);
     const tokenResponse = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
