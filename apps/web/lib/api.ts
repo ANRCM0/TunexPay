@@ -20,7 +20,7 @@ export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
     const next = `${window.location.pathname}${window.location.search}`;
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   }
-  if (!response.ok) throw new Error(payload.error?.message ?? response.statusText ?? "请求失败");
+  if (!response.ok) throw new Error(payload.error?.message || response.statusText || "请求失败");
   return payload as T;
 }
 
@@ -33,6 +33,7 @@ export function useApi<T>(path: string, intervalMs?: number) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [resolvedPath, setResolvedPath] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const inFlight = useRef(false);
 
@@ -45,9 +46,11 @@ export function useApi<T>(path: string, intervalMs?: number) {
       const payload = await api<{ data: T }>(path, { signal: current.signal });
       if (current.signal.aborted) return;
       setData(payload.data);
+      setResolvedPath(path);
       setError("");
     } catch (cause) {
       if (current.signal.aborted) return;
+      setResolvedPath(path);
       setError(cause instanceof Error ? cause.message : "请求失败");
     } finally {
       // 只有最新那次请求有资格收尾；被取代的旧请求到此为止
@@ -79,5 +82,11 @@ export function useApi<T>(path: string, intervalMs?: number) {
     };
   }, [run, intervalMs]);
 
-  return { data, error, loading, reload: run };
+  const pathPending = resolvedPath !== path;
+  return {
+    data: pathPending ? null : data,
+    error: pathPending ? "" : error,
+    loading: loading || pathPending,
+    reload: run,
+  };
 }

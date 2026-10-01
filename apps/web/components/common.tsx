@@ -8,7 +8,9 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 function useDialog(onClose: () => void, dismissible = true) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
   closeRef.current = onClose;
+  dismissibleRef.current = dismissible;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
@@ -17,7 +19,7 @@ function useDialog(onClose: () => void, dismissible = true) {
     (preferred ?? node)?.focus();
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && dismissible) { closeRef.current(); return; }
+      if (event.key === "Escape" && dismissibleRef.current) { closeRef.current(); return; }
       if (event.key !== "Tab" || !node) return;
       const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
       if (!items.length) { event.preventDefault(); node.focus(); return; }
@@ -34,7 +36,7 @@ function useDialog(onClose: () => void, dismissible = true) {
       document.body.style.overflow = previousOverflow;
       previous?.focus?.();
     };
-  }, [dismissible]);
+  }, []);
   return ref;
 }
 
@@ -152,7 +154,7 @@ export function Modal({ title, onClose, dismissible = true, children }: { title:
 }
 
 export function Tabs({ items, active, onChange }: { items: readonly string[]; active: string; onChange: (item: string) => void }) {
-  return <div className="tabs">{items.map(item => <button key={item} type="button" className={item === active ? "tabs-item active" : "tabs-item"} onClick={() => onChange(item)}>{item}</button>)}</div>;
+  return <div className="tabs" role="tablist">{items.map(item => <button key={item} type="button" role="tab" aria-selected={item === active} className={item === active ? "tabs-item active" : "tabs-item"} onClick={() => onChange(item)}>{item}</button>)}</div>;
 }
 
 type Tone = "success" | "warning" | "danger" | "neutral";
