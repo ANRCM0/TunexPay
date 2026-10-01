@@ -399,3 +399,17 @@ tbody tr:last-child td { border-bottom: 0; }
   .routing-member-controls { padding-left: 25px; }
   .routing-binding { min-width: 0; }
 }
+
+
+/* ---- Component contract fixes: shared page actions / credentials / destructive links ---- */
+.page-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.credential-secret { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.credential-secret code { min-width: 0; overflow-wrap: anywhere; word-break: break-all; }
+.danger-link { color: var(--danger); }
+.danger-link:hover { color: #c73e36; }
+.modal { max-height: calc(100dvh - 48px); }
+
+@media (max-width: 560px) {
+  .page-head-actions { width: 100%; justify-content: flex-start; }
+  .credential-secret { align-items: flex-start; flex-direction: column; }
+}

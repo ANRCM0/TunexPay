@@ -20,7 +20,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
       let failures = 0;
       for (;;) {
         try {
-          const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=12`, { signal: controller.signal });
+          const result = await api<{ data: Payment }>(`/public/payments/${paymentNo}?wait=12`, { signal: controller.signal, redirectOnUnauthorized: false });
           if (controller.signal.aborted) return;
           failures = 0;
           setData(result.data); setError(""); setLoading(false);
@@ -54,23 +54,26 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
   const deadline = data?.validUntil ? Date.parse(data.validUntil) : null;
   const canPay = Boolean(data?.payable && !error && (deadline === null || now < deadline));
 
+  const qrType = data?.clientPayload?.type;
+  const qrValue = data?.clientPayload?.value ?? "";
+
   useEffect(() => {
     let active = true;
     setQr("");
     setQrError("");
-    if (canPay && data?.clientPayload?.type === "qr_code" && data.clientPayload.value) {
-      void QRCode.toDataURL(data.clientPayload.value, { width: 420, margin: 1 })
+    if (canPay && qrType === "qr_code" && qrValue) {
+      void QRCode.toDataURL(qrValue, { width: 420, margin: 1 })
         .then(value => { if (active) setQr(value); })
         .catch(() => { if (active) setQrError("付款二维码生成失败，请刷新页面重试。"); });
     }
     return () => { active = false; };
-  }, [data?.clientPayload, canPay]);
+  }, [qrType, qrValue, canPay]);
 
   async function mockPay() {
     setPaying(true);
     setActionError("");
     try {
-      await api(`/mock/${paymentNo}/succeed`, { method: "POST" });
+      await api(`/mock/${paymentNo}/succeed`, { method: "POST", redirectOnUnauthorized: false });
       await reload();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "模拟支付失败");

@@ -79,7 +79,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose }: { 
           </div>
         </section>
 
-        {plugin !== "MOCK" && <section className="bill-settings-section">
+        {activePlugin !== "MOCK" && <section className="bill-settings-section">
           <div className="bill-settings-section-head">
             <h3>支付凭证</h3>
             <p>支付宝开放平台应用参数。密钥留空时会保留已经保存的值。</p>

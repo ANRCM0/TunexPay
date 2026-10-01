@@ -62,7 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="brand">
         <div className="brand-mark">T</div>
         <div className="brand-text"><div className="brand-title">TUOXIN PAY</div><div className="brand-subtitle">拓昕支付基础设施</div></div>
-        <button className="nav-close" onClick={() => setNavOpen(false)} aria-label="关闭导航菜单"><X size={18} /></button>
+        <button type="button" className="nav-close" onClick={() => setNavOpen(false)} aria-label="关闭导航菜单"><X size={18} /></button>
       </div>
       <nav className="nav">{navigation.map(group => <div className="nav-group" key={group.label}>
         {group.label && <div className="nav-group-label">{group.label}</div>}
@@ -72,10 +72,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     </aside>
     <div className="main">
       <header className="topbar">
-        <button className="topbar-menu topbar-collapse" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={!collapsed} aria-controls="app-sidebar"><PanelLeftClose size={18} /></button>
-        <button className="topbar-menu topbar-nav" onClick={() => setNavOpen(true)} aria-label="打开导航菜单" aria-expanded={navOpen} aria-controls="app-sidebar"><Menu size={18} /></button>
+        <button type="button" className="topbar-menu topbar-collapse" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={!collapsed} aria-controls="app-sidebar"><PanelLeftClose size={18} /></button>
+        <button type="button" className="topbar-menu topbar-nav" onClick={() => setNavOpen(true)} aria-label="打开导航菜单" aria-expanded={navOpen} aria-controls="app-sidebar"><Menu size={18} /></button>
         <nav className="breadcrumb" aria-label="面包屑">{trail.map((item, index) => <span key={item}>{index > 0 && <i aria-hidden="true">/</i>}{item}</span>)}</nav>
-        <div className="topbar-user"><span className="topbar-avatar" aria-hidden="true">管</span><span className="topbar-name">系统管理员</span><button className="logout-button" onClick={() => void logout()}><LogOut size={14} />退出</button></div>
+        <div className="topbar-user"><span className="topbar-avatar" aria-hidden="true">管</span><span className="topbar-name">系统管理员</span><button type="button" className="logout-button" onClick={() => void logout()}><LogOut size={14} />退出</button></div>
       </header>
       <main className="content">{children}</main>
     </div>

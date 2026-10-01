@@ -2,15 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/backend${path}`, { ...init, headers: { "content-type": "application/json", ...init?.headers } });
-  const payload = await response.json();
-  if (response.status === 401 && typeof window !== "undefined") {
+export type ApiOptions = RequestInit & { redirectOnUnauthorized?: boolean };
+
+export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
+  const { redirectOnUnauthorized = true, ...requestInit } = init ?? {};
+  const headers = new Headers(requestInit.headers);
+  headers.set("accept", "application/json");
+  if (requestInit.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json");
+  const response = await fetch(`/api/backend${path}`, { ...requestInit, headers });
+  const text = await response.text();
+  let payload: any = {};
+  if (text) {
+    try { payload = JSON.parse(text); }
+    catch { payload = {}; }
+  }
+  if (response.status === 401 && redirectOnUnauthorized && typeof window !== "undefined") {
     const next = `${window.location.pathname}${window.location.search}`;
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   }
-  if (!response.ok) throw new Error(payload.error?.message ?? "请求失败");
-  return payload;
+  if (!response.ok) throw new Error(payload.error?.message ?? response.statusText ?? "请求失败");
+  return payload as T;
 }
 
 // 轮询的三条护栏：
@@ -48,6 +59,9 @@ export function useApi<T>(path: string, intervalMs?: number) {
   }, [path]);
 
   useEffect(() => {
+    setLoading(true);
+    setData(null);
+    setError("");
     void run();
     const onVisible = () => { if (document.visibilityState === "visible") void run(); };
     const timer = intervalMs

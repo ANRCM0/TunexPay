@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, time } from "./common";
 import { assignable, type Channel } from "./channels";
@@ -53,8 +53,6 @@ export function Applications() {
   const [removeError, setRemoveError] = useState("");
   const [removed, setRemoved] = useState<DeleteResult | null>(null);
   const [pendingDisable, setPendingDisable] = useState<Application | null>(null);
-
-  useEffect(() => { void reload(); }, [showArchived, reload]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,13 +183,13 @@ export function Applications() {
       onConfirm={() => void setStatus(pendingDisable, "DISABLED").then(ok => { if (ok) setPendingDisable(null); })}
     />}
 
-    {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} onClose={closeRotate}>
+    {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} onClose={closeRotate} dismissible={!rotated && busy !== rotating.id}>
       {rotated ? <>
         <p className="muted">旧凭证已立即失效，请把新凭证更新到业务侧配置。离开本窗口后无法再次查看。</p>
         <CredentialBlock title="请立即保存以下凭证。" items={[
           ["API Key", rotated.apiKey], ["Webhook Secret", rotated.webhookSecret], ["ePay Key", rotated.epayKey],
         ]} />
-        <p className="muted">ePay PID 未变更：它是商户标识而不是密钥，轮换只会让业务侧已配置的商户号失效。</p>
+        <p className="muted">ePay PID 未变更：它是商户标识而不是密钥；本次轮换只会让旧 ePay Key 失效。</p>
         <div className="dialog-actions"><button className="button" type="button" onClick={closeRotate}>我已保存，关闭</button></div>
       </> : <>
         <p>即将重置「<strong>{rotating.name}</strong>」的三项凭证：接口鉴权 API Key、回调验签 Webhook Secret、ePay 商户密钥。</p>
@@ -203,7 +201,7 @@ export function Applications() {
         {busy === rotating.id && <p className="muted">正在重置…</p>}
         <div className="dialog-actions">
           <button className="button danger" type="button" disabled={busy !== ""} onClick={() => void rotate(rotating)}>确认重置</button>
-          <button className="button secondary" type="button" onClick={closeRotate}>取消</button>
+          <button className="button secondary" type="button" disabled={busy !== ""} onClick={closeRotate}>取消</button>
         </div>
       </>}
     </Modal>}

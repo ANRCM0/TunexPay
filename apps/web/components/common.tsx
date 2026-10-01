@@ -5,16 +5,19 @@ import { channelLabel } from "../lib/labels";
 // 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
-function useDialog(onClose: () => void) {
+function useDialog(onClose: () => void, dismissible = true) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
     const node = ref.current;
-    node?.focus();
+    const preferred = node?.querySelector<HTMLElement>("[autofocus]");
+    (preferred ?? node)?.focus();
+    document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { closeRef.current(); return; }
+      if (event.key === "Escape" && dismissible) { closeRef.current(); return; }
       if (event.key !== "Tab" || !node) return;
       const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
       if (!items.length) { event.preventDefault(); node.focus(); return; }
@@ -28,9 +31,10 @@ function useDialog(onClose: () => void) {
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
       previous?.focus?.();
     };
-  }, []);
+  }, [dismissible]);
   return ref;
 }
 
@@ -117,7 +121,7 @@ export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = fa
   onConfirm: () => void;
   onClose: () => void;
 }) {
-  return <Modal title={title} onClose={working ? () => undefined : onClose}>
+  return <Modal title={title} onClose={onClose} dismissible={!working}>
     <p className="dialog-copy">{copy}</p>
     {danger && <div className="dialog-warning">{warning || "这是影响当前交易状态的操作，请确认你已经核对支付单信息。"}</div>}
     <div className="dialog-actions">
@@ -127,21 +131,21 @@ export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = fa
   </Modal>;
 }
 
-export function Drawer({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
-  const ref = useDialog(onClose);
-  return <div className="drawer-mask" onClick={onClose}>
+export function Drawer({ title, onClose, wide = false, dismissible = true, children }: { title: string; onClose: () => void; wide?: boolean; dismissible?: boolean; children: React.ReactNode }) {
+  const ref = useDialog(onClose, dismissible);
+  return <div className="drawer-mask" onClick={dismissible ? onClose : undefined}>
     <div ref={ref} tabIndex={-1} className={wide ? "drawer drawer-wide" : "drawer"} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="drawer-head"><h2>{title}</h2>{dismissible && <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>}</div>
       <div className="drawer-body">{children}</div>
     </div>
   </div>;
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  const ref = useDialog(onClose);
-  return <div className="drawer-mask modal-mask" onClick={onClose}>
+export function Modal({ title, onClose, dismissible = true, children }: { title: string; onClose: () => void; dismissible?: boolean; children: React.ReactNode }) {
+  const ref = useDialog(onClose, dismissible);
+  return <div className="drawer-mask modal-mask" onClick={dismissible ? onClose : undefined}>
     <div ref={ref} tabIndex={-1} className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="drawer-head"><h2>{title}</h2><button className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="drawer-head"><h2>{title}</h2>{dismissible && <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>}</div>
       <div className="drawer-body">{children}</div>
     </div>
   </div>;
@@ -249,7 +253,19 @@ export function LoadingState({ loading, error, empty, emptyText = "暂无数据"
 }
 
 export function money(cents: number) { return `¥${(cents / 100).toFixed(2)}`; }
-export function time(value: string | null | undefined) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—"; }
+export function time(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+export function toLocalDateTimeInput(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 16);
+}
 
 const statusLabels: Record<string, string> = {
   ACTIVE: "启用",
