@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { config } from "../config.js";
+import { jsonSafe } from "../lib/json.js";
 import { toolCatalogForAdmin } from "../mcp/tools.js";
 import { approveMcpAction, listMcpActions, rejectMcpAction } from "../services/mcp-approval-service.js";
 import { createMcpClient, listMcpClients, rotateMcpClientToken, setMcpClientEnabled, updateMcpClient } from "../services/mcp-client-service.js";
@@ -23,7 +24,7 @@ mcpAdminRoutes.post("/mcp/clients/:id/enabled", async c => {
   const { enabled } = z.object({ enabled: z.boolean() }).parse(await c.req.json());
   return c.json({ data: await setMcpClientEnabled(c.req.param("id"), enabled) });
 });
-mcpAdminRoutes.get("/mcp/audits", async c => c.json({ data: await listMcpAudits(c.req.query()) }));
+mcpAdminRoutes.get("/mcp/audits", async c => c.json({ data: jsonSafe(await listMcpAudits(c.req.query())) }));
 mcpAdminRoutes.get("/mcp/approvals", async c => {
   const limit = z.coerce.number().int().min(1).max(100).default(50).parse(c.req.query("limit"));
   return c.json({ data: await listMcpActions(limit) });
