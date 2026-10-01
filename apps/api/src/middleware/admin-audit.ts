@@ -69,6 +69,20 @@ export function describeAdminAction(method: string, path: string): AuditDescript
     return descriptor(action, "NOTIFICATION_INSTANCE", id ?? null);
   }
   if (root === "notification-deliveries" && operation === "retry") return descriptor("NOTIFICATION_DELIVERY_RETRY", "NOTIFICATION_DELIVERY", id ?? null);
+  if (root === "mcp" && id === "clients") {
+    const clientId = segments[2] ?? null;
+    const clientOperation = segments[3];
+    if (!clientId && method === "POST") return descriptor("MCP_CLIENT_CREATE", "MCP_CLIENT", null);
+    if (clientOperation === "rotate") return descriptor("MCP_CLIENT_TOKEN_ROTATE", "MCP_CLIENT", clientId);
+    if (clientOperation === "enabled") return descriptor("MCP_CLIENT_STATUS_UPDATE", "MCP_CLIENT", clientId);
+    return descriptor("MCP_CLIENT_UPDATE", "MCP_CLIENT", clientId);
+  }
+  if (root === "mcp" && id === "approvals") {
+    const approvalId = segments[2] ?? null;
+    const approvalOperation = segments[3];
+    if (approvalOperation === "approve") return descriptor("MCP_ACTION_APPROVE", "MCP_ACTION", approvalId);
+    if (approvalOperation === "reject") return descriptor("MCP_ACTION_REJECT", "MCP_ACTION", approvalId);
+  }
   if (root === "applications" && operation === "channel-instance") return descriptor("APPLICATION_CHANNEL_CHANGE", "APPLICATION", id ?? null);
   if (method === "POST" && root === "applications" && !id) return descriptor("APPLICATION_CREATE", "APPLICATION", null);
   if (root === "applications" && operation === "rotate-api-key") return descriptor("APPLICATION_API_KEY_ROTATE", "APPLICATION", id ?? null);
