@@ -376,3 +376,26 @@ tbody tr:last-child td { border-bottom: 0; }
   .content { padding: 16px 12px 44px; }
   .section { padding: 16px; }
 }
+
+/* 轮询组沿用现有后台的表格、表单和弹窗体系。 */
+.routing-member-summary { max-width: 380px; white-space: normal; overflow-wrap: anywhere; margin-top: 5px; }
+.routing-help { margin-top: 16px; line-height: 1.8; }
+.routing-editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
+.routing-editor-fields .toggle-inline { display: inline-flex; flex-direction: row; width: fit-content; gap: 6px; }
+.routing-member-heading { display: flex; justify-content: space-between; gap: 12px; }
+.routing-member-list { display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.routing-member-row { padding: 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.routing-member-row.selected { background: var(--paper); }
+.routing-editor-fields .routing-member-choice { display: flex; flex-direction: row; align-items: center; gap: 10px; min-width: 0; }
+.routing-member-choice input, .routing-member-controls input[type="checkbox"] { width: auto; }
+.routing-member-choice > span { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.routing-member-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.routing-editor-fields .routing-weight { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.routing-weight input { width: 78px; }
+.routing-binding { min-width: 190px; max-width: 320px; width: 100%; }
+@media (max-width: 560px) {
+  .routing-member-list { max-height: min(280px, 32vh); }
+  .routing-member-row { align-items: stretch; flex-direction: column; }
+  .routing-member-controls { padding-left: 25px; }
+  .routing-binding { min-width: 0; }
+}

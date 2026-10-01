@@ -59,7 +59,8 @@ async function createEpayPayment(application: Application, params: Record<string
     expiresInSeconds: 1_800,
   }, `epay-order:${externalOrderNo}`, "EPAY_V1");
   const payment = await createPayment(application, orderResult.order.orderNo, {
-    channel: application.defaultChannel,
+    // 绑定组时不传旧默认插件，由支付核心从轮询组中选路。
+    ...(application.routingGroupId ? {} : { channel: application.defaultChannel }),
     method: params.type || "alipay",
   }, `epay-payment:${externalOrderNo}`);
   return { order: orderResult.order, payment };

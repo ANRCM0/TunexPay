@@ -16,6 +16,7 @@ import { updatePaymentException } from "../services/payment-exception-service.js
 import { queryRefund } from "../services/refund-service.js";
 import { importAlipayBill, matchReceipt } from "../services/reconciliation-service.js";
 import { collectSystemStatus } from "../lib/system-status.js";
+import { routingGroupRoutes } from "./routing-groups.js";
 import { channelInstanceRoutes } from "./channel-instances.js";
 import { notificationRoutes } from "./notifications.js";
 import { mcpAdminRoutes } from "./mcp-admin.js";
@@ -25,6 +26,7 @@ export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
 adminRoutes.use("*", adminAudit);
 adminRoutes.route("/", channelInstanceRoutes);
+adminRoutes.route("/", routingGroupRoutes);
 adminRoutes.route("/", notificationRoutes);
 adminRoutes.route("/", mcpAdminRoutes);
 
@@ -74,7 +76,8 @@ adminRoutes.get("/applications", async (c) => {
     where: { appId: { not: "channel-diagnostics" }, ...(includeArchived ? {} : { archivedAt: null }) },
     orderBy: { createdAt: "desc" },
     select: {
-      id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true,
+      id: true, appId: true, epayPid: true, name: true, status: true, webhookUrl: true, defaultChannel: true, defaultChannelId: true, routingGroupId: true,
+      routingGroup: { select: { id: true, name: true, enabled: true, strategy: true } },
       archivedAt: true, pausedAt: true, createdAt: true, updatedAt: true,
       _count: { select: { orders: true, refunds: true, webhookDeliveries: true } },
     },
@@ -103,6 +106,7 @@ adminRoutes.post("/applications", async (c) => {
     webhookUrl: z.string().url().max(500).optional().or(z.literal("")),
     defaultChannel: z.enum(["ALIPAY", "ALIPAY_BILL", "MOCK"]).default("MOCK"),
     defaultChannelId: z.string().min(1).max(80).optional(),
+    routingGroupId: z.string().min(1).max(80).optional(),
   }).parse(await c.req.json());
   const result = await createApplication({ ...input, webhookUrl: input.webhookUrl || null });
   return c.json({ data: result }, 201);

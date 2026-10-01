@@ -4,12 +4,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, time } from "./common";
 import { assignable, type Channel } from "./channels";
+import { applicationRoutingTarget, assignPaymentRouting, routingCreateInput, RoutingTargetSelect } from "./routing-target";
+import { canAssignGroup, type RoutingGroup } from "../lib/routing-groups";
 import { channelLabel } from "../lib/labels";
 
 type Counts = { orders: number; refunds: number; webhookDeliveries: number };
 type Application = {
   id: string; appId: string; epayPid: string; name: string; status: string; webhookUrl: string | null;
-  defaultChannel: string; defaultChannelId: string | null; archivedAt: string | null; pausedAt: string | null;
+  defaultChannel: string; defaultChannelId: string | null; routingGroupId: string | null;
+  routingGroup: { id: string; name: string; enabled: boolean } | null; archivedAt: string | null; pausedAt: string | null;
   createdAt: string; _count: Counts;
 };
 type CreatedCredentials = { apiKey: string; webhookSecret: string; epayPid: string; epayKey: string };
@@ -37,6 +40,7 @@ export function Applications() {
   const [showArchived, setShowArchived] = useState(false);
   const { data, loading, error, reload } = useApi<Application[]>(`/applications${showArchived ? "?includeArchived=true" : ""}`);
   const channels = useApi<Channel[]>("/channel-instances");
+  const groups = useApi<RoutingGroup[]>("/routing-groups");
   const [credentials, setCredentials] = useState<CreatedCredentials | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -60,13 +64,23 @@ export function Applications() {
     try {
       const response = await api<{ data: { credentials: CreatedCredentials } }>("/applications", {
         method: "POST",
-        body: JSON.stringify({ name: form.get("name"), webhookUrl: form.get("webhookUrl"), defaultChannelId: form.get("defaultChannelId") }),
+        body: JSON.stringify({ name: form.get("name"), webhookUrl: form.get("webhookUrl"), ...routingCreateInput(String(form.get("routingTarget") ?? "")) }),
       });
       setCredentials(response.data.credentials);
       element.reset();
       await reload();
     } catch (cause) { setFormError(reason(cause, "创建失败")); }
     finally { setSaving(false); }
+  }
+
+  async function assignRouting(application: Application, target: string) {
+    setBusy(application.id); setNotice(null);
+    try {
+      await assignPaymentRouting(application.id, target);
+      setNotice({ type: "ok", text: target ? `「${application.name}」收款路由已更新，仅影响新支付。` : `「${application.name}」已解除收款绑定，无法发起新支付。` });
+      await reload(); await groups.reload();
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, "收款路由分配失败") }); }
+    finally { setBusy(""); }
   }
 
   async function rotate(application: Application) {
@@ -122,12 +136,13 @@ export function Applications() {
       <form className="form-grid" onSubmit={submit}>
         <label>应用名称<input name="name" required placeholder="TUOXIN Matrix" /></label>
         <label>Webhook 地址<input name="webhookUrl" type="url" placeholder="https://example.com/webhook" /></label>
-        <label>默认通道<select name="defaultChannelId" defaultValue="" required><option value="" disabled>请选择已检测的通道</option>{channels.data?.filter(assignable).map(channel => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</select></label>
-        <button className="button" disabled={saving}>{saving ? "创建中…" : "创建应用"}</button>
+        <label>收款路由<RoutingTargetSelect name="routingTarget" defaultValue="" required groups={groups.data ?? []} channels={channels.data ?? []} disabled={groups.loading || channels.loading || !!groups.error || !!channels.error} /></label>
+        <button className="button" disabled={saving || groups.loading || channels.loading || !!groups.error || !!channels.error}>{saving ? "创建中…" : "创建应用"}</button>
       </form>
       {formError && <div className="error">{formError}</div>}
       {channels.error && <div className="error">{channels.error}</div>}
-      {!channels.loading && !channels.data?.some(assignable) && <p className="muted">请先在“插件与通道”中配置、启用并检测一个收款通道。</p>}
+      {groups.error && <div className="error">{groups.error}</div>}
+      {!channels.loading && !groups.loading && !channels.data?.some(assignable) && !groups.data?.some(canAssignGroup) && <p className="muted">请先配置、启用并检测收款通道，再创建轮询组。也可以保留单通道绑定。</p>}
       {credentials && <CredentialBlock title="请立即保存以下凭证，关闭后无法再次查看。" items={[
         ["API Key", credentials.apiKey], ["Webhook Secret", credentials.webhookSecret], ["ePay PID", credentials.epayPid], ["ePay Key", credentials.epayKey],
       ]} />}
@@ -137,11 +152,11 @@ export function Applications() {
       <section className="card section">
         <div className="section-head"><h2>应用列表</h2><label className="toggle-inline"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />显示已归档</label></div>
         <div className="table-wrap"><table>
-        <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>默认通道</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+        <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>收款路由</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody>{data?.map(item => <tr key={item.id} className={item.archivedAt ? "row-archived" : undefined}>
           <td><strong>{item.name}</strong>{item.archivedAt && <div className="muted">已于 {time(item.archivedAt)} 归档</div>}</td>
           <td data-label="App ID"><div className="id-line"><span className="mono">{item.appId}</span><CopyValue value={item.appId} label="复制 App ID" /></div><div className="id-line"><span className="mono muted">PID {item.epayPid}</span><CopyValue value={item.epayPid} label="复制 ePay PID" /></div></td>
-          <td data-label="默认通道">{channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel)}</td>
+          <td data-label="收款路由">{item.archivedAt ? item.routingGroup?.name || channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel) : <RoutingTargetSelect className="routing-binding" aria-label={`${item.name} 收款路由`} value={applicationRoutingTarget(item)} currentTarget={applicationRoutingTarget(item)} groups={groups.data ?? []} channels={channels.data ?? []} disabled={busy !== "" || groups.loading || channels.loading || !!groups.error || !!channels.error} onChange={event => void assignRouting(item, event.target.value)} />}{item.routingGroupId && <div className="muted">轮询组 · 仅新支付按组内规则选路</div>}</td>
           <td data-label="Webhook">{item.webhookUrl ? <div className="id-line"><span className="mono break-all">{item.webhookUrl}</span><CopyValue value={item.webhookUrl} label="复制 Webhook 地址" /></div> : "—"}</td>
           <td data-label="状态"><Status value={item.status} /></td>
           <td data-label="创建时间">{time(item.createdAt)}</td>
