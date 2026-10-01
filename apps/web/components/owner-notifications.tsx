@@ -142,7 +142,7 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
     finally { onBusy(false); }
   }
 
-  return <fieldset className="settings-group" disabled={busy}>
+  return <form onSubmit={event => { event.preventDefault(); void save(); }}><fieldset className="settings-group" disabled={busy}>
     <div className="settings-group-head">
       <div><h3>{instance.name}</h3><p>{plugin.name} · {instance.id} · {plugin.description}</p></div>
       <Toggle checked={enabled} onChange={setEnabled} label="启用通知实例" />
@@ -152,11 +152,11 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
     <div className="settings-group-head"><div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div></div>
     <EventPicker selected={events} onChange={setEvents} />
     <div className="settings-actions">
-      <button className="button" type="button" onClick={() => void save()}>保存</button>
+      <button className="button" type="submit">保存</button>
       <button className="button secondary" type="button" disabled={!instance.enabled} onClick={() => void test()}>发送测试</button>
       <button className="link-button" type="button" onClick={() => void remove()}>删除</button>
     </div>
-  </fieldset>;
+  </fieldset></form>;
 }
 
 export function OwnerNotificationsPanel() {
