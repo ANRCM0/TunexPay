@@ -587,3 +587,26 @@ model AdminAuditLog {
   @@index([resourceType, resourceId, createdAt])
   @@map("admin_audit_logs")
 }
+
+
+model AgentActionApproval {
+  id          String   @id @db.VarChar(64)
+  action      String   @db.VarChar(40)
+  arguments   Json
+  summary     String   @db.VarChar(500)
+  requestedBy String   @db.VarChar(120)
+  approvedBy  String?  @db.VarChar(120)
+  status      String   @default("PENDING") @db.VarChar(16)
+  expiresAt   DateTime
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  executedAt  DateTime?
+  result      Json?
+  lastError   String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("agent_action_approvals")
+}

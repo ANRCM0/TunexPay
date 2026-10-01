@@ -171,6 +171,12 @@ export async function deleteNotificationInstance(id: string) {
   return { id, name: row.name, archived: true as const };
 }
 
+export async function setNotificationInstanceEnabled(id: string, enabled: boolean) {
+  const row = await db.notificationInstance.findUnique({ where: { id } });
+  if (!row || row.archivedAt) throw new AppError("NOTIFICATION_INSTANCE_NOT_FOUND", "通知实例不存在", 404);
+  return db.notificationInstance.update({ where: { id }, data: { enabled, revision: { increment: 1 } } });
+}
+
 export async function testNotificationInstance(id: string) {
   const row = await db.notificationInstance.findUnique({ where: { id } });
   if (!row || row.archivedAt) throw new AppError("NOTIFICATION_INSTANCE_NOT_FOUND", "通知实例不存在", 404);
@@ -196,5 +202,5 @@ export async function retryNotificationDelivery(id: string) {
   const row = await db.ownerNotificationDelivery.findUnique({ where: { id } });
   if (!row) throw new AppError("NOTIFICATION_DELIVERY_NOT_FOUND", "通知投递不存在", 404);
   if (!row.instanceId) throw new AppError("NOTIFICATION_LEGACY_DELIVERY", "旧版通知记录没有实例绑定，不能自动重试", 409);
-  return db.ownerNotificationDelivery.update({ where: { id }, data: { status: "PENDING", nextAttemptAt: new Date(), lockedUntil: null, leaseOwner: null, lastError: null } });
+  return db.ownerNotificationDelivery.update({ where: { id }, data: { status: "PENDING", attempts: 0, nextAttemptAt: new Date(), lockedUntil: null, leaseOwner: null, lastError: null } });
 }
