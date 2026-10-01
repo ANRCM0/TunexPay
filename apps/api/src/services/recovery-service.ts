@@ -42,6 +42,7 @@ export async function runDuePaymentRecoveries(limit = 20): Promise<RecoverySumma
       summary.failed += 1;
       const message = errorMessage(error).slice(0, 500);
       await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM payments WHERE id = ${item.id} FOR UPDATE`;
         const current = await tx.payment.findUnique({ where: { id: item.id }, select: { orderId: true, status: true } });
         if (!current || !isRecoverablePayment(current.status)) return;
         const exhausted = attempt >= RECOVERY_MAX_ATTEMPTS;
@@ -95,6 +96,7 @@ export async function runDueRefundRecoveries(limit = 20): Promise<RecoverySummar
       summary.failed += 1;
       const message = errorMessage(error).slice(0, 500);
       await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${item.id} FOR UPDATE`;
         const current = await tx.refund.findUnique({ where: { id: item.id }, select: { status: true } });
         if (!current || !isRecoverableRefund(current.status)) return;
         const exhausted = attempt >= RECOVERY_MAX_ATTEMPTS;
@@ -115,6 +117,7 @@ export async function runDueRefundRecoveries(limit = 20): Promise<RecoverySummar
 
 async function exhaustPayment(id: string, paymentNo: string, status: PaymentStatus, attempt: number): Promise<boolean> {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
     const current = await tx.payment.findUnique({ where: { id }, select: { orderId: true, status: true, nextQueryAt: true } });
     if (!current || !isRecoverablePayment(current.status) || !current.nextQueryAt) return false;
     await tx.payment.update({ where: { id }, data: { nextQueryAt: null } });
@@ -128,6 +131,7 @@ async function exhaustPayment(id: string, paymentNo: string, status: PaymentStat
 
 async function exhaustRefund(id: string, refundNo: string, paymentId: string, orderId: string, status: RefundStatus, attempt: number): Promise<boolean> {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${id} FOR UPDATE`;
     const current = await tx.refund.findUnique({ where: { id }, select: { status: true, nextQueryAt: true } });
     if (!current || !isRecoverableRefund(current.status) || !current.nextQueryAt) return false;
     await tx.refund.update({ where: { id }, data: { nextQueryAt: null } });

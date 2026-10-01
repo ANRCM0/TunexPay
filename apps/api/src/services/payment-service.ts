@@ -234,11 +234,14 @@ export async function queryPayment(applicationId: string | null, paymentNo: stri
   if (!payment) throw new AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404);
   const result = await (await adapterForPayment(payment)).query(payment.paymentNo);
   if (result.status === "SUCCESS") {
+    if (!Number.isSafeInteger(result.amount) || result.amount <= 0) {
+      throw new AppError("PAYMENT_QUERY_AMOUNT_INVALID", "通道成功查单缺少有效的整数金额", 502);
+    }
     const succeeded = await markPaymentSucceeded({
       eventKey: `query:${payment.paymentNo}:${result.channelTradeNo ?? "success"}`,
       paymentNo: payment.paymentNo,
       status: "SUCCESS",
-      amount: payment.amount,
+      amount: result.amount,
       channelTradeNo: result.channelTradeNo,
       paidAt: result.paidAt,
       raw: result.raw as Prisma.InputJsonValue,
@@ -249,7 +252,11 @@ export async function queryPayment(applicationId: string | null, paymentNo: stri
     return presentPayment(await updatePaymentObservation(payment, result.status, { rawResponse: result.raw as Prisma.InputJsonValue }, "QUERY"));
   }
   if (payment.channel === "ALIPAY" && isRecoverablePayment(payment.status) && !payment.nextQueryAt && payment.queryAttempts < RECOVERY_MAX_ATTEMPTS) {
-    return presentPayment(await db.payment.update({ where: { id: payment.id }, data: { nextQueryAt: initialRecoveryAt() } }));
+    await db.payment.updateMany({
+      where: { id: payment.id, status: payment.status, nextQueryAt: null, queryAttempts: payment.queryAttempts },
+      data: { nextQueryAt: initialRecoveryAt() },
+    });
+    return presentPayment(await db.payment.findUniqueOrThrow({ where: { id: payment.id } }));
   }
   return presentPayment(payment);
 }

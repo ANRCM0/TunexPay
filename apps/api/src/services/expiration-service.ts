@@ -43,6 +43,7 @@ export async function runDueOrderExpirations(limit = 20): Promise<ExpirationSumm
       summary.failed += 1;
       const message = errorMessage(error).slice(0, 500);
       await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${item.id} FOR UPDATE`;
         const current = await tx.order.findUnique({ where: { id: item.id }, select: { status: true } });
         if (!current || !["CREATED", "PENDING"].includes(current.status)) return;
         await tx.order.update({ where: { id: item.id }, data: {

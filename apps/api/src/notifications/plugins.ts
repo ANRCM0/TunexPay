@@ -3,7 +3,7 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import nodemailer from "nodemailer";
 import { z } from "zod";
-import { assertSafeWebhookUrl } from "../lib/webhook-security.js";
+import { sendWebhookRequest } from "../lib/webhook-security.js";
 import { AppError } from "../lib/errors.js";
 import type { NotificationMessage, NotificationPlugin } from "./types.js";
 
@@ -173,15 +173,14 @@ const webhook: NotificationPlugin = {
   publicConfig(config) { return publicConfig(config, ["secret"]); },
   async send(input, config) {
     const value = webhookSchema.parse(config);
-    const url = await assertSafeWebhookUrl(value.url);
     const body = JSON.stringify({ event: input.event, title: input.title, message: input.message, data: input.data ?? {}, createdAt: new Date().toISOString() });
     const signature = value.secret ? createHmac("sha256", value.secret).update(body).digest("hex") : "";
-    const response = await fetch(url, {
-      method: "POST", redirect: "manual", signal: AbortSignal.timeout(10_000),
+    const response = await sendWebhookRequest(value.url, {
+      method: "POST",
       headers: { "content-type": "application/json", "user-agent": "TuneXPay-Notification/1.0", ...(signature ? { "x-tunexpay-signature": `sha256=${signature}` } : {}) },
       body,
     });
-    if (!response.ok) throw new Error(`NOTIFICATION_WEBHOOK_HTTP_${response.status}`);
+    if (response.status < 200 || response.status >= 300) throw new Error(`NOTIFICATION_WEBHOOK_HTTP_${response.status}`);
   },
 };
 

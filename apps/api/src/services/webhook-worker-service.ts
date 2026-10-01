@@ -2,7 +2,7 @@ import type { IntegrationProtocol, WebhookDelivery } from "@prisma/client";
 import { db } from "../db.js";
 import { epaySign, openSealed, webhookSignature } from "../lib/crypto.js";
 import { AppError } from "../lib/errors.js";
-import { assertSafeWebhookUrl } from "../lib/webhook-security.js";
+import { sendWebhookRequest, type WebhookResponse } from "../lib/webhook-security.js";
 
 export function retryDelaySeconds(attempts: number, random = Math.random()): number {
   const base = Math.min(3_600, 5 * 2 ** Math.min(Math.max(0, attempts - 1), 10));
@@ -77,19 +77,19 @@ export async function deliverWebhook(id: string): Promise<void> {
 }
 
 async function send(delivery: WebhookDelivery & { application: { webhookSecretEncrypted: string; epayKeyEncrypted: string }; order: { orderNo: string } }) {
-  const url = await assertSafeWebhookUrl(delivery.url);
+  const url = new URL(delivery.url);
   const payload = delivery.payload as Record<string, unknown>;
-  let response: Response;
+  let response: WebhookResponse;
   if (delivery.protocol === ("EPAY_V1" satisfies IntegrationProtocol)) {
     const signed = { ...payload, sign_type: "MD5" };
     const sign = epaySign(signed, openSealed(delivery.application.epayKeyEncrypted));
     for (const [key, value] of Object.entries({ ...signed, sign })) url.searchParams.set(key, String(value ?? ""));
-    response = await fetch(url, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    response = await sendWebhookRequest(url.toString(), { method: "GET" });
   } else {
     const body = JSON.stringify(payload);
     const timestamp = String(Math.floor(Date.now() / 1_000));
     const signature = webhookSignature(openSealed(delivery.application.webhookSecretEncrypted), timestamp, body);
-    response = await fetch(url, {
+    response = await sendWebhookRequest(url.toString(), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -100,12 +100,10 @@ async function send(delivery: WebhookDelivery & { application: { webhookSecretEn
         "x-tuoxin-signature": `v1=${signature}`,
       },
       body,
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
     });
   }
-  const body = await response.text();
-  if (!response.ok) throw new AppError("WEBHOOK_HTTP_ERROR", `Webhook 返回 HTTP ${response.status}: ${body.slice(0, 200)}`, 502);
+  const { body } = response;
+  if (response.status < 200 || response.status >= 300) throw new AppError("WEBHOOK_HTTP_ERROR", `Webhook 返回 HTTP ${response.status}: ${body.slice(0, 200)}`, 502);
   if (delivery.protocol === "EPAY_V1" && body.trim().toLowerCase() !== "success") {
     throw new AppError("WEBHOOK_ACK_INVALID", `ePay 通知未返回 success: ${body.slice(0, 200)}`, 502);
   }

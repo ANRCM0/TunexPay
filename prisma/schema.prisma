@@ -365,9 +365,10 @@ model WebhookDelivery {
   id             String              @id @default(cuid())
   applicationId  String
   orderId        String
+  // SQL migration uses ASCII for this internal event name to keep the full URL unique key within 3072 bytes.
   eventType      String              @db.VarChar(80)
   protocol       IntegrationProtocol
-  url            String              @db.VarChar(300)
+  url            String              @db.VarChar(500)
   payload        Json
   status         WebhookStatus       @default(PENDING)
   attempts       Int                 @default(0) @db.UnsignedSmallInt
