@@ -5,7 +5,7 @@ const apiPort = Number.parseInt(process.env.API_INTERNAL_PORT || "3001", 10);
 const webPort = Number.parseInt(process.env.WEB_INTERNAL_PORT || "3000", 10);
 const host = "127.0.0.1";
 
-const apiExactPaths = new Set(["/submit.php", "/mapi.php", "/api.php", "/health"]);
+const apiExactPaths = new Set(["/submit.php", "/mapi.php", "/api.php", "/health", "/mcp"]);
 
 function targetFor(url = "/") {
   const pathname = new URL(url, "http://localhost").pathname;

@@ -9,7 +9,7 @@ import { runDuePaymentRecoveries, runDueRefundRecoveries } from "./services/reco
 import { runDueOrderExpirations } from "./services/expiration-service.js";
 import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
 import { runAllBillCollectors } from "./services/alipay-bill-collector-service.js";
-import { runOwnerNotifications } from "./services/owner-notification-service.js";
+import { runNotifications } from "./services/notification-service.js";
 import { WORKER_HEARTBEAT_KEY } from "./lib/system-status.js";
 
 const connection = new Redis(config().REDIS_URL, { maxRetriesPerRequest: null });
@@ -88,7 +88,7 @@ function tick(): void {
 
   if (!fastTask) fastTask = pollDueDeliveries().finally(() => { fastTask = null; });
   if (runHeavy && !heavyTask) heavyTask = scanDueRecoveries().finally(() => { heavyTask = null; });
-  if (runHeavy && !ownerTask) ownerTask = runOwnerNotifications().catch(() => log("error", "owner_notification.worker_failed", { code: "NOTIFICATION_WORKER_ERROR" })).finally(() => { ownerTask = null; });
+  if (runHeavy && !ownerTask) ownerTask = runNotifications().catch(() => log("error", "notification.worker_failed", { code: "NOTIFICATION_WORKER_ERROR" })).finally(() => { ownerTask = null; });
   // 采集器有自己的 nextRunAt 与 demand 唤醒路径，必须每跳检查，不参与退避
   if (!collectorTask) collectorTask = runAllBillCollectors().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
 }

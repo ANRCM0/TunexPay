@@ -60,6 +60,15 @@ export function describeAdminAction(method: string, path: string): AuditDescript
   const segments = path.replace(/^\/admin\/v1\/?/, "").split("/").filter(Boolean);
   const [root, id, operation] = segments;
   if (root === "channel-instances") return descriptor(operation === "check" ? "CHANNEL_CHECK" : operation === "test-payment" ? "CHANNEL_TEST_PAYMENT" : id ? "CHANNEL_UPDATE" : "CHANNEL_CREATE", "CHANNEL", id ?? null);
+  if (root === "notification-instances") {
+    const action = !id ? "NOTIFICATION_INSTANCE_CREATE"
+      : operation === "subscriptions" ? "NOTIFICATION_INSTANCE_SUBSCRIPTIONS"
+      : operation === "test" ? "NOTIFICATION_INSTANCE_TEST"
+      : operation === "delete" ? "NOTIFICATION_INSTANCE_DELETE"
+      : "NOTIFICATION_INSTANCE_UPDATE";
+    return descriptor(action, "NOTIFICATION_INSTANCE", id ?? null);
+  }
+  if (root === "notification-deliveries" && operation === "retry") return descriptor("NOTIFICATION_DELIVERY_RETRY", "NOTIFICATION_DELIVERY", id ?? null);
   if (root === "applications" && operation === "channel-instance") return descriptor("APPLICATION_CHANNEL_CHANGE", "APPLICATION", id ?? null);
   if (method === "POST" && root === "applications" && !id) return descriptor("APPLICATION_CREATE", "APPLICATION", null);
   if (root === "applications" && operation === "rotate-api-key") return descriptor("APPLICATION_API_KEY_ROTATE", "APPLICATION", id ?? null);

@@ -475,3 +475,10 @@ v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守
 5. 对 `SECRETS_ENCRYPTION_KEY` 做离线备份；丢失后已加密的 ePay/Webhook 密钥无法恢复。
 
 这份边界是刻意保留的：v0.1 先把正确的支付核心跑通，不伪装成已经完成全部生产验证的成熟支付平台。
+
+
+## 通知插件与 MCP
+
+- 管理员通知已抽象为 `NotificationPlugin -> NotificationInstance`，支持 SMTP、飞书机器人、Telegram、通知 Webhook 和飞书应用，并可按事件独立订阅。详见 [docs/notification-plugins.md](docs/notification-plugins.md)。
+- 可选的只读 MCP endpoint 为 AI Agent 提供订单、支付、退款、异常、通道和系统状态查询。默认关闭并使用独立 Token。详见 [docs/mcp.md](docs/mcp.md)。
+- 业务系统的支付成功 / 退款成功 Webhook 仍属于支付协议，不会被通知插件替代。
