@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { applicationAuth } from "../middleware/auth.js";
+import { AppError } from "../lib/errors.js";
 import { createOrder, createOrderSchema, findApplicationOrder } from "../services/order-service.js";
 import { closePayment, createPayment, createPaymentSchema, getPayment, queryPayment } from "../services/payment-service.js";
-import { createRefund, createRefundSchema, queryRefund } from "../services/refund-service.js";
+import { queryRefund } from "../services/refund-service.js";
 
 export const nativeRoutes = new Hono<AppEnv>();
 nativeRoutes.use("/orders", applicationAuth);
@@ -47,10 +48,12 @@ nativeRoutes.post("/payments/:paymentNo/close", async (c) => {
   return c.json({ data: await closePayment(c.get("application").id, paymentNo) });
 });
 
-nativeRoutes.post("/refunds", async (c) => {
-  const input = createRefundSchema.parse(await c.req.json());
-  const refund = await createRefund(c.get("application"), input);
-  return c.json({ data: refund }, 201);
+// 退款不再由商户 API 自动执行：这个入口曾经一调用就直接向通道打款退款。
+// 现在保留路由但一律拒绝，让老接入方能拿到明确的错误码，而不是一个含义模糊的 404；
+// 同时也避免上游重试循环把一个已失效的入口当作偶发失败继续打。
+// 退款只能由管理员通过 MCP 审批（15 分钟人工确认）人工发起。
+nativeRoutes.post("/refunds", () => {
+  throw new AppError("REFUND_API_DISABLED", "退款接口已停用：系统不再自动执行退款，请由管理员人工发起", 410);
 });
 
 nativeRoutes.post("/refunds/:refundNo/query", async (c) => {

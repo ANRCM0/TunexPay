@@ -5,7 +5,7 @@ import { db } from "./db.js";
 import { log } from "./lib/logger.js";
 import { WORKER_TICK_MS, heavyScanStride } from "./lib/worker-policy.js";
 import { deliverWebhook, listDueDeliveryIds, recoverExpiredDeliveries } from "./services/webhook-worker-service.js";
-import { runDuePaymentRecoveries, runDueRefundRecoveries } from "./services/recovery-service.js";
+import { runDuePaymentRecoveries } from "./services/recovery-service.js";
 import { runDueOrderExpirations } from "./services/expiration-service.js";
 import { recoverStaleAlipayBillFlows } from "./services/receipt-flow-service.js";
 import { runAllBillCollectors } from "./services/alipay-bill-collector-service.js";
@@ -54,7 +54,8 @@ async function pollDueDeliveries(): Promise<void> {
   }
 }
 
-// 慢速通道：查单恢复 / 过期关闭 / 流水恢复。空闲时按 stride 拉长间隔，领到任务立刻回到每跳。
+// 慢速通道：支付查单恢复 / 过期关闭 / 流水恢复。空闲时按 stride 拉长间隔，领到任务立刻回到每跳。
+// 退款不在这里：退款状态只由管理员手动查单推进，没有任何自动轮询路径。
 let idleTicks = 0;
 let ticksSinceHeavy = 0;
 let heavyScanning = false;
@@ -63,10 +64,10 @@ async function scanDueRecoveries(): Promise<void> {
   if (heavyScanning) return;
   heavyScanning = true;
   try {
-    const [payments, refunds, expirations, receiptFlows] = await Promise.all([runDuePaymentRecoveries(), runDueRefundRecoveries(), runDueOrderExpirations(), recoverStaleAlipayBillFlows()]);
-    const claimed = payments.claimed + refunds.claimed + expirations.claimed + receiptFlows.found;
+    const [payments, expirations, receiptFlows] = await Promise.all([runDuePaymentRecoveries(), runDueOrderExpirations(), recoverStaleAlipayBillFlows()]);
+    const claimed = payments.claimed + expirations.claimed + receiptFlows.found;
     idleTicks = claimed > 0 ? 0 : idleTicks + 1;
-    if (payments.claimed || refunds.claimed) log("info", "recovery.completed", { payments, refunds });
+    if (payments.claimed) log("info", "recovery.completed", { payments });
     if (expirations.claimed) log("info", "expiration.completed", { expirations });
     if (receiptFlows.found) log("info", "receipt_flow.recovered", { receiptFlows });
   } catch (error) {

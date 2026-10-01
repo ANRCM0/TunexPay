@@ -1,14 +1,12 @@
-import type { PaymentStatus, RefundStatus } from "@prisma/client";
+import type { PaymentStatus } from "@prisma/client";
 
 export const RECOVERY_MAX_ATTEMPTS = 20;
 export const RECOVERY_INITIAL_DELAY_SECONDS = 15;
 export const RECOVERY_MAX_DELAY_SECONDS = 15 * 60;
 
+// 只有支付单参与自动查单。退款状态不再由 Worker 轮询推进：进行中的退款一律等人工查单
+// （见 refund-service.queryRefund）。因此这里没有 isRecoverableRefund。
 export function isRecoverablePayment(status: PaymentStatus): boolean {
-  return status === "PROCESSING" || status === "UNKNOWN";
-}
-
-export function isRecoverableRefund(status: RefundStatus): boolean {
   return status === "PROCESSING" || status === "UNKNOWN";
 }
 

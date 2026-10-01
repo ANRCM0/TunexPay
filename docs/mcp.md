@@ -97,6 +97,8 @@ tunexpay_retry_business_webhook
 
 调用只会创建一个 15 分钟有效的 `McpActionApproval`。管理员必须到 **MCP / Agent Access** 页面确认后，TuneXPay 才通过现有退款、关闭支付或异常处理服务执行。
 
+**退款不再有任何自动或商户直调的执行路径**：Native REST 的 `POST /refunds` 与 ePay V1 的 `act=refund` 都已停用（返回 410 / 明确错误信息）。能创建退款单的只剩两处人工入口——管理台「退款记录 → 人工发起退款」（`POST /admin/v1/refunds`，写 `REFUND_CREATE` 审计），以及本页的 MCP 审批。审批或人工发起后创建出来的退款单也不会被自动查单，状态由管理员在退款页人工查单推进。
+
 ## 审计
 
 每一次 `tools/call` 都记录：

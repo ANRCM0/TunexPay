@@ -4,7 +4,6 @@ import { adapterForPayment } from "./channel-instance-service.js";
 import { db } from "../db.js";
 import { generateId, sha256, stableJson } from "../lib/crypto.js";
 import { AppError, ChannelDefinitiveError, ChannelUncertainError, errorMessage } from "../lib/errors.js";
-import { RECOVERY_MAX_ATTEMPTS, initialRecoveryAt, isRecoverableRefund, recoveryAt } from "../lib/recovery-policy.js";
 import { assertRefundTransition, canRefundTransition, refundedOrderStatus } from "../lib/state-machine.js";
 import { createRefundSucceededDelivery } from "./outbox-service.js";
 import { resolveLateDuplicateExceptionAfterRefund } from "./payment-exception-service.js";
@@ -44,7 +43,6 @@ export async function createRefund(application: Application, input: CreateRefund
       const created = await tx.refund.create({ data: {
         refundNo: generateId("ref"), externalRefundNo: input.externalRefundNo, applicationId: application.id,
         paymentId: payment.id, amount: input.amount, reason: input.reason, status: "PROCESSING",
-        nextQueryAt: payment.channel === "ALIPAY" ? initialRecoveryAt() : null,
       } });
       await tx.paymentEvent.create({ data: {
         aggregateType: "REFUND", aggregateId: created.refundNo, orderId: payment.orderId, paymentId: payment.id,
@@ -93,10 +91,11 @@ async function updateRefund(refund: Refund, status: RefundStatus, data: Record<s
     const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
     if (current.status === "SUCCESS" || !canRefundTransition(current.status, status)) return current;
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: current.paymentId } });
+    // 退款不排下一次自动查单：nextQueryAt 一律清空（也顺手清理升级前遗留的调度）。
     const updated = await tx.refund.update({ where: { id: current.id }, data: {
       status,
       ...data,
-      nextQueryAt: payment.channel === "ALIPAY" && isRecoverableRefund(status) ? recoveryAt(Math.max(1, current.queryAttempts)) : null,
+      nextQueryAt: null,
     } });
     await tx.paymentEvent.create({ data: {
       aggregateType: "REFUND", aggregateId: refund.refundNo, orderId: payment.orderId, paymentId: payment.id,
@@ -142,6 +141,11 @@ async function finalizeRefund(refund: Refund, status: RefundStatus, raw: unknown
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
+/**
+ * 退款单只在这一处被人工动作推进状态（管理员在退款页点「主动查单」，或商户查询接口）。
+ * 这里刻意不再重排 `nextQueryAt`：系统不自动查退款，状态未知的退款会一直保留原状态，
+ * 直到有人手动查单。
+ */
 export async function queryRefund(applicationId: string | null, refundNo: string) {
   const refund = await db.refund.findFirst({
     where: { refundNo, ...(applicationId ? { applicationId } : {}) },
@@ -157,19 +161,7 @@ export async function queryRefund(applicationId: string | null, refundNo: string
   if (refund.status !== result.status && refund.status !== "SUCCESS" && canRefundTransition(refund.status, result.status)) {
     return updateRefund(refund, result.status, { rawResponse: result.raw as Prisma.InputJsonValue, channelRefundNo: result.channelRefundNo }, "QUERY");
   }
-  if (refund.payment.channel === "ALIPAY" && isRecoverableRefund(refund.status) && !refund.nextQueryAt && refund.queryAttempts < RECOVERY_MAX_ATTEMPTS) {
-    await db.refund.updateMany({
-      where: { id: refund.id, status: refund.status, nextQueryAt: null, queryAttempts: refund.queryAttempts },
-      data: { nextQueryAt: initialRecoveryAt() },
-    });
-    return db.refund.findUniqueOrThrow({ where: { id: refund.id } });
-  }
-  return refund;
-}
-
-export async function markRefundSucceededFromReceipt(refundNo: string, amount: number, raw: Prisma.InputJsonValue, channelRefundNo?: string | null) {
-  const refund = await db.refund.findUnique({ where: { refundNo } });
-  if (!refund) throw new AppError("REFUND_NOT_FOUND", "退款单不存在", 404);
-  if (refund.amount !== amount) throw new AppError("REFUND_AMOUNT_MISMATCH", "账单退款金额与退款单金额不一致", 409, { expected: refund.amount, actual: amount });
-  return finalizeRefund(refund, "SUCCESS", raw, channelRefundNo ?? refund.channelRefundNo ?? undefined, "ALIPAY_BILL");
+  // 本次查单没有推进状态：重读一次再返回，避免把「读旧值 → 调通道 → 并发成功确认」之间
+  // 的陈旧快照回给调用方。这是刷新本次响应，不是重排自动查单。
+  return db.refund.findUniqueOrThrow({ where: { id: refund.id }, include: { payment: true } });
 }

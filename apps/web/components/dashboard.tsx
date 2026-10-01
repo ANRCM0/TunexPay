@@ -7,7 +7,7 @@ import { eventLabel, eventSourceLabel, eventTone } from "../lib/labels";
 type Event = { id: string; type: string; source: string; aggregateId: string; createdAt: string };
 type Dashboard = {
   applications: number; ordersToday: number; successfulToday: number; amountToday: number; unknownPayments: number; pendingWebhooks: number;
-  recoveringPayments: number; recoveringRefunds: number; exhaustedRecoveries: number; unmatchedReceipts: number; mismatchedReceipts: number;
+  recoveringPayments: number; pendingRefunds: number; exhaustedRecoveries: number; unmatchedReceipts: number; mismatchedReceipts: number;
   openPaymentExceptions: number; expirationFailures: number; failedAdminActionsToday: number; recentEvents: Event[];
 };
 
@@ -20,6 +20,7 @@ function alertItems(data: Dashboard): AlertItem[] {
     { label: "对账差错", value: data.mismatchedReceipts, note: "金额或流水号冲突", tone: "red" },
     { label: "今日管理失败", value: data.failedAdminActionsToday, note: "可在操作审计中查看", tone: "red" },
     { label: "结果未知", value: data.unknownPayments, note: "需要主动查单", tone: "orange" },
+    { label: "待人工查单退款", value: data.pendingRefunds, note: "退款不再自动查单", tone: "orange" },
     { label: "未匹配账单", value: data.unmatchedReceipts, note: "等待订单或退款单出现", tone: "orange" },
     { label: "过期关闭异常", value: data.expirationFailures, note: "Worker 将自动退避重试", tone: "orange" },
   ];
@@ -36,7 +37,7 @@ export function Dashboard() {
         <div className="grid stats">
           <Stat label="今日订单" value={String(data.ordersToday)} note={`${data.successfulToday} 笔支付成功`} />
           <Stat tone="green" label="今日实收" value={money(data.amountToday)} note="仅统计成功支付" />
-          <Stat label="自动恢复中" value={String(data.recoveringPayments + data.recoveringRefunds)} note={`${data.recoveringPayments} 支付 · ${data.recoveringRefunds} 退款`} />
+          <Stat label="自动恢复中" value={String(data.recoveringPayments)} note="仅支付单自动查单" />
           <Stat label="通知待处理" value={String(data.pendingWebhooks)} note={`${data.applications} 个活跃应用`} />
         </div>
         {alerts.length

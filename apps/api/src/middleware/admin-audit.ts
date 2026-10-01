@@ -8,6 +8,20 @@ import type { AppEnv } from "../types.js";
 
 type AuditDescriptor = { action: string; resourceType: string | null; resourceId: string | null };
 
+/**
+ * 把异常映射成审计里的状态与错误码。
+ *
+ * 与 `app.onError` 的映射保持一致；只在请求确实抛出了异常时使用（正常路径下审计的
+ * HTTP 状态一律以 `c.res.status`——客户端实际收到的那个——为准）。
+ */
+function auditFailure(error: unknown): { statusCode: number; errorCode: string | null } {
+  if (error instanceof AppError) return { statusCode: error.status, errorCode: error.code };
+  if (error instanceof ZodError) return { statusCode: 422, errorCode: "VALIDATION_ERROR" };
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { statusCode: 409, errorCode: "UNIQUE_CONFLICT" };
+  if (error instanceof Error) return { statusCode: 500, errorCode: "INTERNAL_ERROR" };
+  return { statusCode: 500, errorCode: null };
+}
+
 export const adminAudit: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (!isMutation(c.req.method)) return next();
   let success = false;
@@ -18,21 +32,15 @@ export const adminAudit: MiddlewareHandler<AppEnv> = async (c, next) => {
     statusCode = c.res.status;
     success = statusCode < 400;
   } catch (error) {
-    if (error instanceof AppError) {
-      statusCode = error.status;
-      errorCode = error.code;
-    } else if (error instanceof ZodError) {
-      statusCode = 422;
-      errorCode = "VALIDATION_ERROR";
-    } else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      statusCode = 409;
-      errorCode = "UNIQUE_CONFLICT";
-    } else {
-      statusCode = 500;
-      errorCode = "INTERNAL_ERROR";
-    }
+    // 只有在本中间件之上的实现没有装 onError 时才会走到这里（见下面 finally 的说明）。
+    ({ statusCode, errorCode } = auditFailure(error));
     throw error;
   } finally {
+    // Hono 的 compose 在「更内层」的 dispatch 里就捕获了 handler 抛出的异常、交给
+    // app.onError 转成响应，并把原始异常挂在同一个 context 上（context.error）。
+    // 因此这里的 next() 通常不会抛错，业务失败表现为「status >= 400 但 catch 没跑」。
+    // 不读 context.error，审计里的 errorCode 就会永远是 null。
+    if (errorCode === null && !success) errorCode = auditFailure(c.error).errorCode;
     const descriptor = describeAdminAction(c.req.method, c.req.path);
     try {
       await db.adminAuditLog.create({ data: {
@@ -98,6 +106,7 @@ export function describeAdminAction(method: string, path: string): AuditDescript
   if (root === "channels" && id === "alipay-bill" && operation === "settings") return descriptor("ALIPAY_BILL_SETTINGS_UPDATE", "CHANNEL", "ALIPAY_BILL");
   if (root === "payments" && operation === "query") return descriptor("PAYMENT_QUERY", "PAYMENT", id ?? null);
   if (root === "payments" && operation === "close") return descriptor("PAYMENT_CLOSE", "PAYMENT", id ?? null);
+  if (method === "POST" && root === "refunds" && !id) return descriptor("REFUND_CREATE", "REFUND", null);
   if (root === "refunds" && operation === "query") return descriptor("REFUND_QUERY", "REFUND", id ?? null);
   if (root === "exceptions" && operation === "status") return descriptor("PAYMENT_EXCEPTION_UPDATE", "PAYMENT_EXCEPTION", id ?? null);
   if (root === "webhooks" && operation === "retry") return descriptor("WEBHOOK_RETRY", "WEBHOOK", id ?? null);

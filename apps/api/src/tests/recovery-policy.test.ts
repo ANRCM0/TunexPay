@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { RECOVERY_INITIAL_DELAY_SECONDS, RECOVERY_MAX_DELAY_SECONDS, initialRecoveryAt, isRecoverablePayment, isRecoverableRefund, recoveryAt, recoveryDelaySeconds } from "../lib/recovery-policy.js";
+import { RECOVERY_INITIAL_DELAY_SECONDS, RECOVERY_MAX_DELAY_SECONDS, initialRecoveryAt, isRecoverablePayment, recoveryAt, recoveryDelaySeconds } from "../lib/recovery-policy.js";
 
 describe("recovery policy", () => {
-  it("only schedules uncertain or processing records", () => {
+  // 只有支付单参与自动查单：这里没有 isRecoverableRefund，退款不再被自动轮询。
+  it("only schedules uncertain or processing payments", () => {
     expect(isRecoverablePayment("PROCESSING")).toBe(true);
     expect(isRecoverablePayment("UNKNOWN")).toBe(true);
     expect(isRecoverablePayment("SUCCESS")).toBe(false);
-    expect(isRecoverableRefund("UNKNOWN")).toBe(true);
-    expect(isRecoverableRefund("FAILED")).toBe(false);
   });
 
   it("uses bounded exponential backoff", () => {

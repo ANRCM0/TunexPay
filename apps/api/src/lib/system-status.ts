@@ -63,20 +63,22 @@ async function checkWebhookQueue(): Promise<QueueStatus> {
 }
 
 async function collectTasks() {
-  const [pendingWebhooks, deadWebhooks, recoveringPayments, recoveringRefunds, openPaymentExceptions, nextDelivery, nextPaymentQuery, nextRefundQuery] = await Promise.all([
+  const [pendingWebhooks, deadWebhooks, recoveringPayments, pendingRefunds, openPaymentExceptions, nextDelivery, nextPaymentQuery] = await Promise.all([
     db.webhookDelivery.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
     db.webhookDelivery.count({ where: { status: "DEAD" } }),
     db.payment.count({ where: { status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
-    db.refund.count({ where: { status: { in: ["PROCESSING", "UNKNOWN"] }, nextQueryAt: { not: null } } }),
+    // 退款不再自动查单：这里统计的是「还没到终态、等人工查单」的退款，与 nextQueryAt 无关。
+    db.refund.count({ where: { status: { in: ["PROCESSING", "UNKNOWN"] } } }),
     db.paymentException.count({ where: { status: { in: ["OPEN", "PROCESSING"] } } }),
     db.webhookDelivery.findFirst({ where: { status: { in: ["PENDING", "PROCESSING"] } }, orderBy: { nextAttemptAt: "asc" }, select: { nextAttemptAt: true } }),
     db.payment.findFirst({ where: { nextQueryAt: { not: null } }, orderBy: { nextQueryAt: "asc" }, select: { nextQueryAt: true } }),
-    db.refund.findFirst({ where: { nextQueryAt: { not: null } }, orderBy: { nextQueryAt: "asc" }, select: { nextQueryAt: true } }),
   ]);
-  const dueCandidates = [nextDelivery?.nextAttemptAt, nextPaymentQuery?.nextQueryAt, nextRefundQuery?.nextQueryAt]
+  // 只有还会被 Worker 自动执行的到期时间才算「下次任务」。退款不会再有自动任务，
+  // 因此刻意不把 refunds.nextQueryAt 并进来（遗留值只会误导运维）。
+  const dueCandidates = [nextDelivery?.nextAttemptAt, nextPaymentQuery?.nextQueryAt]
     .filter((value): value is Date => Boolean(value));
   const nextTaskAt = dueCandidates.length ? new Date(Math.min(...dueCandidates.map(value => value.getTime()))) : null;
-  return { pendingWebhooks, deadWebhooks, recoveringPayments, recoveringRefunds, openPaymentExceptions, nextTaskAt };
+  return { pendingWebhooks, deadWebhooks, recoveringPayments, pendingRefunds, openPaymentExceptions, nextTaskAt };
 }
 
 export async function collectSystemStatus() {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ find: vi.fn(), latest: vi.fn(), update: vi.fn(), raw: vi.fn(), adapter: vi.fn(), query: vi.fn(), refundQuery: vi.fn(), webhook: vi.fn() }));
 vi.mock("../services/channel-instance-service.js", () => ({ adapterForPayment: mocks.adapter, ensureLegacyChannels: vi.fn(), assertChannelVerified: vi.fn() }));
 vi.mock("../db.js", () => {
-  const tx = { payment: { findFirst: mocks.find, findUnique: mocks.find, findUniqueOrThrow: mocks.latest, update: mocks.update }, refund: { findFirst: mocks.find }, $queryRaw: mocks.raw };
+  const tx = { payment: { findFirst: mocks.find, findUnique: mocks.find, findUniqueOrThrow: mocks.latest, update: mocks.update }, refund: { findFirst: mocks.find, findUniqueOrThrow: mocks.find }, $queryRaw: mocks.raw };
   return { db: { ...tx, $transaction: async (fn: (tx: unknown) => unknown) => fn(tx) } };
 });
 import { handleAlipayWebhook, queryPayment } from "../services/payment-service.js";
@@ -25,13 +25,16 @@ describe("historical channel routing", () => {
     expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.raw).toHaveBeenCalled();
   });
-  it("queries a refund through its original payment channel", async () => {
+  it("queries a refund through its original payment channel without scheduling a follow-up", async () => {
     const payment = { paymentNo: "pay-old", channel: "ALIPAY", channelId: "account-a", channelTradeNo: "trade-a" };
     mocks.find.mockResolvedValue({ refundNo: "refund-old", payment, status: "PROCESSING", nextQueryAt: new Date() });
     mocks.refundQuery.mockResolvedValue({ status: "PROCESSING", raw: {} });
     await queryRefund(null, "refund-old");
     expect(mocks.adapter).toHaveBeenCalledWith(payment);
     expect(mocks.refundQuery).toHaveBeenCalledWith({ paymentNo: "pay-old", refundNo: "refund-old", channelTradeNo: "trade-a" });
+    // 状态没变：人工查单只重读，不写库、也不重排自动查单。
+    expect(mocks.raw).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
   it("selects callback verification credentials using the bound payment", async () => {
     const payment = { paymentNo: "pay-b", channel: "ALIPAY", channelId: "account-b" };
