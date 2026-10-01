@@ -27,9 +27,9 @@ const scopeCopy:Record<Scope,string>={
   FINANCIAL:"运维 + 创建需要人工批准的资金动作",
 };
 
-function eligibleTools(tools:Tool[]|undefined,scope:Scope){ return (tools??[]).filter(tool=>rank[tool.scope]<=rank[scope]); }
+function eligibleTools(tools:Tool[]|null|undefined,scope:Scope){ return (tools??[]).filter(tool=>rank[tool.scope]<=rank[scope]); }
 
-function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|undefined;scope:Scope;selected:string[];onChange:(value:string[])=>void}){
+function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|null|undefined;scope:Scope;selected:string[];onChange:(value:string[])=>void}){
   const eligible=eligibleTools(tools,scope);
   const groups=(["READ","OPERATE","FINANCIAL"] as Scope[]).map(group=>[group,eligible.filter(tool=>tool.scope===group)] as const).filter(([,items])=>items.length);
   const set=new Set(selected);
@@ -44,7 +44,7 @@ function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|undefined;scop
   ])}</div>;
 }
 
-function ClientCard({client,tools,busy,onBusy,onNotice,reload,onToken}:{client:Client;tools:Tool[]|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onToken:(token:string,name:string)=>void}){
+function ClientCard({client,tools,busy,onBusy,onNotice,reload,onToken}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onToken:(token:string,name:string)=>void}){
   const [name,setName]=useState(client.name),[scope,setScope]=useState<Scope>(client.scope),[enabled,setEnabled]=useState(client.enabled);
   const [expiresAt,setExpiresAt]=useState(client.expiresAt?new Date(client.expiresAt).toISOString().slice(0,16):"");
   const [allowed,setAllowed]=useState(client.allowedTools);
