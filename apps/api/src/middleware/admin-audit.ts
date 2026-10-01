@@ -69,6 +69,11 @@ export function describeAdminAction(method: string, path: string): AuditDescript
     return descriptor(action, "NOTIFICATION_INSTANCE", id ?? null);
   }
   if (root === "notification-deliveries" && operation === "retry") return descriptor("NOTIFICATION_DELIVERY_RETRY", "NOTIFICATION_DELIVERY", id ?? null);
+  if (root === "agent" && id === "settings") return descriptor("AGENT_SETTINGS_UPDATE", "AGENT", "settings");
+  if (root === "agent" && id === "test") return descriptor("AGENT_TEST", "AGENT", "test");
+  if (root === "agent" && id === "approvals" && segments[3] === "approve") return descriptor("AGENT_ACTION_APPROVE", "AGENT_ACTION", operation ?? null);
+  if (root === "agent" && id === "approvals" && segments[3] === "reject") return descriptor("AGENT_ACTION_REJECT", "AGENT_ACTION", operation ?? null);
+  if (root === "agent" && id === "telegram" && segments[3] === "register") return descriptor("AGENT_TELEGRAM_REGISTER", "NOTIFICATION_INSTANCE", operation ?? null);
   if (root === "applications" && operation === "channel-instance") return descriptor("APPLICATION_CHANNEL_CHANGE", "APPLICATION", id ?? null);
   if (method === "POST" && root === "applications" && !id) return descriptor("APPLICATION_CREATE", "APPLICATION", null);
   if (root === "applications" && operation === "rotate-api-key") return descriptor("APPLICATION_API_KEY_ROTATE", "APPLICATION", id ?? null);

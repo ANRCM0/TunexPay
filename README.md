@@ -482,3 +482,8 @@ v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守
 - 管理员通知已抽象为 `NotificationPlugin -> NotificationInstance`，支持 SMTP、飞书机器人、Telegram、通知 Webhook 和飞书应用，并可按事件独立订阅。详见 [docs/notification-plugins.md](docs/notification-plugins.md)。
 - 可选的只读 MCP endpoint 为 AI Agent 提供订单、支付、退款、异常、通道和系统状态查询。默认关闭并使用独立 Token。详见 [docs/mcp.md](docs/mcp.md)。
 - 业务系统的支付成功 / 退款成功 Webhook 仍属于支付协议，不会被通知插件替代。
+
+
+### Agent（Phase 4–6）
+
+TuneXPay 现在支持分级 MCP（READ / OPERATE / FINANCIAL-request）、人工资金审批，以及基于同一 MCP Tool Registry 的 OpenAI-compatible Agent。Telegram Bot 和飞书应用可同时作为通知出口与 Agent 对话入口。详见 [docs/agent.md](docs/agent.md) 和 [docs/mcp.md](docs/mcp.md)。

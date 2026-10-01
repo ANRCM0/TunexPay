@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, Puzzle, ReceiptText, RotateCcw, Webhook, X } from "lucide-react";
+import { AlertTriangle, AppWindow, Bell, Bot, CreditCard, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, Puzzle, ReceiptText, RotateCcw, Webhook, X } from "lucide-react";
 
 const navigation = [
   { label: "", items: [["/", "总览", LayoutDashboard]] },
   { label: "交易", items: [["/orders", "订单", ReceiptText], ["/refunds", "退款", RotateCcw], ["/exceptions", "支付异常", AlertTriangle]] },
   { label: "资金", items: [["/reconciliation", "对账", FileCheck2], ["/webhooks", "Webhook", Webhook]] },
-  { label: "系统", items: [["/system", "系统监控", Gauge], ["/applications", "应用", AppWindow], ["/plugins", "支付插件", Puzzle], ["/channels", "支付通道", CreditCard], ["/notifications", "通知设置", Bell], ["/audits", "操作审计", ListChecks]] },
+  { label: "系统", items: [["/system", "系统监控", Gauge], ["/applications", "应用", AppWindow], ["/plugins", "支付插件", Puzzle], ["/channels", "支付通道", CreditCard], ["/notifications", "通知设置", Bell], ["/agent", "Agent", Bot], ["/audits", "操作审计", ListChecks]] },
 ] as const;
 
 const CRUMB_MAP: [RegExp, string[]][] = [
@@ -26,6 +26,7 @@ const CRUMB_MAP: [RegExp, string[]][] = [
   [/^\/channels\/alipay-bill/, ["系统", "支付通道", "账单收款配置"]],
   [/^\/channels/, ["系统", "支付通道"]],
   [/^\/notifications/, ["系统", "通知设置"]],
+  [/^\/agent/, ["系统", "Agent"]],
   [/^\/audits/, ["系统", "操作审计"]],
 ];
 

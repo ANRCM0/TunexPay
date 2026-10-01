@@ -55,3 +55,18 @@ MCP 层不会暴露以下能力：
 - 任意 SQL / 任意 URL fetch。
 
 后续如果增加操作型 MCP，应将 READ / OPERATE / FINANCIAL 分层，并让资金动作经过显式人工确认，而不是扩大当前 Token 的权限。
+
+
+## 权限分层（Phase 4）
+
+MCP 使用三个**互不相同**的 Bearer Token，凭证本身决定最大能力：
+
+| Token | Scope | 能力 |
+|---|---|---|
+| `MCP_TOKEN` | READ | 查询 |
+| `MCP_OPERATE_TOKEN` | OPERATE | READ + 重试通知/业务 Webhook、主动查单、通道检测、启停通知 |
+| `MCP_FINANCIAL_TOKEN` | FINANCIAL | OPERATE + 创建资金/异常审批请求 |
+
+FINANCIAL 不代表“直接动钱”。`tunexpay_request_refund`、`tunexpay_request_payment_close` 和 `tunexpay_request_exception_resolution` 只创建 15 分钟有效的审批单。管理员必须在 **系统 → Agent** 页面批准，服务才调用现有 `createRefund` / `closePayment` / 异常状态机执行。
+
+这使 MCP/Agent 无法绕过支付核心的不变量，也避免模型提示注入直接触发资金动作。
