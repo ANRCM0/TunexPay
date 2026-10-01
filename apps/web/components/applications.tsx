@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, time } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps, time } from "./common";
 import { assignable, type Channel } from "./channels";
 import { applicationRoutingTarget, assignPaymentRouting, routingCreateInput, RoutingTargetSelect } from "./routing-target";
 import { canAssignGroup, type RoutingGroup } from "../lib/routing-groups";
@@ -36,11 +37,25 @@ function clearedSummary(cleared: Cleared) {
 }
 function reason(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
 
+const SORT_COLUMNS: SortColumn<Application>[] = [
+  { key: "name", label: "应用" },
+  { key: "appId", label: "App ID / ePay PID" },
+  // 路由列显示的是"路由组名或默认通道名"，排序用同一份展示文本
+  { key: "route", label: "收款路由", accessor: (row) => row.routingGroup?.name ?? row.defaultChannel },
+  { key: "webhookUrl", label: "Webhook", accessor: (row) => row.webhookUrl ?? "" },
+  { key: "status", label: "状态" },
+  { key: "createdAt", label: "创建时间", type: "date" },
+];
+
 export function Applications() {
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
   const [showArchived, setShowArchived] = useState(false);
   const { data, loading, error, reload } = useApi<Application[]>(`/applications${showArchived ? "?includeArchived=true" : ""}`);
   const channels = useApi<Channel[]>("/channel-instances");
   const groups = useApi<RoutingGroup[]>("/routing-groups");
+
+  // 排序作用于服务端返回的列表（含归档时由 showArchived 决定）
+  const rows = useMemo(() => sortRows(data ?? [], SORT_COLUMNS, sort), [data, sort]);
   const [credentials, setCredentials] = useState<CreatedCredentials | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -150,14 +165,22 @@ export function Applications() {
       <section className="card section">
         <div className="section-head"><h2>应用列表</h2><label className="toggle-inline"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />显示已归档</label></div>
         <div className="table-wrap"><table>
-        <thead><tr><th>应用</th><th>App ID / ePay PID</th><th>收款路由</th><th>Webhook</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
-        <tbody>{data?.map(item => <tr key={item.id} className={item.archivedAt ? "row-archived" : undefined}>
-          <td><strong>{item.name}</strong>{item.archivedAt && <div className="muted">已于 {time(item.archivedAt)} 归档</div>}</td>
-          <td data-label="App ID"><div className="id-line"><span className="mono">{item.appId}</span><CopyValue value={item.appId} label="复制 App ID" /></div><div className="id-line"><span className="mono muted">PID {item.epayPid}</span><CopyValue value={item.epayPid} label="复制 ePay PID" /></div></td>
-          <td data-label="收款路由">{item.archivedAt ? item.routingGroup?.name || channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel) : <RoutingTargetSelect className="routing-binding" aria-label={`${item.name} 收款路由`} value={applicationRoutingTarget(item)} currentTarget={applicationRoutingTarget(item)} groups={groups.data ?? []} channels={channels.data ?? []} disabled={busy !== "" || groups.loading || channels.loading || !!groups.error || !!channels.error} onChange={event => void assignRouting(item, event.target.value)} />}{item.routingGroupId && <div className="muted">轮询组 · 仅新支付按组内规则选路</div>}</td>
-          <td data-label="Webhook">{item.webhookUrl ? <div className="id-line"><span className="mono break-all">{item.webhookUrl}</span><CopyValue value={item.webhookUrl} label="复制 Webhook 地址" /></div> : "—"}</td>
-          <td data-label="状态"><Status value={item.status} /></td>
-          <td data-label="创建时间">{time(item.createdAt)}</td>
+<thead><tr>
+            <SortableTh label="应用" sortKey="name" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="App ID / ePay PID" sortKey="appId" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="收款路由" sortKey="route" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="Webhook" sortKey="webhookUrl" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="状态" sortKey="status" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="创建时间" sortKey="createdAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <th scope="col">操作</th>
+          </tr></thead>
+        <tbody>{rows.map(item => <tr key={item.id} className={item.archivedAt ? "row-archived" : undefined}>
+          <td {...sortValueProps(item, SORT_COLUMNS[0])}><strong>{item.name}</strong>{item.archivedAt && <div className="muted">已于 {time(item.archivedAt)} 归档</div>}</td>
+          <td data-label="App ID" {...sortValueProps(item, SORT_COLUMNS[1])}><div className="id-line"><span className="mono">{item.appId}</span><CopyValue value={item.appId} label="复制 App ID" /></div><div className="id-line"><span className="mono muted">PID {item.epayPid}</span><CopyValue value={item.epayPid} label="复制 ePay PID" /></div></td>
+          <td data-label="收款路由" {...sortValueProps(item, SORT_COLUMNS[2])}>{item.archivedAt ? item.routingGroup?.name || channels.data?.find(channel => channel.id === item.defaultChannelId)?.name || channelLabel(item.defaultChannel) : <RoutingTargetSelect className="routing-binding" aria-label={`${item.name} 收款路由`} value={applicationRoutingTarget(item)} currentTarget={applicationRoutingTarget(item)} groups={groups.data ?? []} channels={channels.data ?? []} disabled={busy !== "" || groups.loading || channels.loading || !!groups.error || !!channels.error} onChange={event => void assignRouting(item, event.target.value)} />}{item.routingGroupId && <div className="muted">轮询组 · 仅新支付按组内规则选路</div>}</td>
+          <td data-label="Webhook" {...sortValueProps(item, SORT_COLUMNS[3])}>{item.webhookUrl ? <div className="id-line"><span className="mono break-all">{item.webhookUrl}</span><CopyValue value={item.webhookUrl} label="复制 Webhook 地址" /></div> : "—"}</td>
+          <td data-label="状态" {...sortValueProps(item, SORT_COLUMNS[4])}><Status value={item.status} /></td>
+          <td data-label="创建时间" {...sortValueProps(item, SORT_COLUMNS[5])}>{time(item.createdAt)}</td>
           <td data-label="操作">
             {item.archivedAt ? <span className="muted">已归档，仅作追溯</span> : <>
               <div className="row-actions">

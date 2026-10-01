@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, HoverDetail, LoadingState, PageHead, Section, Status, Modal, Toast, ConfirmModal, statusText, time } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps, statusText, time } from "./common";
 import { channelLabel } from "../lib/labels";
 import { RoutingTargetSelect, applicationRoutingTarget, assignPaymentRouting } from "./routing-target";
 import type { RoutingGroup } from "../lib/routing-groups";
@@ -27,6 +28,14 @@ function checkDetail(channel: Channel): string {
   ].filter(Boolean).join("\n");
 }
 
+const SORT_COLUMNS: SortColumn<Channel>[] = [
+  { key: "name", label: "通道 / 插件" },
+  { key: "enabled", label: "新订单", accessor: (row) => (row.enabled ? 1 : 0), type: "number" },
+  { key: "checkStatus", label: "验证状态" },
+  // checkedAt 可能为 null（从未检测），空值由 sortRows 统一排到末尾
+  { key: "checkedAt", label: "最近检测", type: "date", accessor: (row) => row.checkedAt ?? "" },
+];
+
 export function Channels() {
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
   const applications = useApi<Application[]>("/applications");
@@ -37,7 +46,9 @@ export function Channels() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [removing, setRemoving] = useState<Channel | null>(null);
   const [busy, setBusy] = useState("");
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const rows = useMemo(() => sortRows(channels.data ?? [], SORT_COLUMNS, sort), [channels.data, sort]);
   const [testChannel, setTestChannel] = useState<Channel | null>(null);
   const [testAmount, setTestAmount] = useState("0.01");
   async function operate(channel: Channel, action: "check" | "test-payment", amount?: string) {
@@ -89,12 +100,18 @@ export function Channels() {
     {notice && <Toast type={notice.ok ? "ok" : "error"} text={notice.text} onClose={() => setNotice(null)} />}
     <Section title="通道列表" action={<span className="muted">创建通道需先选择支付插件 · <button className="link-button" onClick={() => setAssignOpen(true)}>通道分配</button></span>}>
       <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length} emptyText="还没有支付通道：请先创建通道并选择对接的支付插件，检测通过后再分配给应用">
-        <div className="table-wrap"><table><thead><tr><th>通道 / 插件</th><th>新订单</th><th>验证状态</th><th>最近检测</th><th>操作</th></tr></thead><tbody>
-          {channels.data?.map(channel => <tr key={channel.id}>
-            <td><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="id-line"><span className="muted">{channelLabel(channel.plugin)} · <span className="mono">{channel.id}</span></span><CopyValue value={channel.id} label="复制通道 ID" /></div></div></div></td>
-            <td data-label="新订单"><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
-            <td data-label="验证状态"><HoverDetail text={checkDetail(channel)} tone={channel.checkStatus === "FAILED" ? "danger" : "muted"}><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span></HoverDetail>{channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新检测</div>}
-            </td><td data-label="最近检测">{time(channel.checkedAt)}</td>
+        <div className="table-wrap"><table><thead><tr>
+          <SortableTh label="通道 / 插件" sortKey="name" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="新订单" sortKey="enabled" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="验证状态" sortKey="checkStatus" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="最近检测" sortKey="checkedAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <th scope="col">操作</th>
+        </tr></thead><tbody>
+          {rows.map(channel => <tr key={channel.id}>
+            <td {...sortValueProps(channel, SORT_COLUMNS[0])}><div className="channel-id-cell"><div className={`channel-icon xs ${channel.plugin === "MOCK" ? "mock" : "alipay"}`}>{channel.plugin === "MOCK" ? "M" : channel.plugin === "ALIPAY_BILL" ? "账" : "支"}</div><div><strong>{channel.name}</strong><div className="id-line"><span className="muted">{channelLabel(channel.plugin)} · <span className="mono">{channel.id}</span></span><CopyValue value={channel.id} label="复制通道 ID" /></div></div></div></td>
+            <td data-label="新订单" {...sortValueProps(channel, SORT_COLUMNS[1])}><Status value={channel.enabled ? "ACTIVE" : "DISABLED"} /></td>
+            <td data-label="验证状态" {...sortValueProps(channel, SORT_COLUMNS[2])}><HoverDetail text={checkDetail(channel)} tone={channel.checkStatus === "FAILED" ? "danger" : "muted"}><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span></HoverDetail>{channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新检测</div>}
+            </td><td data-label="最近检测" {...sortValueProps(channel, SORT_COLUMNS[3])}>{time(channel.checkedAt)}</td>
             <td data-label="操作"><div className="channel-actions">
               <button className="button secondary" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={14} />配置</button>
               <button className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
@@ -130,7 +147,7 @@ export function Channels() {
     {assignOpen && <Modal title="应用收款路由分配" onClose={() => setAssignOpen(false)}>
       <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length} emptyText="还没有业务应用，创建应用后即可在这里分配收款通道">
         {groups.error && <div className="error">{groups.error}</div>}
-        <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款路由</th></tr></thead><tbody>{applications.data?.map(app => {
+        <div className="table-wrap"><table><thead><tr><th scope="col">业务应用</th><th scope="col">收款路由</th></tr></thead><tbody>{applications.data?.map(app => {
           const current = applicationRoutingTarget(app);
           return <tr key={app.id}><td><strong>{app.name}</strong></td><td data-label="收款路由"><RoutingTargetSelect aria-label={`${app.name} 收款路由`} value={current} currentTarget={current} groups={groups.data ?? []} channels={channels.data ?? []} disabled={!!busy || groups.loading || !!groups.error} onChange={event => void assign(app, event.target.value)} /></td></tr>;
         })}</tbody></table></div>

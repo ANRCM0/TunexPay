@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
 import { eventLabel, notificationChannelLabel } from "../lib/labels";
-import { HoverDetail, LoadingState, Section, Status, Toast, Toggle, time } from "./common";
+import { HoverDetail, LoadingState, Section, SortableTh, Status, Toast, Toggle, sortValueProps, time } from "./common";
 
 type Field = {
   key: string;
@@ -159,10 +160,21 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
   </fieldset></form>;
 }
 
+const DELIVERY_COLUMNS: SortColumn<Delivery>[] = [
+  { key: "createdAt", label: "时间", type: "date" },
+  { key: "instance", label: "实例", accessor: (row) => row.instance?.name ?? row.channel },
+  { key: "eventType", label: "事件", accessor: (row) => row.eventType ?? "" },
+  { key: "title", label: "标题" },
+  { key: "status", label: "状态" },
+  { key: "attempts", label: "尝试", type: "number" },
+];
+
 export function OwnerNotificationsPanel() {
   const { data: plugins, loading: pluginsLoading, error: pluginsError } = useApi<Plugin[]>("/notification-plugins");
   const { data: instances, loading, error, reload } = useApi<Instance[]>("/notification-instances");
   const { data: deliveries, loading: deliveriesLoading, error: deliveriesError, reload: reloadDeliveries } = useApi<Delivery[]>("/notification-deliveries", 10000);
+  const [deliverySort, setDeliverySort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const deliveryRows = useMemo(() => sortRows(deliveries ?? [], DELIVERY_COLUMNS, deliverySort), [deliveries, deliverySort]);
   const [pluginCode, setPluginCode] = useState("");
   const selectedPlugin = useMemo(() => plugins?.find(plugin => plugin.code === pluginCode) ?? plugins?.[0], [plugins, pluginCode]);
   const [newId, setNewId] = useState("");
@@ -246,14 +258,22 @@ export function OwnerNotificationsPanel() {
     <Section title="通知投递" action={<span className="muted">最近 50 条 · 自动刷新</span>} className="detail-section">
       <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录">
         <div className="table-wrap"><table>
-          <thead><tr><th>时间</th><th>实例</th><th>事件</th><th>标题</th><th>状态</th><th>尝试</th><th></th></tr></thead>
-          <tbody>{deliveries?.map(row => <tr key={row.id}>
-            <td>{time(row.createdAt)}</td>
-            <td data-label="实例"><strong>{row.instance?.name ?? notificationChannelLabel(row.channel)}</strong><div className="muted">{notificationChannelLabel(row.instance?.plugin ?? row.channel)}</div></td>
-            <td data-label="事件">{eventLabel(row.eventType ?? "—")}</td>
-            <td data-label="标题">{row.title}</td>
-            <td data-label="状态"><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
-            <td data-label="尝试">{row.attempts}</td>
+          <thead><tr>
+            <SortableTh label="时间" sortKey="createdAt" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <SortableTh label="实例" sortKey="instance" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <SortableTh label="事件" sortKey="eventType" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <SortableTh label="标题" sortKey="title" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <SortableTh label="状态" sortKey="status" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <SortableTh label="尝试" sortKey="attempts" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
+            <th scope="col"></th>
+          </tr></thead>
+          <tbody>{deliveryRows.map(row => <tr key={row.id}>
+            <td {...sortValueProps(row, DELIVERY_COLUMNS[0])}>{time(row.createdAt)}</td>
+            <td data-label="实例" {...sortValueProps(row, DELIVERY_COLUMNS[1])}><strong>{row.instance?.name ?? notificationChannelLabel(row.channel)}</strong><div className="muted">{notificationChannelLabel(row.instance?.plugin ?? row.channel)}</div></td>
+            <td data-label="事件" {...sortValueProps(row, DELIVERY_COLUMNS[2])}>{eventLabel(row.eventType ?? "—")}</td>
+            <td data-label="标题" {...sortValueProps(row, DELIVERY_COLUMNS[3])}>{row.title}</td>
+            <td data-label="状态" {...sortValueProps(row, DELIVERY_COLUMNS[4])}><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
+            <td data-label="尝试" {...sortValueProps(row, DELIVERY_COLUMNS[5])}>{row.attempts}</td>
             <td data-label="操作">{row.status === "DEAD" && row.instance && <button className="link-button" type="button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>}</td>
           </tr>)}</tbody>
         </table></div>

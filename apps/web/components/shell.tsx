@@ -40,6 +40,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   useEffect(() => { setNavOpen(false); }, [path]);
+  // 路由切换后回到顶部。管理台页面很长（对账、MCP、通知），而从客户端路由跳转不会重置
+  // 滚动位置，用户点侧栏后会落在新页面的中间，看起来像"页面没反应"。
+  // 滚动发生在文档根上：.main / .content 都没有 overflow，不是滚动容器。
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [path]);
   useEffect(() => {
     if (!navOpen) return;
     const previous = document.body.style.overflow;
@@ -62,20 +68,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="brand">
         <div className="brand-mark">T</div>
         <div className="brand-text"><div className="brand-title">TUOXIN PAY</div><div className="brand-subtitle">拓昕支付基础设施</div></div>
-        <button type="button" className="nav-close" onClick={() => setNavOpen(false)} aria-label="关闭导航菜单"><X size={18} /></button>
+        <button type="button" className="nav-close" onClick={() => setNavOpen(false)} aria-label="关闭导航菜单"><X size={18} aria-hidden="true" /></button>
       </div>
       <nav className="nav">{navigation.map(group => <div className="nav-group" key={group.label}>
         {group.label && <div className="nav-group-label">{group.label}</div>}
-        {group.items.map(([href, label, Icon]) => <Link title={label} className={path === href || (href !== "/" && path.startsWith(`${href}/`)) ? "active" : ""} href={href} key={href}><Icon size={17} /><span>{label}</span></Link>)}
+        {group.items.map(([href, label, Icon]) => <Link title={label} className={path === href || (href !== "/" && path.startsWith(`${href}/`)) ? "active" : ""} href={href} key={href}><Icon size={17} aria-hidden="true" /><span>{label}</span></Link>)}
       </div>)}</nav>
       <div className="sidebar-foot">v0.1 · Single-tenant payment core</div>
     </aside>
     <div className="main">
       <header className="topbar">
-        <button type="button" className="topbar-menu topbar-collapse" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={!collapsed} aria-controls="app-sidebar"><PanelLeftClose size={18} /></button>
-        <button type="button" className="topbar-menu topbar-nav" onClick={() => setNavOpen(true)} aria-label="打开导航菜单" aria-expanded={navOpen} aria-controls="app-sidebar"><Menu size={18} /></button>
+        <button type="button" className="topbar-menu topbar-collapse" onClick={() => setCollapsed(value => !value)} aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"} aria-expanded={!collapsed} aria-controls="app-sidebar"><PanelLeftClose size={18} aria-hidden="true" /></button>
+        <button type="button" className="topbar-menu topbar-nav" onClick={() => setNavOpen(true)} aria-label="打开导航菜单" aria-expanded={navOpen} aria-controls="app-sidebar"><Menu size={18} aria-hidden="true" /></button>
         <nav className="breadcrumb" aria-label="面包屑">{trail.map((item, index) => <span key={item}>{index > 0 && <i aria-hidden="true">/</i>}{item}</span>)}</nav>
-        <div className="topbar-user"><span className="topbar-avatar" aria-hidden="true">管</span><span className="topbar-name">系统管理员</span><button type="button" className="logout-button" onClick={() => void logout()}><LogOut size={14} />退出</button></div>
+        <div className="topbar-user"><span className="topbar-avatar" aria-hidden="true">管</span><span className="topbar-name">系统管理员</span><button type="button" className="logout-button" onClick={() => void logout()}><LogOut size={14} aria-hidden="true" />退出</button></div>
       </header>
       <main className="content">{children}</main>
     </div>
