@@ -132,6 +132,16 @@ export async function saveNotificationInstance(id: string, raw: unknown) {
     if (!input.revision || input.revision !== current.revision) throw new AppError("NOTIFICATION_CONFIG_CONFLICT", "通知配置已变更，请重新加载", 409);
     if (input.plugin !== current.plugin) throw new AppError("NOTIFICATION_PLUGIN_IMMUTABLE", "通知实例创建后不能更换插件", 409);
     const normalized = notificationPlugin(current.plugin).normalizeConfig(input.config, decode(current.payloadEncrypted));
+    if (input.events !== undefined) {
+      const selected = new Set(input.events);
+      for (const eventType of NOTIFICATION_EVENTS) {
+        await tx.notificationSubscription.upsert({
+          where: { instanceId_eventType: { instanceId: id, eventType } },
+          create: { instanceId: id, eventType, enabled: selected.has(eventType) },
+          update: { enabled: selected.has(eventType) },
+        });
+      }
+    }
     const row = await tx.notificationInstance.update({
       where: { id }, data: { name: input.name, enabled: input.enabled, payloadEncrypted: seal(JSON.stringify(normalized)), revision: { increment: 1 } },
       include: { subscriptions: true },
