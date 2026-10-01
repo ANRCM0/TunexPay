@@ -587,3 +587,70 @@ model AdminAuditLog {
   @@index([resourceType, resourceId, createdAt])
   @@map("admin_audit_logs")
 }
+
+
+model McpClient {
+  id           String        @id @db.VarChar(64)
+  name         String        @db.VarChar(120)
+  tokenHash    String        @unique @db.Char(64)
+  tokenPrefix  String        @db.VarChar(20)
+  scope        String        @default("READ") @db.VarChar(16)
+  allowedTools Json
+  enabled      Boolean       @default(true)
+  revision     Int           @default(1)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  audits       McpAuditLog[]
+
+  @@index([enabled, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_clients")
+}
+
+model McpAuditLog {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  clientId         String?    @db.VarChar(64)
+  clientName       String     @db.VarChar(120)
+  scope            String     @db.VarChar(16)
+  tool             String     @db.VarChar(100)
+  argumentsSummary Json?
+  success          Boolean
+  durationMs       Int        @db.UnsignedInt
+  errorCode        String?    @db.VarChar(80)
+  requestId        String?    @db.VarChar(64)
+  ipAddress        String?    @db.VarChar(64)
+  userAgent        String?    @db.VarChar(500)
+  createdAt        DateTime   @default(now())
+  client           McpClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([tool, createdAt])
+  @@index([success, createdAt])
+  @@map("mcp_audit_logs")
+}
+
+model McpActionApproval {
+  id          String   @id @db.VarChar(64)
+  clientId    String?  @db.VarChar(64)
+  action      String   @db.VarChar(40)
+  arguments   Json
+  summary     String   @db.VarChar(500)
+  requestedBy String   @db.VarChar(120)
+  approvedBy  String?  @db.VarChar(120)
+  status      String   @default("PENDING") @db.VarChar(16)
+  expiresAt   DateTime
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  executedAt  DateTime?
+  result      Json?
+  lastError   String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId, createdAt])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_action_approvals")
+}
