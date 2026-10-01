@@ -20,11 +20,14 @@ export type ChannelCreateResult = {
 };
 
 export type ChannelQueryResult = {
-  status: PaymentStatus;
   channelTradeNo?: string;
   paidAt?: Date;
   raw: unknown;
-};
+} & (
+  // 成功查单必须携带通道实际金额，不能由下游用本地应付金额代填。
+  | { status: "SUCCESS"; amount: number }
+  | { status: Exclude<PaymentStatus, "SUCCESS"> }
+);
 
 export type ChannelRefundInput = {
   paymentNo: string;

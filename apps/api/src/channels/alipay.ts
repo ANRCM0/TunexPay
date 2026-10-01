@@ -88,12 +88,16 @@ export class AlipayChannel implements PaymentChannel {
   async query(paymentNo: string): Promise<ChannelQueryResult> {
     try {
       const response = await this.call("alipay.trade.query", { out_trade_no: paymentNo });
-      return {
-        status: mapTradeStatus(response.trade_status),
+      const status = mapTradeStatus(response.trade_status);
+      const result = {
         channelTradeNo: response.trade_no ? String(response.trade_no) : undefined,
         paidAt: response.send_pay_date ? new Date(String(response.send_pay_date).replace(" ", "T") + "+08:00") : undefined,
         raw: response,
       };
+      if (status === "SUCCESS") {
+        return { ...result, status, amount: yuanToCents(String(response.total_amount ?? "")) };
+      }
+      return { ...result, status };
     } catch (error) {
       if (error instanceof ChannelDefinitiveError && error.code === "ACQ.TRADE_NOT_EXIST") {
         return { status: "CREATED", raw: error.details };

@@ -363,7 +363,7 @@ curl -X POST https://pay.example.com/api/v1/channels/alipay-bill/flows \
 
 ## 本地 Mock 全链路
 
-`.env` 中保持：
+示例配置默认关闭 Mock 和私网 Webhook。仅在隔离的本地开发环境中，在 `.env` 显式开启：
 
 ```dotenv
 MOCK_CHANNEL_ENABLED=true

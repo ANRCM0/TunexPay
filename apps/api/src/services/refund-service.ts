@@ -87,13 +87,16 @@ export async function createRefund(application: Application, input: CreateRefund
 }
 
 async function updateRefund(refund: Refund, status: RefundStatus, data: Record<string, unknown>, source = "CHANNEL") {
-  assertRefundTransition(refund.status, status);
   return db.$transaction(async (tx) => {
-    const payment = await tx.payment.findUniqueOrThrow({ where: { id: refund.paymentId } });
-    const updated = await tx.refund.update({ where: { id: refund.id }, data: {
+    // 通道观察可能晚于另一请求的成功确认：只用锁内重读的状态判断迁移。
+    await tx.$queryRaw`SELECT id FROM refunds WHERE id = ${refund.id} FOR UPDATE`;
+    const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
+    if (current.status === "SUCCESS" || !canRefundTransition(current.status, status)) return current;
+    const payment = await tx.payment.findUniqueOrThrow({ where: { id: current.paymentId } });
+    const updated = await tx.refund.update({ where: { id: current.id }, data: {
       status,
       ...data,
-      nextQueryAt: payment.channel === "ALIPAY" && isRecoverableRefund(status) ? recoveryAt(Math.max(1, refund.queryAttempts)) : null,
+      nextQueryAt: payment.channel === "ALIPAY" && isRecoverableRefund(status) ? recoveryAt(Math.max(1, current.queryAttempts)) : null,
     } });
     await tx.paymentEvent.create({ data: {
       aggregateType: "REFUND", aggregateId: refund.refundNo, orderId: payment.orderId, paymentId: payment.id,
@@ -103,7 +106,7 @@ async function updateRefund(refund: Refund, status: RefundStatus, data: Record<s
       },
     } });
     return updated;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
 
 async function finalizeRefund(refund: Refund, status: RefundStatus, raw: unknown, channelRefundNo?: string, source = "CHANNEL") {
@@ -155,7 +158,11 @@ export async function queryRefund(applicationId: string | null, refundNo: string
     return updateRefund(refund, result.status, { rawResponse: result.raw as Prisma.InputJsonValue, channelRefundNo: result.channelRefundNo }, "QUERY");
   }
   if (refund.payment.channel === "ALIPAY" && isRecoverableRefund(refund.status) && !refund.nextQueryAt && refund.queryAttempts < RECOVERY_MAX_ATTEMPTS) {
-    return db.refund.update({ where: { id: refund.id }, data: { nextQueryAt: initialRecoveryAt() } });
+    await db.refund.updateMany({
+      where: { id: refund.id, status: refund.status, nextQueryAt: null, queryAttempts: refund.queryAttempts },
+      data: { nextQueryAt: initialRecoveryAt() },
+    });
+    return db.refund.findUniqueOrThrow({ where: { id: refund.id } });
   }
   return refund;
 }

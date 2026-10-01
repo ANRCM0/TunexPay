@@ -87,6 +87,13 @@ ADMIN_SESSION_SECRET=
 
 生产环境不要保留示例密码或默认随机值。
 
+### 生产安全边界
+
+- 保持 `MOCK_CHANNEL_ENABLED=false`、`ALLOW_PRIVATE_WEBHOOKS=false`。示例配置现在默认关闭这两个开关；已有 `.env` 不会自动更新，需要人工核对。Mock 收银台允许付款人点击模拟成功，不能用于真实收款或真实业务入账。
+- 管理员口令使用高熵随机值。应用登录接口本身不维护失败计数，公网入口必须配置限流；仓库的 `docker/openresty.conf` 示例对 `/api/auth/login` 按客户端 IP 限制为每分钟 5 次、允许 5 次突发，超限返回 429。配置需要放在 Nginx/OpenResty 的 `http` 上下文；不要直接放进已有 `server` 块。应用端口保持仅绑定 loopback，避免绕过公网限流。
+- 经 CDN/负载均衡部署时，只信任明确配置的代理地址并正确恢复真实客户端 IP；不要无条件信任用户自带的 `X-Forwarded-For`。多 IP 攻击仍需 WAF 等外围控制。
+- 管理员会话为最长 12 小时的无状态签名 Cookie。退出仅清除当前浏览器 Cookie，修改 `ADMIN_PASSWORD` 不会撤销已签发会话。若怀疑 Cookie 泄露，轮换 `ADMIN_SESSION_SECRET` 并重启所有 Web 实例，使旧会话全部失效。
+
 ## 4. 部署方式 A：使用 Compose MySQL
 
 适合新部署或希望 TunexPay 自己管理独立 MySQL 的环境。
@@ -336,6 +343,31 @@ docker login ghcr.io
 生产环境建议固定到经过验证的版本或 SHA tag，而不是长期无条件跟随 `latest`。
 
 ## 10. 更新
+
+### 通知 URL 长度修复的迁移检查
+
+新增迁移 `202610010004_webhook_url_length` 将投递 URL 从 300 扩为 500 字符，与应用及订单接口对齐。它保留完整的 `(orderId, eventType, url)` 唯一键，不使用前缀索引或截断 URL。
+
+由于 MySQL 8 常规 InnoDB 索引限制为 3072 字节，三个列都使用 utf8mb4 时最大预算为 3084 字节。迁移将内部 `eventType` 保持 80 字符但改为 `ascii_general_ci`，预算降为 2844 字节；当前写入者只生成 `payment.succeeded` 和 `refund.succeeded:<refundNo>`。Prisma Schema 无法表达列字符集，这一约束由 SQL 迁移维护，不要用 `db push` 代替正式迁移。
+
+升级前备份数据库，并用只读查询确认历史事件类型均为 ASCII（应返回零行）：
+
+```sql
+SELECT id, eventType
+FROM webhook_deliveries
+WHERE HEX(eventType) <> HEX(CONVERT(eventType USING ascii));
+```
+
+若存在手工写入的非 ASCII 事件类型，先调查，不要直接替换或删除。迁移显式启用严格 SQL 模式，非 ASCII 数据转换会失败而不是静默替换；默认的启动迁移重试可能因此持续等待，需要查看日志解决前置问题。迁移不删除业务数据或缩短已有字段。
+
+升级后核对：
+
+```sql
+SHOW FULL COLUMNS FROM webhook_deliveries;
+SHOW INDEX FROM webhook_deliveries;
+```
+
+确认 `url` 为 `varchar(500)`、`eventType` 为 ASCII 字符集，唯一键仍覆盖完整三列。请在隔离的真实 MySQL 8 测试库执行迁移并验证长 URL 后再上线；单元测试和静态索引预算检查不能替代真实 DDL 验收。
 
 常规更新：
 
