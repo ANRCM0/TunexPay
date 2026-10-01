@@ -3,7 +3,8 @@
 import { FileUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, HoverDetail, LoadingState, PageHead, Section, Status, Toast, money, time } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Section, SortableTh, Status, Toast, sortValueProps, money, time } from "./common";
 
 type Run = {
   id: string; statementDate: string; status: string; fileName: string | null; importedCount: number; duplicateCount: number;
@@ -16,16 +17,39 @@ type Receipt = {
   refund: { refundNo: string; externalRefundNo: string } | null;
 };
 
+// 批次表：列里显示的是"账单日期"和"完成时间"两个时间，分别给排序键。
+const RUN_COLUMNS: SortColumn<Run>[] = [
+  { key: "statementDate", label: "账单日期 / 文件", type: "date" },
+  { key: "status", label: "状态" },
+  // 「导入」单元格同时显示新增/重复/跳过，排序取新增数量（用户最关心的一项）
+  { key: "importedCount", label: "导入", type: "number" },
+  { key: "matchedCount", label: "匹配结果", type: "number" },
+  { key: "completedAt", label: "完成时间", type: "date" },
+];
+
+// 流水表：业务列同时显示方向和时间，排序用时间（方向只有两种，作为排序键没有意义）。
+const RECEIPT_COLUMNS: SortColumn<Receipt>[] = [
+  { key: "occurredAt", label: "业务 / 时间", type: "date" },
+  { key: "providerTradeNo", label: "账单标识", accessor: (row) => row.providerTradeNo ?? row.providerRefundNo ?? "" },
+  { key: "amount", label: "金额", type: "number" },
+  { key: "systemRecord", label: "系统记录", accessor: (row) => row.payment?.order.subject ?? "" },
+  { key: "matchStatus", label: "匹配状态" },
+];
+
 export function Reconciliation() {
   const { data: runs, loading: runsLoading, error: runsError, reload: reloadRuns } = useApi<Run[]>("/reconciliation/runs?pageSize=20", 12_000);
   const [status, setStatus] = useState("");
   const receiptPath = useMemo(() => `/reconciliation/receipts?pageSize=100${status ? `&status=${status}` : ""}`, [status]);
   const { data: receipts, loading: receiptsLoading, error: receiptsError, reload: reloadReceipts } = useApi<Receipt[]>(receiptPath, 12_000);
+  const [runSort, setRunSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const [receiptSort, setReceiptSort] = useState(() => null as ReturnType<typeof nextSortState>);
   const [statementDate, setStatementDate] = useState(() => chinaDate(-1));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [matching, setMatching] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const runRows = useMemo(() => sortRows(runs ?? [], RUN_COLUMNS, runSort), [runs, runSort]);
+  const receiptRows = useMemo(() => sortRows(receipts ?? [], RECEIPT_COLUMNS, receiptSort), [receipts, receiptSort]);
 
   async function upload() {
     if (!file || !statementDate) return;
@@ -73,13 +97,19 @@ export function Reconciliation() {
     <Section title="导入批次" action={<span className="muted">按账单日期幂等覆盖统计</span>} className="detail-section">
       <LoadingState loading={runsLoading} error={runsError} empty={!runs?.length} emptyText="还没有导入过支付宝账单">
         <div className="table-wrap"><table>
-          <thead><tr><th>账单日期 / 文件</th><th>状态</th><th>导入</th><th>匹配结果</th><th>完成时间</th></tr></thead>
-          <tbody>{runs?.map(run => <tr key={run.id}>
-            <td><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td>
-            <td data-label="状态"><HoverDetail text={run.errorMessage} tone="danger"><Status value={run.status} /></HoverDetail></td>
-            <td data-label="导入">新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
-            <td data-label="匹配结果"><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
-            <td data-label="完成时间">{time(run.completedAt)}</td>
+          <thead><tr>
+            <SortableTh label="账单日期 / 文件" sortKey="statementDate" sort={runSort} onSort={key => setRunSort(nextSortState(runSort, key))} />
+            <SortableTh label="状态" sortKey="status" sort={runSort} onSort={key => setRunSort(nextSortState(runSort, key))} />
+            <SortableTh label="导入" sortKey="importedCount" sort={runSort} onSort={key => setRunSort(nextSortState(runSort, key))} />
+            <SortableTh label="匹配结果" sortKey="matchedCount" sort={runSort} onSort={key => setRunSort(nextSortState(runSort, key))} />
+            <SortableTh label="完成时间" sortKey="completedAt" sort={runSort} onSort={key => setRunSort(nextSortState(runSort, key))} />
+          </tr></thead>
+          <tbody>{runRows.map(run => <tr key={run.id}>
+            <td {...sortValueProps(run, RUN_COLUMNS[0])}><strong>{shortDate(run.statementDate)}</strong><div className="muted">{run.fileName ?? "—"}</div></td>
+            <td data-label="状态" {...sortValueProps(run, RUN_COLUMNS[1])}><HoverDetail text={run.errorMessage} tone="danger"><Status value={run.status} /></HoverDetail></td>
+            <td data-label="导入" {...sortValueProps(run, RUN_COLUMNS[2])}>新增 {run.importedCount}<div className="muted">重复 {run.duplicateCount} / 跳过 {run.skippedCount}</div></td>
+            <td data-label="匹配结果" {...sortValueProps(run, RUN_COLUMNS[3])}><span className="match-count ok">{run.matchedCount} 已匹配</span><div className="muted"><span className="match-count bad">{run.mismatchedCount} 差错</span> / {run.unmatchedCount} 未匹配</div></td>
+            <td data-label="完成时间" {...sortValueProps(run, RUN_COLUMNS[4])}>{time(run.completedAt)}</td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>
@@ -88,16 +118,23 @@ export function Reconciliation() {
     <Section title="标准化流水" action={statusFilter} className="detail-section">
       <LoadingState loading={receiptsLoading} error={receiptsError} empty={!receipts?.length} emptyText={status ? "当前筛选条件下没有对账流水" : "还没有标准化对账流水"}>
         <div className="table-wrap"><table>
-          <thead><tr><th>业务 / 时间</th><th>账单标识</th><th>金额</th><th>系统记录</th><th>匹配状态</th><th>操作</th></tr></thead>
-          <tbody>{receipts?.map(item => <tr key={item.id}>
-            <td><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td>
-            <td data-label="账单标识">
+          <thead><tr>
+            <SortableTh label="业务 / 时间" sortKey="occurredAt" sort={receiptSort} onSort={key => setReceiptSort(nextSortState(receiptSort, key))} />
+            <SortableTh label="账单标识" sortKey="providerTradeNo" sort={receiptSort} onSort={key => setReceiptSort(nextSortState(receiptSort, key))} />
+            <SortableTh label="金额" sortKey="amount" sort={receiptSort} onSort={key => setReceiptSort(nextSortState(receiptSort, key))} alignRight />
+            <SortableTh label="系统记录" sortKey="systemRecord" sort={receiptSort} onSort={key => setReceiptSort(nextSortState(receiptSort, key))} />
+            <SortableTh label="匹配状态" sortKey="matchStatus" sort={receiptSort} onSort={key => setReceiptSort(nextSortState(receiptSort, key))} />
+            <th scope="col">操作</th>
+          </tr></thead>
+          <tbody>{receiptRows.map(item => <tr key={item.id}>
+            <td {...sortValueProps(item, RECEIPT_COLUMNS[0])}><strong>{item.direction === "INCOME" ? "收入" : "退款"}</strong><div className="muted">{time(item.occurredAt)}</div></td>
+            <td data-label="账单标识" {...sortValueProps(item, RECEIPT_COLUMNS[1])}>
   {item.providerTradeNo ?? item.providerRefundNo ? <div className="id-line"><span className="mono">{item.providerTradeNo ?? item.providerRefundNo}</span><CopyValue value={item.providerTradeNo ?? item.providerRefundNo ?? ""} label="复制渠道流水号" /></div> : "—"}
   {item.merchantRefundNo ?? item.merchantOrderNo ? <div className="id-line"><span className="mono muted">{item.merchantRefundNo ?? item.merchantOrderNo}</span><CopyValue value={item.merchantRefundNo ?? item.merchantOrderNo ?? ""} label="复制商户单号" /></div> : null}
 </td>
-            <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
-            <td data-label="系统记录">{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="id-line"><span className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</span><CopyValue value={item.refund?.refundNo ?? item.payment.paymentNo} label="复制系统单号" /></div></> : "—"}</td>
-            <td data-label="匹配状态"><HoverDetail text={item.mismatchReason} tone="danger"><Status value={item.matchStatus} /></HoverDetail></td>
+            <td data-label="金额" className="amount-cell" {...sortValueProps(item, RECEIPT_COLUMNS[2])}><strong>{money(item.amount)}</strong></td>
+            <td data-label="系统记录" {...sortValueProps(item, RECEIPT_COLUMNS[3])}>{item.payment ? <><strong>{item.payment.order.subject}</strong><div className="id-line"><span className="mono muted">{item.refund?.refundNo ?? item.payment.paymentNo}</span><CopyValue value={item.refund?.refundNo ?? item.payment.paymentNo} label="复制系统单号" /></div></> : "—"}</td>
+            <td data-label="匹配状态" {...sortValueProps(item, RECEIPT_COLUMNS[4])}><HoverDetail text={item.mismatchReason} tone="danger"><Status value={item.matchStatus} /></HoverDetail></td>
             <td data-label="操作">{item.matchStatus !== "MATCHED" && <button className="button secondary" disabled={matching !== ""} onClick={() => void rematch(item.id)}><RefreshCw size={13} />{matching === item.id ? "匹配中…" : "重新匹配"}</button>}</td>
           </tr>)}</tbody>
         </table></div>

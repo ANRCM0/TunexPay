@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, HoverDetail, LoadingState, PageHead, Status, Toast, money, time } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { CopyValue, HoverDetail, LoadingState, PageHead, SortableTh, Status, Toast, sortValueProps, money, time } from "./common";
 
 type Refund = {
   id: string; refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string;
   queryAttempts: number; nextQueryAt: string | null; lastQueriedAt: string | null; errorMessage: string | null;
   application: { name: string; archivedAt: string | null }; payment: { paymentNo: string; order: { subject: string; deletedAt: string | null } };
 };
+
+const SORT_COLUMNS: SortColumn<Refund>[] = [
+  { key: "refundNo", label: "退款单" },
+  { key: "paymentNo", label: "支付单 / 应用", accessor: (row) => row.payment.paymentNo },
+  { key: "amount", label: "金额", type: "number" },
+  { key: "status", label: "状态 / 恢复" },
+  { key: "createdAt", label: "创建时间", type: "date" },
+];
 
 // 状态列的恢复进度与失败原因默认收起，悬浮或聚焦徽章才展开。
 function refundRecovery(item: Refund): string {
@@ -23,6 +32,8 @@ export function Refunds() {
   const { data, loading, error, reload } = useApi<Refund[]>("/refunds?pageSize=100", 8_000);
   const [querying, setQuerying] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const rows = useMemo(() => sortRows(data ?? [], SORT_COLUMNS, sort), [data, sort]);
 
   async function query(refundNo: string) {
     setQuerying(refundNo);
@@ -44,21 +55,28 @@ export function Refunds() {
     <p className="muted">带「已归档」标记的退款来自已删除的应用：通道侧的钱已经动了，这些记录仍保留可查，未完成的会继续自动查单。</p>
     <LoadingState loading={loading} error={error} empty={!data?.length}>
       <section className="card section"><div className="table-wrap"><table>
-        <thead><tr><th>退款单</th><th>支付单 / 应用</th><th>金额</th><th>状态 / 恢复</th><th>创建时间</th><th>操作</th></tr></thead>
-        <tbody>{data?.map(item => <tr key={item.id}>
-          <td>
+        <thead><tr>
+          <SortableTh label="退款单" sortKey="refundNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="支付单 / 应用" sortKey="paymentNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="金额" sortKey="amount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} alignRight />
+          <SortableTh label="状态 / 恢复" sortKey="status" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="创建时间" sortKey="createdAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <th scope="col">操作</th>
+        </tr></thead>
+        <tbody>{rows.map(item => <tr key={item.id}>
+          <td {...sortValueProps(item, SORT_COLUMNS[0])}>
             <strong>{item.payment.order.subject}</strong>
             <div className="id-line"><span className="mono muted">{item.refundNo}</span><CopyValue value={item.refundNo} label="复制退款单号" /></div>
             <div className="id-line"><span className="mono muted">{item.externalRefundNo}</span><CopyValue value={item.externalRefundNo} label="复制业务退款号" /></div>
             {item.reason && <div className="muted">{item.reason}</div>}
           </td>
-          <td data-label="支付单">
+          <td data-label="支付单" {...sortValueProps(item, SORT_COLUMNS[1])}>
             <div className="id-line"><span className="mono">{item.payment.paymentNo}</span><CopyValue value={item.payment.paymentNo} label="复制支付单号" /></div>
             <div className="muted">{item.application.name}{item.application.archivedAt && <span className="tag-archived">已归档</span>}</div>
           </td>
-          <td data-label="金额" className="amount-cell"><strong>{money(item.amount)}</strong></td>
-          <td data-label="状态"><HoverDetail text={refundRecovery(item)} tone={item.errorMessage ? "danger" : "muted"}><Status value={item.status} /></HoverDetail></td>
-          <td data-label="创建时间">{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>
+          <td data-label="金额" className="amount-cell" {...sortValueProps(item, SORT_COLUMNS[2])}><strong>{money(item.amount)}</strong></td>
+          <td data-label="状态" {...sortValueProps(item, SORT_COLUMNS[3])}><HoverDetail text={refundRecovery(item)} tone={item.errorMessage ? "danger" : "muted"}><Status value={item.status} /></HoverDetail></td>
+          <td data-label="创建时间" {...sortValueProps(item, SORT_COLUMNS[4])}>{time(item.createdAt)}{item.lastQueriedAt && <div className="muted">最近查询 {time(item.lastQueriedAt)}</div>}</td>
           <td data-label="操作">{item.status !== "SUCCESS" && <button className="button secondary" disabled={querying !== ""} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</button>}</td>
         </tr>)}</tbody>
       </table></div></section>

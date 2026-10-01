@@ -1,5 +1,6 @@
-import { AlertCircle, Check, CheckCircle2, Copy, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, Copy, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type SortColumn } from "../lib/sort";
 import { channelLabel } from "../lib/labels";
 
 // 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
@@ -73,28 +74,58 @@ export function ChannelTag({ code }: { code: string }) {
   return <span className={`tag ${CHANNEL_TAG_STYLE[code] ?? "tag-gray"}`} title={code}>{channelLabel(code)}</span>;
 }
 
-export function CopyValue({ value, label = "复制" }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      const node = document.createElement("textarea");
-      node.value = value;
-      node.style.position = "fixed";
-      node.style.opacity = "0";
-      document.body.appendChild(node);
-      node.select();
-      document.execCommand("copy");
-      document.body.removeChild(node);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    }
+type CopyState = "idle" | "copied" | "failed";
+
+// 剪贴板 API 只在安全上下文可用：HTTP 或企业策略下可能直接抛错，
+// 所以要显式回退到 execCommand，并且把它也当作可能失败的路径。
+async function writeClipboard(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch { /* 落到下面的 execCommand 回退 */ }
+  try {
+    const node = document.createElement("textarea");
+    node.value = value;
+    node.setAttribute("readonly", "");
+    node.style.position = "fixed";
+    node.style.top = "0";
+    node.style.opacity = "0";
+    document.body.appendChild(node);
+    node.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(node);
+    return ok;
+  } catch {
+    return false;
   }
-  return <button type="button" className="copy-value" onClick={() => void copy()} title={copied ? "已复制" : label} aria-label={copied ? "已复制" : label}>
-    {copied ? <Check size={12} /> : <Copy size={12} />}<span>{copied ? "已复制" : label}</span>
+}
+
+export function CopyValue({ value, label = "复制" }: { value: string; label?: string }) {
+  const [state, setState] = useState<CopyState>("idle");
+  const timer = useRef<number | null>(null);
+
+  async function copy() {
+    const ok = await writeClipboard(value);
+    setState(ok ? "copied" : "failed");
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    // 失败提示留久一点，用户才有机会读到；并用 ref 收尾，避免卸载后写 state。
+    timer.current = window.setTimeout(() => setState("idle"), ok ? 1600 : 4000);
+  }
+
+  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+
+  // 之前无论是否真的写进剪贴板都显示「已复制」，会误导用户；
+  // 现在只有确认成功才报成功，失败给出可操作的提示。
+  const text = state === "copied" ? "已复制" : state === "failed" ? "复制失败" : label;
+  // 提示走 title 而不是 aria-label：可见文本本身就是按钮的可访问名称，
+  // 而这段可操作提示太长，不适合当作名字（按钮名里有句号会被逐字念出来）。
+  const hint = state !== "failed"
+    ? "复制到剪贴板"
+    : "复制失败：浏览器拒绝了剪贴板访问。通过 HTTP 打开控制台时会出现这种情况，请改用 HTTPS 或手动选中复制。";
+  return <button type="button" className="copy-value" onClick={() => void copy()} title={hint}>
+    {state === "copied" ? <Check size={12} aria-hidden="true" /> : state === "failed" ? <AlertCircle size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+    {/* 实时区域就是这段可见文本本身：如果另建一个 sr-only 副本，读屏器会连念两遍 */}
+    <span role="status" aria-live="polite">{text}</span>
   </button>;
 }
 
@@ -107,9 +138,9 @@ export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; t
   }, [text]);
 
   return <div className={`toast toast-${type}`} role={type === "error" ? "alert" : "status"} aria-live="polite">
-    <span className="toast-icon">{type === "error" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}</span>
+    <span className="toast-icon" aria-hidden="true">{type === "error" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}</span>
     <span>{text}</span>
-    <button type="button" onClick={onClose} aria-label="关闭提示"><X size={14} /></button>
+    <button type="button" onClick={onClose} aria-label="关闭提示"><X size={14} aria-hidden="true" /></button>
   </div>;
 }
 
@@ -153,8 +184,72 @@ export function Modal({ title, onClose, dismissible = true, children }: { title:
   </div>;
 }
 
+// 标签页遵循 WAI-ARIA tabs 模式：只有当前标签可 Tab 聚焦（roving tabindex），
+// 组内用方向键切换，Home / End 跳到首尾；否则键盘用户要逐个 Tab 才能走到下一个控件。
 export function Tabs({ items, active, onChange }: { items: readonly string[]; active: string; onChange: (item: string) => void }) {
-  return <div className="tabs" role="tablist">{items.map(item => <button key={item} type="button" role="tab" aria-selected={item === active} className={item === active ? "tabs-item active" : "tabs-item"} onClick={() => onChange(item)}>{item}</button>)}</div>;
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const index = Math.max(0, items.indexOf(active));
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? items.length - 1
+      : event.key === "ArrowRight" ? (index + 1) % items.length
+      : (index - 1 + items.length) % items.length;
+    onChange(items[next]);
+    // 焦点跟着选中项走，符合 tabs 模式的预期
+    event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+  }
+
+  return <div className="tabs" role="tablist" onKeyDown={onKeyDown}>{items.map(item => <button
+    key={item}
+    type="button"
+    role="tab"
+    aria-selected={item === active}
+    tabIndex={item === active ? 0 : -1}
+    className={item === active ? "tabs-item active" : "tabs-item"}
+    onClick={() => onChange(item)}
+  >{item}</button>)}</div>;
+}
+
+/**
+ * 给数据单元格标注该行在本列上的排序值。
+ *
+ * 为什么需要它：单元格里往往混着「复制」按钮、徽章和补充说明，纯文本无法代表排序依据。
+ * 把它标出来，验证脚本（和以后的端到端测试）就能直接断言排序性质，而不用去猜文本
+ * 里哪一段才是被排序的值。未排序的列不标注，避免留下无意义的空值。
+ */
+export function sortValueProps<T>(row: T, column: SortColumn<T> | undefined): { "data-sort-value"?: string } {
+  if (!column) return {};
+  const raw = column.accessor ? column.accessor(row) : (row as Record<string, unknown> | null)?.[column.key];
+  if (raw === null || raw === undefined || raw === "") return {};
+  return { "data-sort-value": String(raw) };
+}
+
+/**
+ * 可排序表头。整格就是一个按钮，点击/回车/空格都能触发，命中区域比文字大；
+ * `aria-sort` 放在 th 上（ARIA 要求），按钮的 aria-label 说明下一步会做什么。
+ */
+export function SortableTh({ label, sortKey, sort, onSort, alignRight = false }: {
+  label: string;
+  sortKey: string;
+  /** 当前排序状态，null 表示未排序。 */
+  sort: { key: string; direction: "asc" | "desc" } | null;
+  onSort: (key: string) => void;
+  /** 与 .amount-cell 右对齐的列保持一致。 */
+  alignRight?: boolean;
+}) {
+  const active = sort?.key === sortKey;
+  const direction = active ? sort!.direction : null;
+  const ariaSort = direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none";
+  const nextHint = direction === "asc" ? "切换为降序" : direction === "desc" ? "取消排序" : "按此列升序排序";
+
+  return <th scope="col" aria-sort={ariaSort} className={alignRight ? "th-sort th-right" : "th-sort"}>
+    <button type="button" className={active ? "th-sort-button active" : "th-sort-button"} onClick={() => onSort(sortKey)} aria-label={`${label}，${nextHint}`}>
+      <span>{label}</span>
+      <span className="th-sort-icon" aria-hidden="true">{direction === "asc" ? <ArrowUp size={12} /> : direction === "desc" ? <ArrowDown size={12} /> : <ArrowUpDown size={12} />}</span>
+    </button>
+  </th>;
 }
 
 type Tone = "success" | "warning" | "danger" | "neutral";

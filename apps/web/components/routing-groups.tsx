@@ -1,17 +1,29 @@
 "use client";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
 import { routingStrategyLabels, type RoutingGroup, type RoutingStrategy } from "../lib/routing-groups";
 import { channelLabel } from "../lib/labels";
 import { checkLabels, type Channel } from "./channels";
-import { ConfirmModal, LoadingState, Modal, PageHead, Section, Status, Toast } from "./common";
+import { ConfirmModal, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps } from "./common";
 
 type MemberInput = { channelId: string; weight: number; enabled: boolean };
+
+const SORT_COLUMNS: SortColumn<RoutingGroup>[] = [
+  { key: "name", label: "轮询组" },
+  { key: "strategy", label: "选路规则" },
+  // 单元格显示"可用 / 总数"，排序取可用数（能不能真正承载流量）
+  { key: "availableChannels", label: "成员通道", type: "number" },
+  { key: "enabled", label: "状态", accessor: (row) => (row.enabled ? 1 : 0), type: "number" },
+  { key: "applicationCount", label: "绑定应用", type: "number" },
+];
 
 export function RoutingGroups() {
   const groups = useApi<RoutingGroup[]>("/routing-groups", 10_000);
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const rows = useMemo(() => sortRows(groups.data ?? [], SORT_COLUMNS, sort), [groups.data, sort]);
   const [editing, setEditing] = useState<RoutingGroup | "new" | null>(null);
   const [removing, setRemoving] = useState<RoutingGroup | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,13 +47,20 @@ export function RoutingGroups() {
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
     <Section title="轮询组列表" action={<button className="link-button" onClick={() => { void groups.reload(); void channels.reload(); }}>刷新状态</button>}>
       <LoadingState loading={groups.loading} error={groups.error} empty={!groups.data?.length} emptyText="还没有轮询组。先创建轮询组、添加通道，再到业务应用中绑定。">
-        <div className="table-wrap"><table><thead><tr><th>轮询组</th><th>选路规则</th><th>成员通道</th><th>状态</th><th>绑定应用</th><th>操作</th></tr></thead><tbody>
-          {groups.data?.map(group => <tr key={group.id}>
-            <td><strong>{group.name}</strong><div className="muted mono">{group.id}</div></td>
-            <td data-label="选路规则">{routingStrategyLabels[group.strategy]}</td>
-            <td data-label="成员通道"><div>{group.availableChannels} / {group.members.length} 个可用</div><div className="muted routing-member-summary">{group.members.map(member => `${member.channel.name}${group.strategy === "WEIGHTED_RANDOM" ? `（权重 ${member.weight}）` : ""}${!member.eligible ? " · 不参与" : ""}`).join("、") || "成员已移除，请重新配置"}</div></td>
-            <td data-label="状态"><Status value={group.enabled ? "ACTIVE" : "DISABLED"} />{group.enabled && !group.availableChannels && <div className="error">无可用通道</div>}</td>
-            <td data-label="绑定应用">{group.applicationCount} 个</td>
+        <div className="table-wrap"><table><thead><tr>
+          <SortableTh label="轮询组" sortKey="name" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="选路规则" sortKey="strategy" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="成员通道" sortKey="availableChannels" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="状态" sortKey="enabled" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <SortableTh label="绑定应用" sortKey="applicationCount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+          <th scope="col">操作</th>
+        </tr></thead><tbody>
+          {rows.map(group => <tr key={group.id}>
+            <td {...sortValueProps(group, SORT_COLUMNS[0])}><strong>{group.name}</strong><div className="muted mono">{group.id}</div></td>
+            <td data-label="选路规则" {...sortValueProps(group, SORT_COLUMNS[1])}>{routingStrategyLabels[group.strategy]}</td>
+            <td data-label="成员通道" {...sortValueProps(group, SORT_COLUMNS[2])}><div>{group.availableChannels} / {group.members.length} 个可用</div><div className="muted routing-member-summary">{group.members.map(member => `${member.channel.name}${group.strategy === "WEIGHTED_RANDOM" ? `（权重 ${member.weight}）` : ""}${!member.eligible ? " · 不参与" : ""}`).join("、") || "成员已移除，请重新配置"}</div></td>
+            <td data-label="状态" {...sortValueProps(group, SORT_COLUMNS[3])}><Status value={group.enabled ? "ACTIVE" : "DISABLED"} />{group.enabled && !group.availableChannels && <div className="error">无可用通道</div>}</td>
+            <td data-label="绑定应用" {...sortValueProps(group, SORT_COLUMNS[4])}>{group.applicationCount} 个</td>
             <td data-label="操作"><div className="row-actions"><button className="button secondary" onClick={() => setEditing(group)}>配置</button><button className="button danger" disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</button></div></td>
           </tr>)}
         </tbody></table></div>

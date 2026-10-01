@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, money, time } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps, money, time } from "./common";
 import { eventSourceLabel, exceptionSeverityLabel, exceptionTypeLabel } from "../lib/labels";
 
 type PaymentException = {
@@ -24,14 +25,27 @@ type PaymentException = {
 
 type FinalAction = "RESOLVED" | "IGNORED";
 
+// 状态列展示的是 statusLabels（OPEN=待处理 等），排序按原始枚举码；枚举码不表达业务紧急度，
+// 所以「发现时间」和「金额」才是这张表真正有用的排序列。
+const SORT_COLUMNS: SortColumn<PaymentException>[] = [
+  { key: "exceptionNo", label: "异常 / 风险" },
+  { key: "order", label: "订单与支付", accessor: (row) => row.order?.subject ?? "" },
+  { key: "amount", label: "金额 / 渠道流水", type: "number", accessor: (row) => row.payment?.amount ?? null },
+  { key: "status", label: "状态" },
+  { key: "detectedAt", label: "发现时间", type: "date" },
+];
+
 export function Exceptions() {
   const [status, setStatus] = useState("");
   const { data, loading, error, reload } = useApi<PaymentException[]>(`/exceptions?pageSize=100${status ? `&status=${status}` : ""}`, 10_000);
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState<{ item: PaymentException; next: FinalAction } | null>(null);
   const [resolution, setResolution] = useState("");
   const [resolutionRef, setResolutionRef] = useState("");
+  // 状态筛选由服务端完成（会改变请求 URL），所以这里只负责排序
+  const rows = useMemo(() => sortRows(data ?? [], SORT_COLUMNS, sort), [data, sort]);
 
   async function update(item: PaymentException, next: "PROCESSING" | FinalAction, body?: { resolution: string; resolutionRef?: string }) {
     setWorking(item.id);
@@ -82,16 +96,23 @@ export function Exceptions() {
     <Section title="异常处置队列" action={statusFilter}>
       <LoadingState loading={loading} error={error} empty={!data?.length}>
         <div className="table-wrap"><table>
-          <thead><tr><th>异常 / 风险</th><th>订单与支付</th><th>金额 / 渠道流水</th><th>状态</th><th>发现时间</th><th>处置</th></tr></thead>
-          <tbody>{data?.map(item => <tr key={item.id}>
-            <td>
+          <thead><tr>
+            <SortableTh label="异常 / 风险" sortKey="exceptionNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="订单与支付" sortKey="order" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="金额 / 渠道流水" sortKey="amount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} alignRight />
+            <SortableTh label="状态" sortKey="status" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <SortableTh label="发现时间" sortKey="detectedAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+            <th scope="col">处置</th>
+          </tr></thead>
+          <tbody>{rows.map(item => <tr key={item.id}>
+            <td {...sortValueProps(item, SORT_COLUMNS[0])}>
               <strong>{exceptionTypeLabel(item.type)}</strong>
               <div className="row-error">{item.summary}</div>
               <div className="id-line"><span className="mono muted">{item.exceptionNo}</span><CopyValue value={item.exceptionNo} label="复制异常单号" /></div>
               <div className="muted">{eventSourceLabel(item.source)}</div>
             </td>
 
-            <td data-label="订单与支付">
+            <td data-label="订单与支付" {...sortValueProps(item, SORT_COLUMNS[1])}>
               {item.order ? <>
                 <Link className="data-link" href={`/orders/${item.order.orderNo}`}><strong>{item.order.subject}</strong></Link>
                 <div className="id-line"><span className="mono muted">{item.order.orderNo}</span><CopyValue value={item.order.orderNo} label="复制订单号" /></div>
@@ -99,7 +120,7 @@ export function Exceptions() {
               {item.payment && <div className="id-line"><span className="mono muted">{item.payment.paymentNo}</span><CopyValue value={item.payment.paymentNo} label="复制支付单号" /></div>}
             </td>
 
-            <td data-label="金额 / 流水">
+            <td data-label="金额 / 流水" {...sortValueProps(item, SORT_COLUMNS[2])}>
               {item.payment ? <>
                 <strong>{money(item.payment.receivedAmount ?? item.payment.amount)}</strong>
                 {item.payment.receivedAmount && item.payment.receivedAmount !== item.payment.amount && <div className="muted">业务金额 {money(item.payment.amount)}</div>}
@@ -109,14 +130,14 @@ export function Exceptions() {
               </> : "—"}
             </td>
 
-            <td data-label="状态">
+            <td data-label="状态" {...sortValueProps(item, SORT_COLUMNS[3])}>
               <Status value={item.status} />
               <div className={`severity ${item.severity}`}>{exceptionSeverityLabel(item.severity)}</div>
               {item.resolution && <div className="muted">{item.resolution}</div>}
               {item.resolutionRef && <div className="id-line"><span className="mono muted">{item.resolutionRef}</span><CopyValue value={item.resolutionRef} label="复制处置凭证" /></div>}
             </td>
 
-            <td data-label="发现时间">{time(item.detectedAt)}{item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}</td>
+            <td data-label="发现时间" {...sortValueProps(item, SORT_COLUMNS[4])}>{time(item.detectedAt)}{item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}</td>
 
             <td data-label="处置">
               <div className="row-actions">

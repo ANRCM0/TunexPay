@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, Toggle, time, toLocalDateTimeInput } from "./common";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, Toggle, sortValueProps, time, toLocalDateTimeInput } from "./common";
 
 type Scope = "READ" | "OPERATE" | "FINANCIAL";
 type Tool = { name:string; description:string; inputSchema:Record<string,unknown>; scope:Scope };
@@ -81,12 +82,37 @@ function ClientCard({client,tools,busy,onBusy,onNotice,reload,onToken}:{client:C
   </fieldset>;
 }
 
+// 审批表：状态列展示审批状态，排序按状态枚举码。
+const APPROVAL_COLUMNS: SortColumn<Approval>[] = [
+  { key: "createdAt", label: "时间", type: "date" },
+  { key: "requester", label: "来源", accessor: (row) => row.clientId ?? row.requestedBy },
+  { key: "action", label: "动作" },
+  { key: "summary", label: "说明" },
+  { key: "status", label: "状态" },
+  { key: "expiresAt", label: "到期", type: "date" },
+];
+
+// 调用审计表：与操作审计同理，「结果」列按布尔值排序而不是状态码文本。
+const MCP_AUDIT_COLUMNS: SortColumn<Audit>[] = [
+  { key: "createdAt", label: "时间", type: "date" },
+  { key: "clientName", label: "客户端" },
+  { key: "scope", label: "Scope" },
+  { key: "tool", label: "Tool" },
+  { key: "success", label: "结果", accessor: (row) => (row.success ? 1 : 0), type: "number" },
+  { key: "durationMs", label: "耗时", type: "number" },
+  { key: "ipAddress", label: "来源", accessor: (row) => row.ipAddress ?? "" },
+];
+
 export function McpAccessPanel(){
   const {data:info,loading:infoLoading,error:infoError}=useApi<Info>("/mcp/info");
   const {data:tools,loading:toolsLoading,error:toolsError}=useApi<Tool[]>("/mcp/tools");
   const {data:clients,loading,error,reload}=useApi<Client[]>("/mcp/clients");
   const {data:audits,loading:auditsLoading,error:auditsError,reload:reloadAudits}=useApi<Audit[]>("/mcp/audits?limit=100",5000);
   const {data:approvals,loading:approvalsLoading,error:approvalsError,reload:reloadApprovals}=useApi<Approval[]>("/mcp/approvals",5000);
+  const [approvalSort, setApprovalSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const [auditSort, setAuditSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const approvalRows = useMemo(() => sortRows(approvals ?? [], APPROVAL_COLUMNS, approvalSort), [approvals, approvalSort]);
+  const auditRows = useMemo(() => sortRows(audits ?? [], MCP_AUDIT_COLUMNS, auditSort), [audits, auditSort]);
   const [name,setName]=useState("Hermes"),[scope,setScope]=useState<Scope>("READ"),[enabled,setEnabled]=useState(true),[expiresAt,setExpiresAt]=useState("");
   const [allowed,setAllowed]=useState<string[]>([]);
   const [issued,setIssued]=useState<{token:string;name:string}|null>(null);
@@ -153,16 +179,32 @@ export function McpAccessPanel(){
 
     <Section title="资金 / 状态动作审批" action={<span className="muted">FINANCIAL 工具只能创建这里的待审批请求</span>}>
       <LoadingState loading={approvalsLoading} error={approvalsError} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
-        <div className="table-wrap"><table><thead><tr><th>时间</th><th>来源</th><th>动作</th><th>说明</th><th>状态</th><th>到期</th><th></th></tr></thead>
-          <tbody>{approvals?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td data-label="来源"><code>{row.clientId??row.requestedBy}</code></td><td data-label="动作"><code>{row.action}</code></td><td data-label="说明">{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</td><td data-label="状态"><Status value={row.status}/></td><td data-label="到期">{time(row.expiresAt)}</td><td data-label="操作">{row.status==="PENDING"&&<><button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"approve")}>批准</button> <button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"reject")}>拒绝</button></>}</td></tr>)}</tbody>
+        <div className="table-wrap"><table><thead><tr>
+            <SortableTh label="时间" sortKey="createdAt" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <SortableTh label="来源" sortKey="requester" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <SortableTh label="动作" sortKey="action" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <SortableTh label="说明" sortKey="summary" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <SortableTh label="状态" sortKey="status" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <SortableTh label="到期" sortKey="expiresAt" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
+            <th scope="col"></th>
+          </tr></thead>
+          <tbody>{approvalRows.map(row=><tr key={row.id}><td {...sortValueProps(row, APPROVAL_COLUMNS[0])}>{time(row.createdAt)}</td><td data-label="来源" {...sortValueProps(row, APPROVAL_COLUMNS[1])}><code>{row.clientId??row.requestedBy}</code></td><td data-label="动作" {...sortValueProps(row, APPROVAL_COLUMNS[2])}><code>{row.action}</code></td><td data-label="说明" {...sortValueProps(row, APPROVAL_COLUMNS[3])}>{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</td><td data-label="状态" {...sortValueProps(row, APPROVAL_COLUMNS[4])}><Status value={row.status}/></td><td data-label="到期" {...sortValueProps(row, APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</td><td data-label="操作">{row.status==="PENDING"&&<><button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"approve")}>批准</button> <button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"reject")}>拒绝</button></>}</td></tr>)}</tbody>
         </table></div>
       </LoadingState>
     </Section>
 
     <Section title="MCP Tool 调用审计" action={<button className="link-button" onClick={()=>void reloadAudits()} type="button">刷新</button>}>
       <LoadingState loading={auditsLoading} error={auditsError} empty={!audits?.length} emptyText="还没有 MCP Tool 调用">
-        <div className="table-wrap"><table><thead><tr><th>时间</th><th>客户端</th><th>Scope</th><th>Tool</th><th>结果</th><th>耗时</th><th>来源</th></tr></thead>
-          <tbody>{audits?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td data-label="客户端">{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></td><td data-label="Scope"><code>{row.scope}</code></td><td data-label="Tool"><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</td><td data-label="结果"><Status value={row.success?"SUCCESS":"FAILED"}/></td><td data-label="耗时">{row.durationMs} ms</td><td data-label="来源">{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></td></tr>)}</tbody>
+        <div className="table-wrap"><table><thead><tr>
+            <SortableTh label="时间" sortKey="createdAt" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="客户端" sortKey="clientName" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="Scope" sortKey="scope" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="Tool" sortKey="tool" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="结果" sortKey="success" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="耗时" sortKey="durationMs" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+            <SortableTh label="来源" sortKey="ipAddress" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
+          </tr></thead>
+          <tbody>{auditRows.map(row=><tr key={row.id}><td {...sortValueProps(row, MCP_AUDIT_COLUMNS[0])}>{time(row.createdAt)}</td><td data-label="客户端" {...sortValueProps(row, MCP_AUDIT_COLUMNS[1])}>{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></td><td data-label="Scope" {...sortValueProps(row, MCP_AUDIT_COLUMNS[2])}><code>{row.scope}</code></td><td data-label="Tool" {...sortValueProps(row, MCP_AUDIT_COLUMNS[3])}><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</td><td data-label="结果" {...sortValueProps(row, MCP_AUDIT_COLUMNS[4])}><Status value={row.success?"SUCCESS":"FAILED"}/></td><td data-label="耗时" {...sortValueProps(row, MCP_AUDIT_COLUMNS[5])}>{row.durationMs} ms</td><td data-label="来源" {...sortValueProps(row, MCP_AUDIT_COLUMNS[6])}>{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></td></tr>)}</tbody>
         </table></div>
       </LoadingState>
     </Section>
