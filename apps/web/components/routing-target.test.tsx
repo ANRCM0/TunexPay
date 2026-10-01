@@ -37,7 +37,7 @@ describe("routing target selection", () => {
     ["channel:account-a", "/applications/app-1/channel-instance", { channelId: "account-a" }],
     ["", "/applications/app-1/routing-group", { groupId: null }],
   ])("assigns target %s through the correct authenticated BFF path", async (target, path, body) => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: {} }) });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {} }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     await assignPaymentRouting("app-1", target as string);
     expect(fetchMock).toHaveBeenCalledWith(`/api/backend${path}`, expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
