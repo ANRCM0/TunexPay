@@ -1,9 +1,9 @@
 import { generateKeyPairSync } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelInstance } from "@prisma/client";
-const mocks = vi.hoisted(() => ({ find: vi.fn(), updateMany: vi.fn(), payment: vi.fn(), query: vi.fn(), logs: vi.fn(), create: vi.fn(), refund: vi.fn(), webhook: vi.fn(), settings: vi.fn(), upsert: vi.fn(), update: vi.fn(), count: vi.fn(), state: vi.fn(), siblings: vi.fn(), raw: vi.fn() }));
+const mocks = vi.hoisted(() => ({ find: vi.fn(), updateMany: vi.fn(), payment: vi.fn(), query: vi.fn(), logs: vi.fn(), create: vi.fn(), refund: vi.fn(), webhook: vi.fn(), settings: vi.fn(), upsert: vi.fn(), update: vi.fn(), count: vi.fn(), state: vi.fn(), siblings: vi.fn(), raw: vi.fn(), appFind: vi.fn(), appUpdate: vi.fn() }));
 vi.mock("../db.js", () => {
-  const tx = { channelInstance: { findUnique: mocks.find, findUniqueOrThrow: mocks.find, updateMany: mocks.updateMany, upsert: mocks.upsert, update: mocks.update, create: mocks.create, findMany: mocks.siblings }, payment: { findUnique: mocks.payment, count: mocks.count }, billChannelSettings: { upsert: mocks.upsert, findUniqueOrThrow: mocks.settings }, billCollectorState: { findUnique: mocks.state, updateMany: mocks.updateMany }, $queryRaw: mocks.raw };
+  const tx = { application: { findUnique: mocks.appFind, update: mocks.appUpdate }, channelInstance: { findUnique: mocks.find, findUniqueOrThrow: mocks.find, updateMany: mocks.updateMany, upsert: mocks.upsert, update: mocks.update, create: mocks.create, findMany: mocks.siblings }, payment: { findUnique: mocks.payment, count: mocks.count }, billChannelSettings: { upsert: mocks.upsert, findUniqueOrThrow: mocks.settings }, billCollectorState: { findUnique: mocks.state, updateMany: mocks.updateMany }, $queryRaw: mocks.raw };
   return { db: { ...tx, $transaction: async (fn: (tx: unknown) => unknown) => fn(tx) } };
 });
 vi.mock("../channels/alipay.js", () => ({ AlipayChannel: class {
@@ -12,7 +12,7 @@ vi.mock("../channels/alipay.js", () => ({ AlipayChannel: class {
 } }));
 // Capture configuration at the adapter boundary, not environment defaults.
 const configCapture = vi.hoisted(() => [] as unknown[]);
-import { adapterForPayment, checkChannel, decodeChannel, mergeChannelSettings, publicChannel, saveChannel, verificationStatus } from "../services/channel-instance-service.js";
+import { assignChannel, adapterForPayment, checkChannel, decodeChannel, mergeChannelSettings, publicChannel, saveChannel, verificationStatus } from "../services/channel-instance-service.js";
 import { initialBillSettings } from "../services/bill-settings-service.js";
 import { openSealed, seal } from "../lib/crypto.js";
 import { resetConfigForTests } from "../config.js";
@@ -108,6 +108,13 @@ describe("plugin channel instances", () => {
   it("rejects nonofficial gateway URLs before any outbound request", () => {
     expect(() => mergeChannelSettings("ALIPAY", decodeChannel(row), { gateway: "https://127.0.0.1/gateway.do" }, true)).toThrow();
     expect(() => mergeChannelSettings("ALIPAY", decodeChannel(row), { privateKey: "invalid" }, true)).toThrow();
+  });
+  it("clears the routing group when an application returns to a direct channel", async () => {
+    row.enabled = true; row.checkStatus = "API_VERIFIED"; row.checkRevision = row.revision;
+    mocks.appFind.mockResolvedValue({ id: "app-group", appId: "app_live", routingGroupId: "old-group", archivedAt: null });
+    const result = await assignChannel("app-group", row.id);
+    expect(mocks.appUpdate).toHaveBeenCalledWith({ where: { id: "app-group" }, data: { defaultChannel: row.plugin, defaultChannelId: row.id, routingGroupId: null } });
+    expect(result).toMatchObject({ defaultChannelId: row.id, routingGroupId: null });
   });
   it("redacts secrets in management views", async () => {
     const view = await publicChannel(row);

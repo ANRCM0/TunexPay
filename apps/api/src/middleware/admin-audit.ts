@@ -59,6 +59,8 @@ export const adminAudit: MiddlewareHandler<AppEnv> = async (c, next) => {
 export function describeAdminAction(method: string, path: string): AuditDescriptor {
   const segments = path.replace(/^\/admin\/v1\/?/, "").split("/").filter(Boolean);
   const [root, id, operation] = segments;
+  if (root === "routing-groups") return descriptor(operation === "delete" ? "ROUTING_GROUP_DELETE" : id ? "ROUTING_GROUP_UPDATE" : "ROUTING_GROUP_CREATE", "ROUTING_GROUP", id ?? null);
+  if (root === "applications" && operation === "routing-group") return descriptor("APPLICATION_ROUTING_GROUP_CHANGE", "APPLICATION", id ?? null);
   if (root === "channel-instances") return descriptor(operation === "check" ? "CHANNEL_CHECK" : operation === "test-payment" ? "CHANNEL_TEST_PAYMENT" : id ? "CHANNEL_UPDATE" : "CHANNEL_CREATE", "CHANNEL", id ?? null);
   if (root === "notification-instances") {
     const action = !id ? "NOTIFICATION_INSTANCE_CREATE"

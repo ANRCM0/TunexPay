@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "../db.js";
 import { generateId, randomSecret, seal, sha256 } from "../lib/crypto.js";
 import { AppError } from "../lib/errors.js";
+import { requireAssignableRoutingGroup } from "./routing-group-service.js";
 import { loadChannel, assertChannelVerified } from "./channel-instance-service.js";
 
 // 通道实付验收用的内部应用由 channel-test-service 自动创建，不出现在应用列表里，也不允许从管理端启停或删除。
@@ -15,6 +16,7 @@ export type CreateApplicationInput = {
   webhookUrl?: string | null;
   defaultChannel?: PaymentChannelCode;
   defaultChannelId?: string;
+  routingGroupId?: string;
 };
 
 function numericPid(): string {
@@ -23,6 +25,7 @@ function numericPid(): string {
 }
 
 export async function createApplication(input: CreateApplicationInput) {
+  if (input.routingGroupId && input.defaultChannelId) throw new AppError("APPLICATION_ROUTING_CONFLICT", "应用不能同时绑定单通道与轮询组", 422);
   const channel = input.defaultChannelId ? await loadChannel(input.defaultChannelId) : null;
   if (channel) await assertChannelVerified(channel);
   const appId = generateId("app");
@@ -30,6 +33,7 @@ export async function createApplication(input: CreateApplicationInput) {
   const webhookSecret = `whsec_${randomSecret(32)}`;
   const epayKey = randomSecret(24);
   const application = await db.$transaction(async tx => {
+    if (input.routingGroupId) await requireAssignableRoutingGroup(tx, input.routingGroupId);
     if (channel) {
       await tx.$queryRaw`SELECT id FROM channel_instances WHERE id = ${channel.id} FOR UPDATE`;
       const current = await tx.channelInstance.findUniqueOrThrow({ where: { id: channel.id } });
@@ -43,6 +47,7 @@ export async function createApplication(input: CreateApplicationInput) {
       webhookUrl: input.webhookUrl || null,
       defaultChannel: channel?.plugin ?? input.defaultChannel ?? "MOCK",
       defaultChannelId: channel?.id,
+      routingGroupId: input.routingGroupId,
       apiKeyHash: sha256(apiKey),
       webhookSecretEncrypted: seal(webhookSecret),
       epayPid: numericPid(),
