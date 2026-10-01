@@ -4,6 +4,8 @@ import { RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { api, useApi } from "../lib/api";
 import { CopyValue, HoverDetail, LoadingState, PageHead, Section, Status, Modal, Toast, ConfirmModal, statusText, time } from "./common";
 import { channelLabel } from "../lib/labels";
+import { RoutingTargetSelect, applicationRoutingTarget, assignPaymentRouting } from "./routing-target";
+import type { RoutingGroup } from "../lib/routing-groups";
 import { ChannelEditor, type PluginOption } from "./channel-editor";
 
 export type Channel = {
@@ -13,7 +15,7 @@ export type Channel = {
   watcherUrl: string; webhookUrl: string;
   testPayment: { paymentNo: string; status: string; currentRevision: boolean; cashierUrl: string } | null;
 };
-type Application = { id: string; name: string; defaultChannel: string; defaultChannelId: string | null };
+type Application = { id: string; name: string; defaultChannel: string; defaultChannelId: string | null; routingGroupId: string | null };
 export const checkLabels: Record<string, string> = { UNCHECKED: "待检测", API_VERIFIED: "接口已验证", PAYMENT_VERIFIED: "实付已验证", SIMULATED: "模拟配置通过", NEEDS_PAYMENT: "待实付验证", FAILED: "检测失败" };
 export const assignable = (channel: Channel) => !channel.archivedAt && channel.enabled && ["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(channel.checkStatus);
 
@@ -28,6 +30,7 @@ function checkDetail(channel: Channel): string {
 export function Channels() {
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
   const applications = useApi<Application[]>("/applications");
+  const groups = useApi<RoutingGroup[]>("/routing-groups");
   const plugins = useApi<PluginOption[]>("/plugins");
   const [editor, setEditor] = useState<Channel | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -68,11 +71,11 @@ export function Channels() {
     } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "删除失败" }); }
     finally { setBusy(""); }
   }
-  async function assign(app: Application, channelId: string) {
+  async function assign(app: Application, target: string) {
     setBusy(app.id); setNotice(null);
     try {
-      await api(`/applications/${app.id}/channel-instance`, { method: "POST", body: JSON.stringify({ channelId }) });
-      await applications.reload(); setNotice({ ok: true, text: `${app.name} 已分配通道，新支付使用该通道。` });
+      await assignPaymentRouting(app.id, target);
+      await applications.reload(); await groups.reload(); setNotice({ ok: true, text: target ? `${app.name} 收款路由已更新，仅影响新支付。` : `${app.name} 已解除收款绑定，新支付将被拒绝。` });
     } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "分配失败" }); }
     finally { setBusy(""); }
   }
@@ -124,15 +127,12 @@ export function Channels() {
 
     {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); }} /></Modal>}
     {createOpen && <Modal title="创建通道" onClose={() => setCreateOpen(false)}><ChannelEditor plugins={plugins.data ?? []} onClose={() => setCreateOpen(false)} onSaved={async () => { setCreateOpen(false); await channels.reload(); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); }} /></Modal>}
-    {assignOpen && <Modal title="应用通道分配" onClose={() => setAssignOpen(false)}>
+    {assignOpen && <Modal title="应用收款路由分配" onClose={() => setAssignOpen(false)}>
       <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length} emptyText="还没有业务应用，创建应用后即可在这里分配收款通道">
-        <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款通道</th></tr></thead><tbody>{applications.data?.map(app => {
-          const current = app.defaultChannelId || "";
-          return <tr key={app.id}><td><strong>{app.name}</strong></td><td data-label="收款通道"><select aria-label={`${app.name} 收款通道`} value={current} disabled={!!busy} onChange={event => void assign(app, event.target.value)}>
-            {!current && <option value="" disabled>未分配 —— 请选择通道</option>}
-            {current && !channels.data?.some(channel => channel.id === current) && <option value={current}>原通道（已删除或待加载）</option>}
-            {channels.data?.map(channel => <option key={channel.id} value={channel.id} disabled={!assignable(channel)}>{channel.name} · {checkLabels[channel.checkStatus]}{!channel.enabled ? " · 已停用" : ""}</option>)}
-          </select></td></tr>;
+        {groups.error && <div className="error">{groups.error}</div>}
+        <div className="table-wrap"><table><thead><tr><th>业务应用</th><th>收款路由</th></tr></thead><tbody>{applications.data?.map(app => {
+          const current = applicationRoutingTarget(app);
+          return <tr key={app.id}><td><strong>{app.name}</strong></td><td data-label="收款路由"><RoutingTargetSelect aria-label={`${app.name} 收款路由`} value={current} currentTarget={current} groups={groups.data ?? []} channels={channels.data ?? []} disabled={!!busy || groups.loading || !!groups.error} onChange={event => void assign(app, event.target.value)} /></td></tr>;
         })}</tbody></table></div>
       </LoadingState>
     </Modal>}

@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { describeAdminAction } from "../middleware/admin-audit.js";
 
 describe("admin audit descriptors", () => {
+  it("names routing group configuration and application binding actions", () => {
+    expect(describeAdminAction("POST", "/admin/v1/routing-groups")).toMatchObject({ action: "ROUTING_GROUP_CREATE", resourceType: "ROUTING_GROUP" });
+    expect(describeAdminAction("POST", "/admin/v1/routing-groups/grp-1")).toMatchObject({ action: "ROUTING_GROUP_UPDATE", resourceId: "grp-1" });
+    expect(describeAdminAction("POST", "/admin/v1/routing-groups/grp-1/delete")).toMatchObject({ action: "ROUTING_GROUP_DELETE" });
+    expect(describeAdminAction("POST", "/admin/v1/applications/app-1/routing-group")).toMatchObject({ action: "APPLICATION_ROUTING_GROUP_CHANGE", resourceType: "APPLICATION", resourceId: "app-1" });
+  });
   it("names sensitive administrator actions", () => {
     expect(describeAdminAction("POST", "/admin/v1/applications/app_1/rotate-api-key")).toEqual({
       action: "APPLICATION_API_KEY_ROTATE", resourceType: "APPLICATION", resourceId: "app_1",
