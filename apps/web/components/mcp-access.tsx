@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, Toggle, time } from "./common";
+import { CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, Toggle, time, toLocalDateTimeInput } from "./common";
 
 type Scope = "READ" | "OPERATE" | "FINANCIAL";
 type Tool = { name:string; description:string; inputSchema:Record<string,unknown>; scope:Scope };
@@ -46,9 +46,9 @@ function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|null|undefined
 
 function ClientCard({client,tools,busy,onBusy,onNotice,reload,onToken}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onToken:(token:string,name:string)=>void}){
   const [name,setName]=useState(client.name),[scope,setScope]=useState<Scope>(client.scope),[enabled,setEnabled]=useState(client.enabled);
-  const [expiresAt,setExpiresAt]=useState(client.expiresAt?new Date(client.expiresAt).toISOString().slice(0,16):"");
+  const [expiresAt,setExpiresAt]=useState(toLocalDateTimeInput(client.expiresAt));
   const [allowed,setAllowed]=useState(client.allowedTools);
-  useEffect(()=>{setName(client.name);setScope(client.scope);setEnabled(client.enabled);setExpiresAt(client.expiresAt?new Date(client.expiresAt).toISOString().slice(0,16):"");setAllowed(client.allowedTools);},[client]);
+  useEffect(()=>{setName(client.name);setScope(client.scope);setEnabled(client.enabled);setExpiresAt(toLocalDateTimeInput(client.expiresAt));setAllowed(client.allowedTools);},[client]);
   function changeScope(next:Scope){setScope(next);const eligible=new Set(eligibleTools(tools,next).map(t=>t.name));setAllowed(current=>current.filter(name=>eligible.has(name)));}
 
   async function save(){
@@ -113,7 +113,7 @@ export function McpAccessPanel(){
 
   return <>
     {notice&&<Toast type={notice.type} text={notice.text} onClose={()=>setNotice(null)}/>}
-    {issued&&<Modal title="MCP Token 仅显示一次" onClose={()=>setIssued(null)}>
+    {issued&&<Modal title="MCP Token 仅显示一次" onClose={()=>setIssued(null)} dismissible={false}>
       <p className="dialog-copy">把它保存到 {issued.name} 的 MCP 配置中。TuneXPay 只保存哈希，关闭后无法再次查看明文。</p>
       <div className="credential-secret"><code>{issued.token}</code><CopyValue value={issued.token} label="复制 Token"/></div>
       {info?.endpoint&&<><p className="dialog-copy">Streamable HTTP Endpoint</p><div className="credential-secret"><code>{info.endpoint}</code><CopyValue value={info.endpoint} label="复制地址"/></div></>}
@@ -133,7 +133,7 @@ export function McpAccessPanel(){
       <LoadingState loading={toolsLoading} error={toolsError}>
         <form onSubmit={event=>void create(event)}><fieldset className="settings-group" disabled={busy}>
           <div className="settings-grid">
-            <label>客户端名称<input value={name} maxLength={120} placeholder="Hermes / Codex / OpenClaw" onChange={e=>setName(e.target.value)}/></label>
+            <label>客户端名称<input required value={name} maxLength={120} placeholder="Hermes / Codex / OpenClaw" onChange={e=>setName(e.target.value)}/></label>
             <label>最大 Scope<select value={scope} onChange={e=>changeScope(e.target.value as Scope)}><option value="READ">READ</option><option value="OPERATE">OPERATE</option><option value="FINANCIAL">FINANCIAL-request</option></select></label>
             <label>有效期（空=不过期）<input type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/></label>
           </div>
@@ -154,7 +154,7 @@ export function McpAccessPanel(){
     <Section title="资金 / 状态动作审批" action={<span className="muted">FINANCIAL 工具只能创建这里的待审批请求</span>}>
       <LoadingState loading={approvalsLoading} error={approvalsError} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
         <div className="table-wrap"><table><thead><tr><th>时间</th><th>来源</th><th>动作</th><th>说明</th><th>状态</th><th>到期</th><th></th></tr></thead>
-          <tbody>{approvals?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td><code>{row.clientId??row.requestedBy}</code></td><td><code>{row.action}</code></td><td>{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</td><td><Status value={row.status}/></td><td>{time(row.expiresAt)}</td><td>{row.status==="PENDING"&&<><button className="link-button" disabled={busy} onClick={()=>void decide(row.id,"approve")}>批准</button> <button className="link-button" disabled={busy} onClick={()=>void decide(row.id,"reject")}>拒绝</button></>}</td></tr>)}</tbody>
+          <tbody>{approvals?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td data-label="来源"><code>{row.clientId??row.requestedBy}</code></td><td data-label="动作"><code>{row.action}</code></td><td data-label="说明">{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</td><td data-label="状态"><Status value={row.status}/></td><td data-label="到期">{time(row.expiresAt)}</td><td data-label="操作">{row.status==="PENDING"&&<><button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"approve")}>批准</button> <button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"reject")}>拒绝</button></>}</td></tr>)}</tbody>
         </table></div>
       </LoadingState>
     </Section>
@@ -162,7 +162,7 @@ export function McpAccessPanel(){
     <Section title="MCP Tool 调用审计" action={<button className="link-button" onClick={()=>void reloadAudits()} type="button">刷新</button>}>
       <LoadingState loading={auditsLoading} error={auditsError} empty={!audits?.length} emptyText="还没有 MCP Tool 调用">
         <div className="table-wrap"><table><thead><tr><th>时间</th><th>客户端</th><th>Scope</th><th>Tool</th><th>结果</th><th>耗时</th><th>来源</th></tr></thead>
-          <tbody>{audits?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td>{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></td><td><code>{row.scope}</code></td><td><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</td><td><Status value={row.success?"SUCCESS":"FAILED"}/></td><td>{row.durationMs} ms</td><td>{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></td></tr>)}</tbody>
+          <tbody>{audits?.map(row=><tr key={row.id}><td>{time(row.createdAt)}</td><td data-label="客户端">{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></td><td data-label="Scope"><code>{row.scope}</code></td><td data-label="Tool"><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</td><td data-label="结果"><Status value={row.success?"SUCCESS":"FAILED"}/></td><td data-label="耗时">{row.durationMs} ms</td><td data-label="来源">{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></td></tr>)}</tbody>
         </table></div>
       </LoadingState>
     </Section>

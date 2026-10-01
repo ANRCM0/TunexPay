@@ -60,13 +60,15 @@ function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, 
   return <div className="settings-grid">{plugin.fields.map(field => {
     const configured = Boolean(config[`${field.key}Configured`]);
     const value = field.secret ? (secretValues[field.key] ?? "") : String(config[field.key] ?? "");
+    const clearing = Boolean(field.secret && clearSecrets?.has(field.key));
+    const required = Boolean(field.required && (!field.secret || !configured));
     const control = field.type === "select"
-      ? <select value={value} onChange={event => onChange(field.key, formValue(field, event.target.value))}>{field.options?.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
-      : <input type={field.secret ? "password" : field.type === "number" ? "number" : "text"} value={value} placeholder={field.placeholder} autoComplete={field.secret ? "new-password" : "off"} onChange={event => field.secret ? onSecretChange(field.key, event.target.value) : onChange(field.key, formValue(field, event.target.value))} />;
+      ? <select required={required} value={value} onChange={event => onChange(field.key, formValue(field, event.target.value))}>{field.options?.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
+      : <input required={required} disabled={clearing} type={field.secret ? "password" : field.type === "number" ? "number" : "text"} value={value} placeholder={field.placeholder} autoComplete={field.secret ? "new-password" : "off"} onChange={event => field.secret ? onSecretChange(field.key, event.target.value) : onChange(field.key, formValue(field, event.target.value))} />;
     return <label key={field.key}>
       {field.label}{field.secret && configured ? "（已配置，留空保留）" : ""}
       {control}
-      {field.secret && configured && onClearSecret && <span className="field-clear"><input type="checkbox" checked={clearSecrets?.has(field.key) ?? false} onChange={event => onClearSecret(field.key, event.target.checked)} />清除已保存的值</span>}
+      {field.secret && configured && !field.required && onClearSecret && <span className="field-clear"><input type="checkbox" checked={clearSecrets?.has(field.key) ?? false} onChange={event => onClearSecret(field.key, event.target.checked)} />清除已保存的值</span>}
     </label>;
   })}</div>;
 }
@@ -112,8 +114,7 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
   async function save() {
     onBusy(true); onNotice(null);
     try {
-      await api(`/notification-instances/${instance.id}`, { method: "POST", body: JSON.stringify({ name, plugin: instance.plugin, enabled, revision: instance.revision, config: payloadConfig() }) });
-      await api(`/notification-instances/${instance.id}/subscriptions`, { method: "POST", body: JSON.stringify({ events }) });
+      await api(`/notification-instances/${instance.id}`, { method: "POST", body: JSON.stringify({ name, plugin: instance.plugin, enabled, revision: instance.revision, config: payloadConfig(), events }) });
       await reload();
       onNotice({ type: "ok", text: `${name} 已保存。` });
     } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "保存失败" }); }
@@ -141,21 +142,21 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
     finally { onBusy(false); }
   }
 
-  return <fieldset className="settings-group" disabled={busy}>
+  return <form onSubmit={event => { event.preventDefault(); void save(); }}><fieldset className="settings-group" disabled={busy}>
     <div className="settings-group-head">
       <div><h3>{instance.name}</h3><p>{plugin.name} · {instance.id} · {plugin.description}</p></div>
       <Toggle checked={enabled} onChange={setEnabled} label="启用通知实例" />
     </div>
-    <div className="settings-grid"><label>实例名称<input value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label></div>
+    <div className="settings-grid"><label>实例名称<input required value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label></div>
     <ConfigFields plugin={plugin} config={config} onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))} secretValues={secrets} onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))} clearSecrets={clearSecrets} onClearSecret={(key, clear) => setClearSecrets(current => { const next = new Set(current); if (clear) next.add(key); else next.delete(key); return next; })} />
     <div className="settings-group-head"><div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div></div>
     <EventPicker selected={events} onChange={setEvents} />
     <div className="settings-actions">
-      <button className="button" type="button" onClick={() => void save()}>保存</button>
+      <button className="button" type="submit">保存</button>
       <button className="button secondary" type="button" disabled={!instance.enabled} onClick={() => void test()}>发送测试</button>
       <button className="link-button" type="button" onClick={() => void remove()}>删除</button>
     </div>
-  </fieldset>;
+  </fieldset></form>;
 }
 
 export function OwnerNotificationsPanel() {
@@ -220,8 +221,8 @@ export function OwnerNotificationsPanel() {
               <Toggle checked={newEnabled} onChange={setNewEnabled} label="创建后立即启用" />
             </div>
             <div className="settings-grid">
-              <label>插件<select value={selectedPlugin?.code ?? ""} onChange={event => setPluginCode(event.target.value)}>{plugins?.map(plugin => <option value={plugin.code} key={plugin.code}>{plugin.name}</option>)}</select></label>
-              <label>实例名称<input value={newName} maxLength={120} onChange={event => setNewName(event.target.value)} /></label>
+              <label>插件<select required value={selectedPlugin?.code ?? ""} onChange={event => setPluginCode(event.target.value)}>{plugins?.map(plugin => <option value={plugin.code} key={plugin.code}>{plugin.name}</option>)}</select></label>
+              <label>实例名称<input required value={newName} maxLength={120} onChange={event => setNewName(event.target.value)} /></label>
               <label>实例 ID（可留空自动生成）<input value={newId} maxLength={60} placeholder="notify-ops-tg" onChange={event => setNewId(event.target.value.toLowerCase())} /></label>
             </div>
             {selectedPlugin && <ConfigFields plugin={selectedPlugin} config={newConfig} onChange={(key, value) => setNewConfig(current => ({ ...current, [key]: value }))} secretValues={newSecrets} onSecretChange={(key, value) => setNewSecrets(current => ({ ...current, [key]: value }))} />}
@@ -253,7 +254,7 @@ export function OwnerNotificationsPanel() {
             <td data-label="标题">{row.title}</td>
             <td data-label="状态"><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
             <td data-label="尝试">{row.attempts}</td>
-            <td>{row.status === "DEAD" && row.instance && <button className="link-button" type="button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>}</td>
+            <td data-label="操作">{row.status === "DEAD" && row.instance && <button className="link-button" type="button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>}</td>
           </tr>)}</tbody>
         </table></div>
       </LoadingState>
