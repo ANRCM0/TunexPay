@@ -93,7 +93,7 @@ function tick(): void {
   if (runHeavy && !ownerTask) ownerTask = runNotifications().catch(() => log("error", "notification.worker_failed", { code: "NOTIFICATION_WORKER_ERROR" })).finally(() => { ownerTask = null; });
   // 采集器有自己的 nextRunAt 与 demand 唤醒路径，必须每跳检查，不参与退避
   if (!collectorTask) collectorTask = runAllBillCollectors().catch(() => log("error", "alipay_bill.collector_unavailable", { code: "DATABASE_OR_CONFIG_ERROR" })).finally(() => { collectorTask = null; });
-  if (!agentTask) agentTask = runAgentInbox().catch(error => log("error","agent.worker_failed",{error:error instanceof Error?error.message:String(error)})).finally(() => { agentTask = null; });
+  if (!agentTask) agentTask = runAgentInbox().then(() => undefined).catch(error => log("error","agent.worker_failed",{error:error instanceof Error?error.message:String(error)})).finally(() => { agentTask = null; });
 }
 
 const interval = setInterval(tick, WORKER_TICK_MS);
