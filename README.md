@@ -1,6 +1,6 @@
 # TUOXIN Pay v0.1
 
-TUOXIN Pay 是面向自有业务的轻量支付中台。它不是 MPAY 的改皮版本，而是一套重新建模的 TypeScript 项目：保留支付系统真正需要的事务、幂等、状态机、异常恢复和可靠通知，移除多商户运营、余额、清算、费率和复杂路由。
+TUOXIN Pay 是面向自有业务的轻量支付中台，是一套重新建模的 TypeScript 项目：保留支付系统真正需要的事务、幂等、状态机、异常恢复和可靠通知，移除多商户运营、余额、清算、费率和复杂路由。
 
 ## v0.1 已实现
 
@@ -8,7 +8,7 @@ TUOXIN Pay 是面向自有业务的轻量支付中台。它不是 MPAY 的改皮
 
 - 插件与多通道：同一插件可配置多个独立账号，按业务应用分配；真实接口检测、版本化检测结果和小额实付验收。历史支付绑定原通道，账单流水与采集进度按通道隔离。[使用与升级说明](docs/plugin-channels.md)。
 
-- 本人通知：面板配置邮箱 SMTP 和飞书机器人、测试发送、独立持久化任务、失败重试、投递记录和采集失败提醒限频；[配置说明](docs/owner-notifications.md)。
+- 管理员通知：面板按插件创建独立实例（邮箱 SMTP、飞书机器人、Telegram、通知 Webhook、飞书应用）并分别订阅事件，支持测试发送、独立持久化任务、失败重试与手动重发、投递记录和采集失败提醒限频；[配置说明](docs/notification-plugins.md)。
 
 - Application：独立 API Key、Webhook Secret、ePay PID/Key；敏感密钥使用 AES-256-GCM 加密保存。
 - Order / Payment 分离：一张业务订单支持多次支付尝试。
@@ -53,7 +53,7 @@ TUOXIN Matrix / Studio / Chat / NewAPI
              业务 Webhook
 ```
 
-详细设计见 [docs/architecture.md](docs/architecture.md)，生产部署、升级、回滚与故障排查见 [docs/deployment.md](docs/deployment.md)，从 MPAY 提取/删除的内容见 [docs/mpay-reference-notes.md](docs/mpay-reference-notes.md)，接口定义见 [docs/openapi.yaml](docs/openapi.yaml)。
+详细设计见 [docs/architecture.md](docs/architecture.md)，生产部署、升级、回滚与故障排查见 [docs/deployment.md](docs/deployment.md)，接口定义见 [docs/openapi.yaml](docs/openapi.yaml)。
 
 ## 使用 Docker 启动
 

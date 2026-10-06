@@ -105,7 +105,7 @@ paths:
   /channels/alipay-bill/flows:
     post:
       summary: Watcher 投递支付宝标准化收款流水
-      description: 支持单条、`{record:{...}}` 或 `{records:[...]}`；`amount` 使用整数分，兼容 MPAY 的 `price` 元字符串。
+      description: 支持单条、`{record:{...}}` 或 `{records:[...]}`；`amount` 使用整数分，兼容旧版接入方以 `price` 提交的元字符串。
       security: []
       parameters:
         - name: X-Watcher-Token
