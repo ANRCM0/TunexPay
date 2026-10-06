@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
 import { ChannelTag, ConfirmModal, CopyValue, HoverDetail, LoadingState, Section, SortableTh, Stat, Status, Tabs, Toast, sortValueProps, money, time } from "./common";
-import { eventLabel, eventSourceLabel, eventTone, exceptionSeverityLabel, exceptionTypeLabel, protocolLabel, receiptMatchModeLabel } from "../lib/labels";
+import { eventLabel, eventSourceLabel, eventTone, exceptionSeverityLabel, exceptionTypeLabel, protocolLabel } from "../lib/labels";
 
 type Refund = { refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string };
 type Payment = {

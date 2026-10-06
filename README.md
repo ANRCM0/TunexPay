@@ -338,7 +338,7 @@ curl http://127.0.0.1:3000/health
 
 ## 支付宝账单收款 Watcher
 
-这条链路与上面的“官方日账单对账”不同：`ALIPAY_BILL` 用个人收款码承接付款，由内置采集器或外部 Watcher 查询到账流水。推荐在“支付渠道 → 支付宝账单收款配置”中开启、填写账号密钥并保存；[面板配置与升级说明](docs/alipay-bill-collector.md)。
+这条链路与上面的“官方日账单对账”不同：`ALIPAY_BILL` 用个人收款码承接付款，由内置采集器或外部 Watcher 查询到账流水。推荐在“支付通道”页打开对应账单通道的“配置”，在“账单采集”区开启并填写账号密钥后保存；[面板配置与升级说明](docs/alipay-bill-collector.md)。
 
 以下环境变量只作为配置表首次初始化的兼容值，后续以面板保存的数据库配置为准：
 
@@ -415,7 +415,7 @@ WEB_PUBLIC_URL=https://pay.example.com
 https://pay.example.com/api/v1/channels/alipay/webhook
 ```
 
-先在支付宝沙箱完成预创建、扫码、异步回调、重复回调、主动查单和退款测试（退款只能经 MCP 审批人工发起，不再有 API 直调入口），再切生产网关及生产密钥。
+先在支付宝沙箱完成预创建、扫码、异步回调、重复回调、主动查单和退款测试（退款只能由管理员人工发起：管理台「退款记录 → 人工发起退款」，或经 MCP 审批；不再有 API 直调入口），再切生产网关及生产密钥。
 
 ## ePay / NewAPI 接入
 
@@ -484,7 +484,7 @@ v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守
 ## 通知插件与 MCP
 
 - 管理员通知已抽象为 `NotificationPlugin -> NotificationInstance`，支持 SMTP、飞书机器人、Telegram、通知 Webhook 和飞书应用，并可按事件独立订阅。详见 [docs/notification-plugins.md](docs/notification-plugins.md)。
-- 可选的只读 MCP endpoint 为 AI Agent 提供订单、支付、退款、异常、通道和系统状态查询。默认关闭并使用独立 Token。详见 [docs/mcp.md](docs/mcp.md)。
+- 可选的 MCP endpoint 为 AI Agent 提供订单、支付、退款、异常、通道和系统状态查询，以及受控操作与资金动作审批。默认关闭并使用独立 Token。详见 [docs/mcp.md](docs/mcp.md)。
 - 业务系统的支付成功 / 退款成功 Webhook 仍属于支付协议，不会被通知插件替代。
 
 

@@ -10,10 +10,10 @@ describe("bill configuration origin protection", () => {
     const response = await POST(new NextRequest(`https://pay.example.com/api/backend/${path.join("/")}`, { method: "POST", headers: { origin: "https://evil.example" } }), { params: Promise.resolve({ path }) });
     expect(response.status).toBe(403); expect(fetch).not.toHaveBeenCalled();
   });
-  it("rejects cross-site owner notification tests before forwarding credentials", async () => {
+  it("rejects cross-site notification instance tests before forwarding credentials", async () => {
     process.env.WEB_PUBLIC_URL = "https://pay.example.com";
     const fetch = vi.fn(); vi.stubGlobal("fetch",fetch);
-    const response = await POST(new NextRequest("https://pay.example.com/api/backend/owner-notifications/test", {method:"POST",headers:{origin:"https://evil.example"}}), {params:Promise.resolve({path:["owner-notifications","test"]})});
+    const response = await POST(new NextRequest("https://pay.example.com/api/backend/notification-instances/notify-webhook/test", {method:"POST",headers:{origin:"https://evil.example"}}), {params:Promise.resolve({path:["notification-instances","notify-webhook","test"]})});
     expect(response.status).toBe(403); expect(fetch).not.toHaveBeenCalled();
   });
   it("rejects cross-site writes before forwarding any credentials", async () => {

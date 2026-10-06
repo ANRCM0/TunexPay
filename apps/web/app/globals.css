@@ -17,12 +17,6 @@
   --danger: #e5534b;
   --danger-soft: #fdeceb;
   --shadow: 0 1px 3px rgba(36, 49, 67, 0.06);
-  /* 旧别名，避免漏改处直接崩色 */
-  --teal: var(--primary);
-  --teal-soft: var(--primary-soft);
-  --navy: var(--primary);
-  --amber: var(--warning);
-  --red: var(--danger);
 }
 
 * { box-sizing: border-box; }

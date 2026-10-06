@@ -48,10 +48,9 @@ nativeRoutes.post("/payments/:paymentNo/close", async (c) => {
   return c.json({ data: await closePayment(c.get("application").id, paymentNo) });
 });
 
-// 退款不再由商户 API 自动执行：这个入口曾经一调用就直接向通道打款退款。
-// 现在保留路由但一律拒绝，让老接入方能拿到明确的错误码，而不是一个含义模糊的 404；
-// 同时也避免上游重试循环把一个已失效的入口当作偶发失败继续打。
-// 退款只能由管理员通过 MCP 审批（15 分钟人工确认）人工发起。
+// 退款不由商户 API 执行：保留路由但一律拒绝，让老接入方能拿到明确的错误码，
+// 而不是一个含义模糊的 404；同时也避免上游重试循环把一个已失效的入口当作偶发失败继续打。
+// 退款只能由管理员人工发起：管理台「退款记录 → 人工发起退款」，或经 MCP 审批（15 分钟人工确认）。
 nativeRoutes.post("/refunds", () => {
   throw new AppError("REFUND_API_DISABLED", "退款接口已停用：系统不再自动执行退款，请由管理员人工发起", 410);
 });

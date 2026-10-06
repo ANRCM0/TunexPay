@@ -42,9 +42,9 @@ export function initialBillSettings(inherit = true): BillSettings {
   };
 }
 
-// 默认行按需初始化：以前用 upsert 自我初始化，等于每次读配置（外部 Watcher 投递流水、
-// 采集器每一轮、后台每次读取）都带一条写入语句和一次行锁。改成「先读、缺了才补」，
-// 稳定态下读取是纯 SELECT，并发初始化交给主键唯一约束兜底。
+// 默认行按需初始化：读配置的路径很热（外部 Watcher 投递流水、采集器每一轮、后台每次读取），
+// 稳定态下必须是纯 SELECT，不能每次读取都带上一条写入语句和一次行锁。因此采用「先读、缺了才补」，
+// 并发初始化交给主键唯一约束兜底。
 async function readOrCreateSettingsRow(client: Client, id: string) {
   try {
     return await client.billChannelSettings.findUniqueOrThrow({ where: { id } });
@@ -123,25 +123,6 @@ export function mergeBillSettings(previous: BillSettings, raw: unknown): BillSet
     throw new AppError("BILL_CHANNEL_NOT_CONFIGURED", "启用收款前请配置收款码及内置采集器或外部 Watcher", 422);
   }
   return next;
-}
-
-export async function saveBillSettings(raw: unknown) {
-  const input = billSettingsInputSchema.parse(raw);
-  return db.$transaction(async (tx) => {
-    const current = await loadBillSettings(tx, true);
-    if (current.revision !== input.revision) throw new AppError("BILL_SETTINGS_CONFLICT", "配置已被修改，请重新加载后再保存", 409);
-    const next = mergeBillSettings(current.settings, input);
-    if (billIdentity(next) !== billIdentity(current.settings)) {
-      const history = await tx.payment.count({ where: { channel: "ALIPAY_BILL" } });
-      const collector = await tx.billCollectorState.findUnique({ where: { id: SETTINGS_ID } });
-      if (history || collector) throw new AppError("BILL_ACCOUNT_CHANGE_BLOCKED", "已有账单支付记录或采集断点，不能直接更换账号、网关或收款码；请先做账号迁移", 409);
-    }
-    const row = await tx.billChannelSettings.update({ where: { id: SETTINGS_ID }, data: { payloadEncrypted: seal(JSON.stringify(next)), revision: { increment: 1 } } });
-    // Configuration changes should wake the collector even if a previous failure
-    // put it into a long retry backoff; in-flight pages use their old snapshot.
-    await tx.billCollectorState.updateMany({ where: { id: SETTINGS_ID }, data: { nextRunAt: new Date() } });
-    return publicBillSettings(next, row.revision, row.updatedAt);
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 }
 
 export async function billRuntimeConfig(client: Client = db, lock = false, id = SETTINGS_ID): Promise<Config & { billRevision: number }> {

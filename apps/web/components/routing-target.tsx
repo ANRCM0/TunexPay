@@ -8,7 +8,7 @@ type RoutingTargetProps = SelectHTMLAttributes<HTMLSelectElement> & {
   groups: RoutingGroup[]; channels: Channel[]; currentTarget?: string;
 };
 
-/** 用带类型前缀的选项避免组 ID 与通道 ID 混淆；仍保留旧单通道绑定。 */
+/** 用带类型前缀的选项避免组 ID 与通道 ID 混淆；单通道绑定（channel: 前缀）同样受支持。 */
 export function RoutingTargetSelect({ groups, channels, currentTarget, ...props }: RoutingTargetProps) {
   const found = !currentTarget || groups.some(group => `group:${group.id}` === currentTarget)
     || channels.some(channel => `channel:${channel.id}` === currentTarget);

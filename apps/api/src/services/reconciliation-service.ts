@@ -131,8 +131,8 @@ async function matchRefund(receipt: Receipt): Promise<Receipt> {
   if (refund.channelRefundNo && receipt.providerRefundNo && refund.channelRefundNo !== receipt.providerRefundNo) {
     return markMismatch(receipt, `支付宝退款号不一致：系统 ${refund.channelRefundNo}，账单 ${receipt.providerRefundNo}`, refund.paymentId, refund.id, refund.payment.orderId);
   }
-  // 对账只做「匹配 + 差错」：账单出现退款流水不再直接把本地退款单改成 SUCCESS。
-  // 退款是否到账由管理员在退款页人工查单确认，对账不会推进任何资金状态。
+  // 对账只做「匹配 + 差错」：账单退款流水只用于匹配，不会把本地退款单改成 SUCCESS，
+  // 也不会推进任何资金状态；退款是否到账由管理员在退款页人工查单确认。
   return markMatched(receipt, refund.paymentId, refund.id, refund.payment.orderId, { refundNo: refund.refundNo, amount: refund.amount });
 }
 

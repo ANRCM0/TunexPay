@@ -91,7 +91,7 @@ async function updateRefund(refund: Refund, status: RefundStatus, data: Record<s
     const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
     if (current.status === "SUCCESS" || !canRefundTransition(current.status, status)) return current;
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: current.paymentId } });
-    // 退款不排下一次自动查单：nextQueryAt 一律清空（也顺手清理升级前遗留的调度）。
+    // 退款不排下一次自动查单：nextQueryAt 一律清空（升级前遗留的调度值不会被执行）。
     const updated = await tx.refund.update({ where: { id: current.id }, data: {
       status,
       ...data,

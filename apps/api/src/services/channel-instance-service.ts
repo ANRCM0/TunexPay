@@ -61,17 +61,6 @@ export async function adapterForPayment(payment: { channel: PaymentChannelCode; 
   return paymentPlugins[row.plugin].create(row.id, channelRuntime(decodeChannel(row)));
 }
 
-/**
- * 取一个「可用于新建支付」的通道：必须存在、插件匹配、未归档、已启用。
- * 归档通道在这里被明确拒绝，错误信息指向运营该做什么。
- */
-export async function requireActiveChannel(channelId: string, plugin: PaymentChannelCode): Promise<ChannelInstance> {
-  const row = await db.channelInstance.findUnique({ where: { id: channelId } });
-  if (!row || row.plugin !== plugin) throw new AppError("CHANNEL_BINDING_INVALID", "支付单通道绑定异常", 409);
-  if (row.archivedAt) throw new AppError("CHANNEL_ARCHIVED", "该通道已删除，不能再发起新支付，请为应用重新分配通道", 409);
-  return row;
-}
-
 export async function publicChannel(row: ChannelInstance) {
   const settings = row.plugin === "ALIPAY_BILL" ? (await loadBillSettings(db, false, row.id)).settings : decodeChannel(row);
   const test = row.testPaymentNo ? await db.payment.findUnique({ where: { paymentNo: row.testPaymentNo }, select: { paymentNo: true, status: true, channelId: true, paidAt: true } }) : null;

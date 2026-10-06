@@ -43,11 +43,10 @@ export type ReceiptFlowOutcome = {
 export async function ingestAlipayBillFlows(input: unknown, accountId = ALIPAY_BILL_ACCOUNT_ID): Promise<ReceiptFlowOutcome[]> {
   const records = receiptFlowRecords(input);
   if (records.length > 100) throw new AppError("TOO_MANY_RECEIPT_FLOWS", "单次最多提交 100 条流水", 422);
-  // 归一化留在每条流水自己的处理步骤里，与原来的逐条循环一致：某条流水格式不合法时，排在它
-  // 前面的合法流水已经入库，不会因为一条坏数据把整批变成「什么都没发生」而卡住调用方重试。
+  // 归一化留在每条流水自己的处理步骤里：某条流水格式不合法时，排在它前面的合法流水已经入库，
+  // 不会因为一条坏数据把整批变成「什么都没发生」而卡住调用方重试。
   //
-  // 与串行版本相比，并发会让「失败之前的那些流水」推进得更多（串行版本在一批里遇到第一条
-  // 失败时，后面的记录根本不会碰；并发版本已经有一批流水在飞，它们会各自跑到自己的终态）。
+  // 一条流水失败时，已经有一批流水在飞，它们会各自跑到自己的终态（后面的记录不再被领取）。
   // 这是安全的：整批重放时，回执指纹 fingerprint 的数据库唯一约束保证同一条流水只会有一行
   // 回执，PROCESSING 租约（matchStatus + lockedUntil 的条件更新）保证同一行回执同一时刻只有
   // 一个执行者，markPaymentSucceeded 也按 eventKey 幂等。因此「多推进了」只会表现为重放时命中
@@ -56,7 +55,7 @@ export async function ingestAlipayBillFlows(input: unknown, accountId = ALIPAY_B
 }
 
 /**
- * 有界并发工作池，严格保持「结果顺序 === 输入顺序」，并且失败语义贴近原来的串行版本。
+ * 有界并发工作池，严格保持「结果顺序 === 输入顺序」，失败时立即停止领取新任务。
  *
  * 1) 并发上限：至多 `limit` 个 task 同时在飞，不会因为一批 100 条就打出 100 路并发。
  * 2) 顺序：每条流水的结果写入它自己的下标 `results[index]`，与完成先后无关，因此调用方仍然

@@ -2,11 +2,10 @@ import { db } from "../db.js";
 import { RECOVERY_MAX_ATTEMPTS } from "./recovery-policy.js";
 
 /**
- * `/admin/v1/dashboard` 的 14 个计数原本由 14 条 Prisma `count/aggregate` 并发执行
- * （加 1 条 `recentEvents` 的 `findMany`，每次刷新共 15 条语句/连接）。这里把它们合并为
- * **一条** 条件聚合 SQL：8 张表各自一个子查询，数据库只解析一次、只走一趟连接。
+ * `/admin/v1/dashboard` 的 14 个计数合并为 **一条** 条件聚合 SQL：8 张表各自一个子查询，
+ * 数据库只解析一次、只走一趟连接。
  *
- * 语义必须与 Prisma 版本逐条等价，尤其是关联过滤：
+ * 各计数的语义必须与逐条 Prisma 查询等价，尤其是关联过滤：
  *  - `{ order: { deletedAt: null } }` 是 **INNER JOIN 语义**：必须存在一条 `deletedAt IS NULL`
  *    的 order。因此不能写成 `LEFT JOIN orders o ... WHERE o.deletedAt IS NULL`（那样会把
  *    `orderId` 为空的行也算进来），本文件统一写成

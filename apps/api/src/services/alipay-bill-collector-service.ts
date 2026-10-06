@@ -48,7 +48,7 @@ export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID)
     const demand = await collectionDemand(tx, now, cfg.ALIPAY_BILL_OVERLAP_SECONDS, cfg.ALIPAY_BILL_LAG_SECONDS, accountId);
     if (!demand) {
       // 无待收流水时状态页显示 IDLE、不读心跳；因此只在心跳确实过期时才刷新，
-      // 不再每一跳都对同一行做一次空写。
+      // 避免每一跳都对同一行做一次空写。
       await tx.billCollectorState.updateMany({
         where: { id: accountId, OR: [{ heartbeatAt: null }, { heartbeatAt: { lte: new Date(now.getTime() - IDLE_HEARTBEAT_MS) } }] },
         data: { heartbeatAt: now },
@@ -100,12 +100,11 @@ export async function runAlipayBillCollector(accountId = ALIPAY_BILL_ACCOUNT_ID)
         page_no: pageNo, page_size: PAGE_SIZE,
       });
       const page = accountLogPage(response, pageNo, PAGE_SIZE);
-      // 先整页校验、再整页批量投递（原来是"逐条校验 + 逐条投递"交替进行）。
-      // 顺序变化只影响"发现越界流水之前已经投递了多少条"：现在一页里只要有任意一条
-      // paidAt 落在 [windowStart, windowEnd) 之外，这一页一条都不会投递，而不是投递到那条
-      // 越界记录为止的前半页。这是安全的，因为页在崩溃/失败后会被原样重放：回执指纹的唯一
-      // 约束与支付核心（eventKey 幂等 + 支付单状态机）保证重放不会产生重复回执或重复成功。
-      // 校验仍逐条进行，语义不变（越界即抛 ALIPAY_BILL_OUTSIDE_QUERY_WINDOW，游标不前进）。
+      // 先整页校验、再整页批量投递。校验逐条进行，越界即抛
+      // ALIPAY_BILL_OUTSIDE_QUERY_WINDOW，游标不前进；一页里只要有任意一条 paidAt 落在
+      // [windowStart, windowEnd) 之外，这一页一条都不会投递（不会只投递到那条越界记录为止的前半页）。
+      // 这是安全的，因为页在崩溃/失败后会被原样重放：回执指纹的唯一约束与支付核心
+      // （eventKey 幂等 + 支付单状态机）保证重放不会产生重复回执或重复成功。
       const flows: Record<string, unknown>[] = [];
       for (const record of page.records) {
         const flow = paymentFlowFromAccountLog(record);
@@ -156,8 +155,8 @@ export async function alipayBillCollectorStatus(accountId = ALIPAY_BILL_ACCOUNT_
 }
 
 export async function runAllBillCollectors(): Promise<void> {
-  // 只为「真实存在的通道」跑采集，不再无条件带上历史默认账号：
-  // 默认通道已不再自动创建，对新装环境来说那个 id 根本不存在，每跳都为它开一次事务是纯浪费。
+  // 只为「真实存在的通道」跑采集：默认通道不会自动创建，对新装环境来说那个 id 根本不存在，
+  // 每跳都为它开一次事务是纯浪费。
   // 注意这里**故意不过滤 archivedAt**：通道归档只阻断新支付，如果它还有在途的账单收款单，
   // 采集器必须继续把到账流水匹配上，否则那笔钱永远确认不了。
   const rows = await db.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL" }, select: { id: true } });
