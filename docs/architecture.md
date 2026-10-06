@@ -2,7 +2,7 @@
 
 ## 设计边界
 
-系统只服务 TUOXIN 自有业务，因此第一版以 `Application` 代替完整商户体系。不包含余额、冻结、分账、清算、提现、商户费率与多级权限。
+系统只服务 TUOXIN 自有业务，以 `Application` 代替完整商户体系。这一范围边界是刻意保留的：不做多商户后台与多级权限，不做账户余额、冻结、分录、清算、提现、商户费率和平台服务费，不做支付插件市场、多种银行及聚合支付插件、进件与转账，也不做收款监听授权平台和多级渠道路由。这些能力不是支付正确性的必要条件，而是多商户平台的运营复杂度；避免重新长成一个庞大的多商户平台。
 
 ## 核心不变量
 
@@ -97,7 +97,7 @@ BEGIN
 
 - `ALIPAY_BILL` 是个人收款码 + 流水监听支付渠道，与官方支付宝日账单对账是两条独立链路。
 - 发起支付时为该 Payment 预约备注码或唯一金额，并保存 `receiptValidFrom/receiptValidUntil`；业务金额 `amount` 永不被临时改写。
-- Watcher 使用专用令牌向 `/api/v1/channels/alipay-bill/flows` 投递标准流水，也兼容 MPAY 的 `{record:{order_no,price,paid_at,remark}}` 结构。
+- Watcher 使用专用令牌向 `/api/v1/channels/alipay-bill/flows` 投递标准流水，也兼容旧版接入方的 `{record:{order_no,price,paid_at,remark}}` 结构。
 - 流水先通过唯一指纹去重，再使用数据库租约认领；匹配顺序为交易号、备注码、有效期内金额。
 - API 在状态推进途中崩溃时，Worker 会扫描租约已过期的 `PROCESSING` 流水并重新处理，不依赖 Watcher 恰好再次投递。
 - 多笔候选时不选择“时间最近”的订单，而是标记差错并创建 `RECEIPT_AMBIGUOUS` 异常，避免错单入账。

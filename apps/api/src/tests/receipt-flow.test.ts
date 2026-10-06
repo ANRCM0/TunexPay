@@ -8,7 +8,7 @@ import {
 } from "../lib/receipt-flow.js";
 
 describe("receipt watcher flow normalization", () => {
-  it("accepts the normalized MPAY watcher record shape", () => {
+  it("accepts the normalized legacy watcher record shape", () => {
     const [record] = receiptFlowRecords({ record: {
       order_no: "ali_20260916001",
       price: "19.99",
