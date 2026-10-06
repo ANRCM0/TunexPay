@@ -134,9 +134,3 @@ export function nextSortState(current: SortState, key: string): SortState {
   if (current.direction === "asc") return { key, direction: "desc" };
   return null;
 }
-
-/** 供表头 aria-sort 使用。 */
-export function ariaSortValue(current: SortState, key: string): "ascending" | "descending" | "none" {
-  if (!current || current.key !== key) return "none";
-  return current.direction === "asc" ? "ascending" : "descending";
-}

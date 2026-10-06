@@ -5,7 +5,7 @@ import nodemailer from "nodemailer";
 import { z } from "zod";
 import { sendWebhookRequest } from "../lib/webhook-security.js";
 import { AppError } from "../lib/errors.js";
-import type { NotificationMessage, NotificationPlugin } from "./types.js";
+import type { NotificationPlugin } from "./types.js";
 
 function record(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};

@@ -1,4 +1,4 @@
-import { Prisma, type Application, type Payment, type PaymentChannelCode, type PaymentStatus } from "@prisma/client";
+import { Prisma, type Application, type Payment, type PaymentStatus } from "@prisma/client";
 import { z } from "zod";
 import { adapterForPayment, assertChannelVerified } from "./channel-instance-service.js";
 import type { ChannelWebhookResult } from "../channels/types.js";
@@ -42,7 +42,7 @@ export async function createPayment(application: Application, orderNo: string, i
     if (!order) throw new AppError("ORDER_NOT_FOUND", "订单不存在", 404);
     if (key) {
       const existing = await tx.payment.findUnique({ where: { orderId_idempotencyKey: { orderId: order.id, idempotencyKey: key } } });
-      // 不再抽签；幂等重试不受组停用、成员移除、应用改派或订单成功/过期影响。
+      // 幂等重试不会重新选路：不受组停用、成员移除、应用改派或订单成功/过期影响。
       if (existing) return { payment: existing, shouldDispatch: false };
     }
     if (order.expiresAt && order.expiresAt <= new Date()) throw new AppError("ORDER_EXPIRED", "订单已过期", 409);

@@ -105,6 +105,34 @@ describe("plugin channel instances", () => {
     await expect(saveChannel({ name: row.name, plugin: "ALIPAY", enabled: true, revision: 2, settings: { appId: "2026000000000002" } }, row.id)).rejects.toMatchObject({ code: "CHANNEL_ACCOUNT_CHANGE_BLOCKED" });
     expect(mocks.update).not.toHaveBeenCalled();
   });
+  it("blocks replacing an account when the channel already has collector progress", async () => {
+    mocks.count.mockResolvedValue(0);
+    mocks.state.mockResolvedValue({ id: row.id });
+    await expect(saveChannel({ name: row.name, plugin: row.plugin, enabled: true, revision: 2, settings: { userId: "2088000000000001" } }, row.id)).rejects.toMatchObject({ code: "CHANNEL_ACCOUNT_CHANGE_BLOCKED" });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it("rejects a stale revision or a plugin swap before writing any configuration", async () => {
+    await expect(saveChannel({ name: row.name, plugin: row.plugin, enabled: true, revision: 1, settings: {} }, row.id)).rejects.toMatchObject({ code: "CHANNEL_CONFIG_CONFLICT" });
+    await expect(saveChannel({ name: row.name, plugin: "ALIPAY_BILL", enabled: true, revision: 2, settings: {} }, row.id)).rejects.toMatchObject({ code: "CHANNEL_CONFIG_CONFLICT" });
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+  it("wakes the bill collector for this channel after saving bill settings", async () => {
+    row.plugin = "ALIPAY_BILL";
+    mocks.settings.mockResolvedValue({
+      revision: 1, updatedAt: new Date(),
+      payloadEncrypted: seal(JSON.stringify({
+        ...initialBillSettings(false), enabled: true, collectorEnabled: true, appId: "2026000000000001", userId: "2088000000000002",
+        qrContent: "https://qr.alipay.com/a", watcherToken: "watcher-token-at-least-24-characters",
+        privateKey: pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), publicKey: pair.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      })),
+    });
+    await saveChannel({ name: row.name, plugin: "ALIPAY_BILL", enabled: true, revision: 2, settings: { pollSeconds: 20 } }, row.id);
+    expect(mocks.raw).toHaveBeenCalled();
+    expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: row.id } }));
+    expect(mocks.updateMany.mock.calls.some(([input]: [{ where?: { id?: string }; data?: { nextRunAt?: unknown } }]) =>
+      input.where?.id === row.id && input.data?.nextRunAt instanceof Date)).toBe(true);
+  });
   it("rejects nonofficial gateway URLs before any outbound request", () => {
     expect(() => mergeChannelSettings("ALIPAY", decodeChannel(row), { gateway: "https://127.0.0.1/gateway.do" }, true)).toThrow();
     expect(() => mergeChannelSettings("ALIPAY", decodeChannel(row), { privateKey: "invalid" }, true)).toThrow();

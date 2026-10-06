@@ -134,9 +134,9 @@ describe("independent Alipay collector", () => {
     mocks.cfg.ALIPAY_BILL_COLLECTOR_ENABLED = true; await runAlipayBillCollector();
     vi.advanceTimersByTime(100000); expect((await alipayBillCollectorStatus()).status).toBe("OFFLINE");
   });
-  // 性能优化后：一页最多 100 条流水不再逐条投递，而是先整页校验、再一次性交给
-  // ingestAlipayBillFlows({records})（该函数支持 {records:[...]} 且上限与 PAGE_SIZE 一致）。
-  // 下面四条锁住这次顺序变化带来的可观察行为。
+  // 一页最多 100 条流水：先整页校验、再一次性交给 ingestAlipayBillFlows({records})
+  // （该函数支持 {records:[...]} 且上限与 PAGE_SIZE 一致）。
+  // 下面四条锁住这个投递顺序带来的可观察行为。
   it("delivers a whole page in one batched call, in page order", async () => {
     const tradeNos = Array.from({ length: 100 }, (_, index) => `page-${index + 1}`);
     mocks.query.mockResolvedValue({ total_size: 100, detail_list: tradeNos.map(tradeNo => ({ ...row, alipay_order_no: tradeNo })) });

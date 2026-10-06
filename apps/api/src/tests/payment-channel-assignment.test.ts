@@ -51,7 +51,7 @@ beforeEach(() => {
 
 describe("createPayment channel assignment", () => {
   it("refuses to create a payment when the application has no channel assigned", async () => {
-    // 这是本次结构调整的核心行为变更：不再有隐式默认通道，猜一个通道等于让钱进错账号。
+    // 不存在隐式默认通道：猜一个通道等于让钱进错账号。
     await expect(createPayment(baseApp, "ord_1", { method: "alipay" })).rejects.toMatchObject({ code: "CHANNEL_NOT_ASSIGNED" });
     // 必须在打开事务之前就拒绝，不能先写库再报错。
     expect(mocks.raw).not.toHaveBeenCalled();

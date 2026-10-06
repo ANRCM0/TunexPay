@@ -137,8 +137,8 @@ async function api(c: Context<AppEnv>) {
         return { trade_no: payment?.paymentNo ?? "", out_trade_no: order.externalOrderNo, type: payment?.method ?? "alipay", pid: application.epayPid, addtime: Math.floor(order.createdAt.getTime() / 1000), endtime: order.paidAt ? Math.floor(order.paidAt.getTime() / 1000) : null, name: order.subject, money: centsToYuan(order.amount), status: ["SUCCESS", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.status) ? 1 : 0 };
       }) });
     }
-    // ePay V1 的退款动作已停用：它曾经一调用就直接向通道打款退款。
-    // 保留分支以便老接入方拿到明确错误信息（而不是掉进「不支持的操作类型」）。
+    // ePay V1 的退款动作已停用；保留分支只为让老接入方拿到明确错误信息，
+    // 而不是掉进「不支持的操作类型」。
     if (act === "refund") {
       throw new AppError("EPAY_REFUND_DISABLED", "退款接口已停用：系统不再自动执行退款，请由管理员人工发起", 410);
     }

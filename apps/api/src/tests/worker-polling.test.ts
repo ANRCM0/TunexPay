@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   dbDisconnect: vi.fn(),
   recoverExpired: vi.fn(), listDue: vi.fn(), deliver: vi.fn(),
   paymentRecoveries: vi.fn(), expirations: vi.fn(), receiptFlows: vi.fn(),
-  collectors: vi.fn(), ownerNotifications: vi.fn(),
+  collectors: vi.fn(), notifications: vi.fn(),
 }));
 
 vi.mock("bullmq", () => ({
@@ -23,14 +23,14 @@ vi.mock("../lib/system-status.js", () => ({ WORKER_HEARTBEAT_KEY: "tuoxin:worker
 vi.mock("../services/webhook-worker-service.js", () => ({
   deliverWebhook: mocks.deliver, listDueDeliveryIds: mocks.listDue, recoverExpiredDeliveries: mocks.recoverExpired,
 }));
-// 退款不参与自动扫描：Worker 只跑支付查单恢复（runDueRefundRecoveries 已删除）。
+// 退款不参与自动扫描：Worker 只跑支付查单恢复。
 vi.mock("../services/recovery-service.js", () => ({
   runDuePaymentRecoveries: mocks.paymentRecoveries,
 }));
 vi.mock("../services/expiration-service.js", () => ({ runDueOrderExpirations: mocks.expirations }));
 vi.mock("../services/receipt-flow-service.js", () => ({ recoverStaleAlipayBillFlows: mocks.receiptFlows }));
 vi.mock("../services/alipay-bill-collector-service.js", () => ({ runAllBillCollectors: mocks.collectors }));
-vi.mock("../services/owner-notification-service.js", () => ({ runOwnerNotifications: mocks.ownerNotifications }));
+vi.mock("../services/notification-service.js", () => ({ runNotifications: mocks.notifications }));
 
 const TICK = 3_000;
 
@@ -42,7 +42,7 @@ function idleAll() {
   mocks.expirations.mockResolvedValue({ claimed: 0 });
   mocks.receiptFlows.mockResolvedValue({ found: 0 });
   mocks.collectors.mockResolvedValue(undefined);
-  mocks.ownerNotifications.mockResolvedValue(undefined);
+  mocks.notifications.mockResolvedValue(undefined);
   mocks.redisSet.mockResolvedValue("OK");
   mocks.queueAdd.mockResolvedValue(undefined);
 }
@@ -71,6 +71,15 @@ describe("worker polling behaviour", () => {
 
     expect(mocks.listDue.mock.calls.length).toBe(12);
     expect(mocks.collectors.mock.calls.length).toBe(12);
+  });
+
+  it("runs the notification pump on the heavy-scan ticks, not on every tick", async () => {
+    await boot();
+    await vi.advanceTimersByTimeAsync(TICK * 11);
+
+    expect(mocks.notifications.mock.calls.length).toBeGreaterThan(0);
+    expect(mocks.notifications.mock.calls.length).toBe(mocks.paymentRecoveries.mock.calls.length);
+    expect(mocks.notifications.mock.calls.length).toBeLessThan(mocks.listDue.mock.calls.length);
   });
 
   it("backs the recovery scans off while the worker is idle", async () => {

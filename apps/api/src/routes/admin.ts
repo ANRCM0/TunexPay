@@ -4,7 +4,6 @@ import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { config } from "../config.js";
 import { billRuntimeConfig, getPublicBillSettings } from "../services/bill-settings-service.js";
-import { getOwnerSettings, saveOwnerSettings, testOwnerNotification } from "../services/owner-notification-service.js";
 import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
 import { AppError } from "../lib/errors.js";
@@ -21,7 +20,7 @@ import { routingGroupRoutes } from "./routing-groups.js";
 import { channelInstanceRoutes } from "./channel-instances.js";
 import { notificationRoutes } from "./notifications.js";
 import { mcpAdminRoutes } from "./mcp-admin.js";
-import { assignChannel, saveChannel, loadChannel, checkChannel } from "../services/channel-instance-service.js";
+import { saveChannel } from "../services/channel-instance-service.js";
 
 export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", adminAuth);
@@ -30,18 +29,6 @@ adminRoutes.route("/", channelInstanceRoutes);
 adminRoutes.route("/", routingGroupRoutes);
 adminRoutes.route("/", notificationRoutes);
 adminRoutes.route("/", mcpAdminRoutes);
-
-adminRoutes.get("/owner-notifications/settings", async c => c.json({ data: await getOwnerSettings() }));
-adminRoutes.post("/owner-notifications/settings", async c => c.json({ data: await saveOwnerSettings(await c.req.json()) }));
-adminRoutes.post("/owner-notifications/test", async c => {
-  const { channel } = z.object({ channel: z.enum(["EMAIL", "FEISHU"]) }).parse(await c.req.json());
-  const task = await testOwnerNotification(channel);
-  return c.json({ data: { id: task.id, status: task.status } }, 202);
-});
-adminRoutes.get("/owner-notifications/deliveries", async c => {
-  const rows = await db.ownerNotificationDelivery.findMany({ orderBy: { createdAt: "desc" }, take: 50, select: { id: true, channel: true, title: true, status: true, attempts: true, lastError: true, createdAt: true } });
-  return c.json({ data: rows });
-});
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -133,11 +120,11 @@ adminRoutes.post("/applications/:id/delete", async (c) => {
   return c.json({ data: await deleteApplication(c.req.param("id")) });
 });
 
-// 通道分配统一走 /applications/:id/channel-instance（在 channel-instances 路由里）。
-// 早期的 /applications/:id/default-channel 依赖自动创建的默认通道，默认通道概念移除后一并删除。
+// 通道分配统一走 /applications/:id/channel-instance（在 channel-instances 路由里）；
+// 不要再引入依赖「自动创建的默认通道」的分配入口。
 //
-// 账单收款配置面板保留原有路径，但不再假定 alipay-bill-default 一定存在：
-// 改成解析「当前实际的 ALIPAY_BILL 通道」，找不到就给出明确指引。
+// 账单收款配置面板沿用原有路径，但不假定 alipay-bill-default 一定存在：
+// 一律解析「当前实际的 ALIPAY_BILL 通道」，找不到就给出明确指引。
 async function resolveBillChannel() {
   const rows = await db.channelInstance.findMany({ where: { plugin: "ALIPAY_BILL", archivedAt: null }, orderBy: { createdAt: "asc" }, take: 1 });
   const row = rows[0];

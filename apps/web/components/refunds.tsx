@@ -20,8 +20,8 @@ const SORT_COLUMNS: SortColumn<Refund>[] = [
   { key: "createdAt", label: "创建时间", type: "date" },
 ];
 
-// 状态列的说明默认收起，悬浮或聚焦徽章才展开。系统不再自动查退款，所以这里只呈现
-// 历史查单次数与错误原因，并明确告诉管理员下一步要人工查单。
+// 状态列的说明默认收起，悬浮或聚焦徽章才展开。退款查单是人工动作（系统不自动查单），
+// 所以这里只呈现历史查单次数与错误原因，并明确告诉管理员下一步要人工查单。
 function refundRecovery(item: Refund): string {
   return [
     item.queryAttempts > 0 ? `历史自动查询 ${item.queryAttempts} 次` : null,

@@ -5,3 +5,8 @@ node_modules
 .git
 .env
 *.zip
+.env.local
+**/*.tsbuildinfo
+**/*.log
+coverage
+.DS_Store

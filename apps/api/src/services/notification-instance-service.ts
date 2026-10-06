@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db.js";
 import { openSealed, seal } from "../lib/crypto.js";

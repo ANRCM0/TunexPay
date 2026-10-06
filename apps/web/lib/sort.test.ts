@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ariaSortValue, nextSortState, sortRows, type SortColumn } from "./sort";
+import { nextSortState, sortRows, type SortColumn } from "./sort";
 
 type Row = {
   orderNo: string;
@@ -132,14 +132,5 @@ describe("nextSortState（三态循环）", () => {
 
   it("换一列时从升序重新开始", () => {
     expect(nextSortState({ key: "amount", direction: "desc" }, "subject")).toEqual({ key: "subject", direction: "asc" });
-  });
-});
-
-describe("ariaSortValue", () => {
-  it("只给当前列标记方向，其余为 none", () => {
-    const state = { key: "amount", direction: "desc" } as const;
-    expect(ariaSortValue(state, "amount")).toBe("descending");
-    expect(ariaSortValue(state, "subject")).toBe("none");
-    expect(ariaSortValue(null, "amount")).toBe("none");
   });
 });

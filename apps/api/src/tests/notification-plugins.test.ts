@@ -1,13 +1,25 @@
 import { createHmac } from "node:crypto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ send: vi.fn() }));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ send: vi.fn(), lookup: vi.fn(), transport: vi.fn(), mail: vi.fn() }));
 vi.mock("../lib/webhook-security.js", () => ({ sendWebhookRequest: mocks.send }));
+vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
+vi.mock("nodemailer", () => ({ default: { createTransport: mocks.transport } }));
 import { notificationPlugin, notificationPluginCatalog } from "../notifications/plugins.js";
+
+const message = { event: "ORDER_SUCCEEDED", title: "title", message: "body" } as const;
+const smtpConfig = { host: "smtp.example.com", port: 465, user: "user", password: "dummy-password", from: "from@example.com", to: "to@example.com" };
+const feishuHook = "https://open.feishu.cn/open-apis/bot/v2/hook/11111111-1111-1111-1111-111111111111";
 
 describe("notification plugins", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.send.mockResolvedValue({ status: 200, body: "ok" });
+    mocks.lookup.mockResolvedValue([{ address: "8.8.8.8", family: 4 }]);
+    mocks.transport.mockReturnValue({ sendMail: mocks.mail, close: vi.fn() });
+    mocks.mail.mockResolvedValue({});
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("sends the unchanged notification body and signature through the pinned transport", async () => {
@@ -54,5 +66,112 @@ describe("notification plugins", () => {
     const initial = plugin.normalizeConfig({ url: "https://example.com/hook", secret: "secret-value" });
     expect(plugin.normalizeConfig({ url: "https://example.com/next", secret: "" }, initial).secret).toBe("secret-value");
     expect(plugin.normalizeConfig({ url: "https://example.com/next", secret: null }, initial).secret).toBe("");
+  });
+
+  it("masks the SMTP password and never returns it from publicConfig", () => {
+    const plugin = notificationPlugin("SMTP");
+    const config = plugin.normalizeConfig(smtpConfig);
+    expect(plugin.publicConfig(config)).toMatchObject({ host: "smtp.example.com", passwordConfigured: true });
+    expect(plugin.publicConfig(config)).not.toHaveProperty("password");
+    expect(plugin.normalizeConfig({ ...smtpConfig, password: "" }, config).password).toBe("dummy-password");
+  });
+});
+
+describe("SMTP plugin outbound hardening", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.transport.mockReturnValue({ sendMail: mocks.mail, close: vi.fn() });
+    mocks.mail.mockResolvedValue({});
+  });
+
+  it("blocks private, link-local and mapped IPv6 SMTP destinations", async () => {
+    const plugin = notificationPlugin("SMTP");
+    for (const [address, family] of [["127.0.0.1", 4], ["10.0.0.1", 4], ["192.168.1.1", 4], ["169.254.1.1", 4], ["::1", 6], ["::ffff:7f00:1", 6], ["::ffff:a00:1", 6], ["fe90::1", 6], ["fd00::1", 6]] as const) {
+      mocks.lookup.mockResolvedValueOnce([{ address, family }]);
+      await expect(plugin.send(message, smtpConfig)).rejects.toThrow("SMTP_ADDRESS_BLOCKED");
+    }
+    // A hostname that resolves to nothing must fail closed as well.
+    mocks.lookup.mockResolvedValueOnce([]);
+    await expect(plugin.send(message, smtpConfig)).rejects.toThrow("SMTP_ADDRESS_BLOCKED");
+    expect(mocks.transport).not.toHaveBeenCalled();
+  });
+
+  it("rejects the whole host when any resolved address is private", async () => {
+    mocks.lookup.mockResolvedValueOnce([{ address: "8.8.8.8", family: 4 }, { address: "10.0.0.1", family: 4 }]);
+    await expect(notificationPlugin("SMTP").send(message, smtpConfig)).rejects.toThrow("SMTP_ADDRESS_BLOCKED");
+    expect(mocks.transport).not.toHaveBeenCalled();
+  });
+
+  it("pins the resolved address with verified TLS and implicit TLS on 465", async () => {
+    await notificationPlugin("SMTP").send(message, smtpConfig);
+    expect(mocks.transport).toHaveBeenCalledWith(expect.objectContaining({
+      host: "8.8.8.8", port: 465, secure: true, requireTLS: true,
+      tls: { servername: "smtp.example.com", rejectUnauthorized: true },
+      auth: { user: "user", pass: "dummy-password" },
+      disableFileAccess: true, disableUrlAccess: true,
+    }));
+    expect(mocks.mail).toHaveBeenCalledWith(expect.objectContaining({ from: "from@example.com", to: "to@example.com", subject: "title", text: "body" }));
+  });
+
+  it("uses STARTTLS instead of implicit TLS on 587", async () => {
+    await notificationPlugin("SMTP").send(message, { ...smtpConfig, port: 587 });
+    expect(mocks.transport).toHaveBeenCalledWith(expect.objectContaining({ port: 587, secure: false, requireTLS: true }));
+  });
+});
+
+describe("FEISHU_BOT plugin outbound hardening", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("signs requests with the timestamp/secret HMAC and checks the business ack", async () => {
+    const fetch = vi.fn(async () => new Response('{"code":0}'));
+    vi.stubGlobal("fetch", fetch);
+    await notificationPlugin("FEISHU_BOT").send(message, { webhook: feishuHook, secret: "secret" });
+    const [, init] = fetch.mock.calls[0]! as unknown as [URL, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("manual");
+    const body = JSON.parse(init.body as string) as { msg_type: string; content: { text: string }; timestamp: string; sign: string };
+    expect(body.msg_type).toBe("text");
+    expect(body.content.text).toBe("title\nbody");
+    expect(body.sign).toBe(createHmac("sha256", `${body.timestamp}\nsecret`).update("").digest("base64"));
+  });
+
+  it("rejects provider failures despite HTTP 200", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"code":19021}')));
+    await expect(notificationPlugin("FEISHU_BOT").send(message, { webhook: feishuHook, secret: "secret" })).rejects.toThrow("FEISHU_BOT_SEND_FAILED");
+  });
+
+  it("omits the signature when no secret is configured", async () => {
+    const fetch = vi.fn(async () => new Response('{"code":0}'));
+    vi.stubGlobal("fetch", fetch);
+    await notificationPlugin("FEISHU_BOT").send(message, { webhook: feishuHook, secret: "" });
+    const body = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("sign");
+    expect(body).not.toHaveProperty("timestamp");
+  });
+
+  it("rejects arbitrary webhook hosts, credentials, query strings and paths", async () => {
+    const plugin = notificationPlugin("FEISHU_BOT");
+    const rejection = (webhook: string) => {
+      try {
+        plugin.normalizeConfig({ webhook, secret: "" });
+      } catch (error) {
+        return error as { code?: string };
+      }
+      throw new Error(`expected ${webhook} to be rejected`);
+    };
+    for (const webhook of [
+      "http://open.feishu.cn/open-apis/bot/v2/hook/11111111111111111111",
+      "https://evil.example/hook/11111111111111111111",
+      `${feishuHook}?redirect=1`,
+      "https://user@open.feishu.cn/open-apis/bot/v2/hook/11111111111111111111",
+      "https://open.feishu.cn:8443/open-apis/bot/v2/hook/11111111111111111111",
+    ]) {
+      expect(rejection(webhook)).toMatchObject({ code: "FEISHU_URL_INVALID" });
+    }
   });
 });

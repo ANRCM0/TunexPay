@@ -23,14 +23,13 @@ worker.on("failed", (job, error) => log("warn", "webhook.failed", { jobId: job?.
 worker.on("error", (error) => log("error", "worker.error", { error: error.message }));
 
 // 心跳代表「快速通道刚刚跑通」：能连上 MySQL、能读到到期投递、能把任务交给 Redis。
-// 只有成功才写，所以数据库出错或快速通道卡住时心跳会自然停更，管理台 15 秒后即显示 STALE，
-// 而不是像以前那样无论成败都刷新心跳、永远显示 ONLINE。
+// 只有成功才写，所以数据库出错或快速通道卡住时心跳会自然停更，管理台 15 秒后即显示 STALE。
 function writeHeartbeat(): void {
   void connection.set(WORKER_HEARTBEAT_KEY, new Date().toISOString()).catch((error: unknown) => log("warn", "worker.heartbeat_failed", { error: error instanceof Error ? error.message : String(error) }));
 }
 
 // 快速通道：每跳都跑。它决定支付成功通知的时效，因此单独守卫，
-// 不能排在可能耗时上百秒的查单恢复后面等（以前两者在同一个守卫里，恢复扫描会拖慢通知）。
+// 不能排在可能耗时上百秒的查单恢复后面等。
 let fastPolling = false;
 let fastTask: Promise<void> | null = null;
 async function pollDueDeliveries(): Promise<void> {

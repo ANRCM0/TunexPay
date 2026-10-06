@@ -46,7 +46,7 @@ describe("GET /api/v1/channels/public/payments/:paymentNo long polling", () => {
     expect((await response.json()).data.status).toBe("SUCCESS");
     expect(mocks.publicPayment).toHaveBeenCalledTimes(2);
     expect(Date.now() - started).toBeLessThan(500);
-    // 等待时长是兜底间隔（而不是旧实现的 400ms 轮询），等待者按支付单登记。
+    // 等待时长是兜底间隔，等待者按支付单登记。
     expect(mocks.wait).toHaveBeenCalledWith("pay_1", FALLBACK);
   });
 

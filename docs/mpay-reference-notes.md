@@ -1,6 +1,6 @@
 # 从 MPAY 提取的设计经验
 
-`mpay.zip` 仅作为架构教材，TUOXIN Pay 没有复制它的 PHP/Webman 实现。
+MPAY 的 PHP/Webman 实现未被复制，这里只记录从上游提取的设计经验。
 
 ## 保留并简化
 
@@ -9,11 +9,14 @@
 | 支付单与业务单分别建模 | `Order` 与 `Payment` 分离，一张 Order 可有多次 Payment |
 | 终态支付仍可能收到成功结果 | `FAILED`、`CLOSED`、`UNKNOWN` 均允许可信成功；重复到账记业务事件 |
 | 回调需要验签和去重 | `ChannelCallback(channel,eventKey)` 唯一约束；未处理完成的重复回调继续执行 |
+| 回调必须校验支付单号、金额与渠道引用 | 标准化后逐项精确校验，任何一项冲突都不推进状态 |
 | 通知失败必须重试 | `WebhookDelivery` 是 MySQL Outbox，Redis 只做任务调度 |
 | Worker 崩溃需要恢复 | 条件认领、执行租约、过期恢复、指数退避、DEAD 手工重试 |
 | 退款必须有独立生命周期 | `Refund` 独立单号、状态、幂等与累计可退金额校验 |
 | 支付异常需要可追溯 | `PaymentEvent` 记录业务事实，不依赖普通文本日志还原 |
 | 账单是最后一道资金核验 | 支付宝行先标准化为 `Receipt`，再由 Matcher 通过支付核心统一推进状态 |
+| 金额/备注匹配受订单时间窗约束 | 只接受 `receiptValidFrom <= paidAt <= receiptValidUntil` 的流水 |
+| 金额偏移只用于识别 | `Payment.amount` 始终是业务金额，`channelAmount/receivedAmount` 单独保存 |
 
 ## 第一版明确删除
 

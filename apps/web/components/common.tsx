@@ -114,8 +114,7 @@ export function CopyValue({ value, label = "复制" }: { value: string; label?: 
 
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
 
-  // 之前无论是否真的写进剪贴板都显示「已复制」，会误导用户；
-  // 现在只有确认成功才报成功，失败给出可操作的提示。
+  // 只有确认写进剪贴板才报成功：写不进去时必须显示失败与可操作提示，不能谎报「已复制」。
   const text = state === "copied" ? "已复制" : state === "failed" ? "复制失败" : label;
   // 提示走 title 而不是 aria-label：可见文本本身就是按钮的可访问名称，
   // 而这段可操作提示太长，不适合当作名字（按钮名里有句号会被逐字念出来）。
