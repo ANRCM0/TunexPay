@@ -119,13 +119,13 @@ rm -f .env
 
 ## 版本号
 
-每次发布带一个唯一版本号 `v<提交日期 YYYYMMDD>-<7 位提交号>`（如 `v20260830-4f48e61`）：管理台左下角常驻显示，`/health`、系统监控页、MCP `serverInfo` 同源，发布镜像也用同一个版本号打 tag。
+每次发布带一个语义化版本号 `vMAJOR.MINOR.PATCH`（如 `v0.1.0`）：**tag 就是版本号**，管理台左下角常驻显示，`/health`、系统监控页、MCP `serverInfo` 同源，发布镜像也用同一个版本号打 tag。本地开发没有 tag 时用 `git describe` 推导成 `v0.1.0-3.g4f48e61` 这种形态，一眼能看出不是发布版。
 
 ```bash
-docker pull ghcr.io/anrcm0/tunexpay:v20260830-4f48e61
+docker pull ghcr.io/anrcm0/tunexpay:v0.1.0
 ```
 
-发布即推 tag：CI 检查通过后构建镜像并推送到 GHCR，同时打「版本号」「你推的 tag 名」「latest」三个 tag。完整约定见[版本号与发布](docs/deployment.md#版本号)。
+发布即推 tag：CI 检查通过后构建镜像并推送到 GHCR，打「版本号」与「latest」两个 tag。完整约定见[版本号与发布](docs/deployment.md#版本号)。
 
 ## 文档
 

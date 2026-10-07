@@ -71,7 +71,7 @@ services:
     build:
       context: .
       # 发布版本号（<提交日期 YYYYMMDD>-<7 位提交号>）。本地 build 时可用
-      # `APP_VERSION=v20260830-4f48e61 docker compose build` 或写进 .env 注入；
+      # `APP_VERSION=v0.1.0 docker compose build` 或写进 .env 注入；
       # 不传则镜像内为 0.1.0-dev，管理台左下角会如实显示这不是一次发布。
       args:
         APP_VERSION: ${APP_VERSION:-}
