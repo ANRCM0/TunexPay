@@ -135,7 +135,7 @@ export function RoutingGroups() {
           <FilterSelect value={draft.enabled} onChange={value => setDraft({ ...draft, enabled: value })} options={ENABLED_OPTIONS} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={groups.loading} error={groups.error} empty={!groups.data?.length} emptyText="还没有轮询组。先创建轮询组、添加通道，再到业务应用中绑定。">
+      <LoadingState loading={groups.loading} error={groups.error} stale={Boolean(groups.data)} empty={!groups.data?.length} emptyText="还没有轮询组。先创建轮询组、添加通道，再到业务应用中绑定。">
         <ListCard
           toolbar={<><ToolbarNote>共 {rows.length} 个轮询组</ToolbarNote><ToolbarSpacer /><Button size="small" onClick={() => { void groups.reload(); void channels.reload(); }}>刷新状态</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
