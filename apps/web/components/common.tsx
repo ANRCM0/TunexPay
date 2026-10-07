@@ -319,15 +319,15 @@ export function HoverDetail({ text, tone = "muted", children }: { text?: string 
   </span>;
 }
 
-export function LoadingState({ loading, error, empty, emptyText = "暂无数据", children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {
+export function LoadingState({ loading, error, empty, emptyText = "暂无数据", stale = false, children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; stale?: boolean; children: React.ReactNode }) {
   if (loading) return <div className="card skeleton-card" role="status" aria-label="正在加载"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
-  // 后台轮询失败不擦掉上次成功读取的列表；用户可继续查阅，同时明确告知数据可能过期。
+  // 只有明确确认有旧数据的页面才在错误时保留内容；避免初始化失败时显示可操作的空表单。
   if (error) return <>
     <div className="operation-notice error load-error-notice" role="alert">
-      <div className="load-error-copy"><strong>数据更新失败</strong><span>{error}。显示的内容可能不是最新数据。</span></div>
+      <div className="load-error-copy"><strong>数据更新失败</strong><span>{error}{stale ? "；以下为上次成功读取的数据。" : "。请检查网络后重试。"}</span></div>
       <button type="button" className="button secondary load-retry" onClick={refreshClientData}>重新尝试</button>
     </div>
-    {!empty && children}
+    {stale && !empty && children}
   </>;
   if (empty) return <div className="card empty">{emptyText}</div>;
   return <>{children}</>;
