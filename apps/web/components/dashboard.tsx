@@ -56,7 +56,7 @@ export function Dashboard() {
         {data && !error && alerts.length > 0 && <span className="hero-badge">可进入对应页面查看详情</span>}
       </div>
     </section>
-    <LoadingState loading={loading} error={error}>
+    <LoadingState loading={loading} error={error} stale={Boolean(data)}>
       {data && <>
         <div className="grid stats">
           <Stat label="今日订单" value={String(data.ordersToday)} note={`${data.successfulToday} 笔支付成功`} />
