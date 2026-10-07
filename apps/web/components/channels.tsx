@@ -196,7 +196,7 @@ export function Channels() {
           <FilterSelect value={draft.enabled} onChange={value => setDraft({ ...draft, enabled: value })} options={ENABLED_OPTIONS} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={channels.loading} error={channels.error} empty={!channels.data?.length} emptyText="还没有支付通道：请先创建通道并选择对接的支付插件，检测通过后再分配给应用">
+      <LoadingState loading={channels.loading} error={channels.error} stale={Boolean(channels.data)} empty={!channels.data?.length} emptyText="还没有支付通道：请先创建通道并选择对接的支付插件，检测通过后再分配给应用">
         <ListCard
           toolbar={<><ToolbarNote>共 {rows.length} 个通道</ToolbarNote><ToolbarSpacer /><button type="button" className="link-button" onClick={() => setAssignOpen(true)}>通道分配</button><Button size="small" onClick={() => void channels.reload()}>刷新状态</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
@@ -239,7 +239,7 @@ export function Channels() {
     {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); }} /></Modal>}
     {createOpen && <Modal title="创建通道" onClose={() => setCreateOpen(false)}><ChannelEditor plugins={plugins.data ?? []} onClose={() => setCreateOpen(false)} onSaved={async () => { setCreateOpen(false); await channels.reload(); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); }} /></Modal>}
     {assignOpen && <Modal title="应用收款路由分配" onClose={() => setAssignOpen(false)}>
-      <LoadingState loading={applications.loading} error={applications.error} empty={!applications.data?.length} emptyText="还没有业务应用，创建应用后即可在这里分配收款通道">
+      <LoadingState loading={applications.loading} error={applications.error} stale={Boolean(applications.data)} empty={!applications.data?.length} emptyText="还没有业务应用，创建应用后即可在这里分配收款通道">
         {groups.error && <div className="error" role="alert">{groups.error}</div>}
         <Table<Application>
           className="list-table"
