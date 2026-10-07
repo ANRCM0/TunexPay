@@ -107,13 +107,17 @@
 /* ---- 多页签栏（40px，对齐 SnowAdmin） ---- */
 
 .page-tabs { display: flex; align-items: center; height: var(--tabs-h); background: var(--panel); border-bottom: 1px solid var(--line); padding: 0 16px; gap: 8px; position: sticky; top: var(--header-h); z-index: 29; }
-.page-tabs-list { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.page-tabs-list { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .page-tabs-list::-webkit-scrollbar { display: none; }
-.page-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: var(--tabs-h); padding: 0 10px; border: 0; background: transparent; color: var(--ink-2); font-size: 14px; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; transition: color .15s ease, border-color .15s ease, background .15s ease; }
-.page-tab:hover { color: var(--primary); background: var(--fill-2); }
-.page-tab.active { color: var(--primary); font-weight: 500; border-bottom-color: var(--primary); }
-.page-tab-close { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; font-size: 10px; color: var(--muted); }
-.page-tab-close:hover { background: var(--line); color: var(--ink); }
+/* 关闭按钮与 tab 按钮是并列元素：不会产生交互元素嵌套或无法键盘关闭的问题。 */
+.page-tab-entry { display: inline-flex; align-items: center; flex: 0 0 auto; height: var(--tabs-h); border-bottom: 2px solid transparent; white-space: nowrap; transition: background .15s ease, border-color .15s ease; }
+.page-tab-entry:hover { background: var(--fill-2); }
+.page-tab-entry.active { border-bottom-color: var(--primary); }
+.page-tab { display: inline-flex; align-items: center; height: calc(var(--tabs-h) - 2px); padding: 0 10px; border: 0; background: transparent; color: var(--ink-2); font-size: 14px; cursor: pointer; white-space: nowrap; transition: color .15s ease; }
+.page-tab:hover, .page-tab.active { color: var(--primary); }
+.page-tab.active { font-weight: 500; }
+.page-tab-close { display: inline-grid; place-items: center; width: 25px; height: 25px; margin-right: 4px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+.page-tab-close:hover, .page-tab-close:focus-visible { background: var(--line); color: var(--ink); }
 .page-tabs-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .page-tabs-action { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
 .page-tabs-action:hover { background: var(--fill-2); color: var(--primary); }
