@@ -100,7 +100,7 @@ export function Plugins() {
           <FilterSelect value={draft.capability} onChange={value => setDraft({ ...draft, capability: value })} options={capabilityOptions} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={plugins.loading} error={plugins.error} empty={!plugins.data?.length} emptyText="当前没有可用的支付插件">
+      <LoadingState loading={plugins.loading} error={plugins.error} stale={Boolean(plugins.data)} empty={!plugins.data?.length} emptyText="当前没有可用的支付插件">
         <ListCard
           toolbar={<><ToolbarNote>共 {rows.length} 个插件</ToolbarNote><ToolbarSpacer /><Button size="small" onClick={() => void plugins.reload()}>刷新</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
