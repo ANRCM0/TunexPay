@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../types.js";
 import { config } from "../config.js";
 import { log } from "../lib/logger.js";
+import { APP_VERSION } from "../lib/version.js";
 import { executeTool, toolCatalog } from "../mcp/tools.js";
 import { authenticateMcpToken } from "../services/mcp-client-service.js";
 import { recordMcpAudit } from "../services/mcp-audit-service.js";
@@ -45,7 +46,7 @@ mcpRoutes.post("/", async c => {
     return c.json(result(id,{
       protocolVersion,
       capabilities:{tools:{listChanged:false}},
-      serverInfo:{name:"TuneXPay",version:"0.2.0"},
+      serverInfo:{name:"TuneXPay",version:APP_VERSION},
       instructions:`TuneXPay MCP client=${principal.name}, scope=${principal.scope}. Tool availability is restricted by this client's allowlist. FINANCIAL tools only create short-lived human approval requests and never move money directly.`,
     }),200,{"MCP-Protocol-Version":protocolVersion,"Cache-Control":"no-store"});
   }

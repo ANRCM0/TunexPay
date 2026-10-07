@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_VERSION } from "../lib/version.js";
 
 const mocks = vi.hoisted(() => ({
   queryRaw: vi.fn(),
@@ -48,7 +49,7 @@ describe("GET /admin/v1/system", () => {
     const response = await app.request("/admin/v1/system", { headers: AUTH });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.data.api).toMatchObject({ version: "0.1.0", nodeEnv: process.env.NODE_ENV ?? "test" });
+    expect(body.data.api).toMatchObject({ version: APP_VERSION, nodeEnv: process.env.NODE_ENV ?? "test" });
     expect(body.data.mysql).toMatchObject({ ok: true, version: "8.0.36" });
     expect(body.data.redis).toMatchObject({ ok: true });
     expect(body.data.worker).toMatchObject({ status: "ONLINE" });
