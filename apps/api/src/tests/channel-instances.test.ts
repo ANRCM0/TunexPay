@@ -83,6 +83,16 @@ describe("plugin channel instances", () => {
     expect((await checkChannel(row.id, 2)).checkStatus).toBe("FAILED");
     expect(mocks.logs).toHaveBeenCalledWith(expect.objectContaining({ bill_user_id: "2088000000000001" }));
   });
+  it("stops reporting an acceptance record once the configuration changed", async () => {
+    row.checkStatus = "API_VERIFIED"; row.checkRevision = 2;
+    row.testPaymentNo = "pay_acceptance"; row.testRevision = 2;
+    mocks.payment.mockResolvedValue({ paymentNo: "pay_acceptance", status: "SUCCESS", channelId: row.id, paidAt: new Date() });
+    expect((await publicChannel(row)).testPayment).toMatchObject({ paymentNo: "pay_acceptance" });
+
+    // 配置变更后（revision 前进）旧验收单作废：不再作为记录报出去，
+    // 界面因此不会留下一条用户无法消掉的「验收记录来自旧配置」提示。
+    expect((await publicChannel({ ...row, revision: 3 })).testPayment).toBeNull();
+  });
   it("only trusts successful test payments from the current channel and configuration", () => {
     row.testRevision = 2;
     const paid = { channelId: "chn-a", status: "SUCCESS", paidAt: new Date() };

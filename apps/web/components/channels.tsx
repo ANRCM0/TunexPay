@@ -17,7 +17,8 @@ export type Channel = {
   archivedAt?: string | null;
   settings: Record<string, string | number | boolean>; checkStatus: string; checkMessage: string | null; checkedAt: string | null;
   watcherUrl: string; webhookUrl: string;
-  testPayment: { paymentNo: string; status: string; currentRevision: boolean; cashierUrl: string } | null;
+  // 接口只报「当前配置下」的验收单；配置变更后旧单作废，这里就是 null
+  testPayment: { paymentNo: string; status: string; cashierUrl: string } | null;
 };
 type Application = { id: string; name: string; defaultChannel: string; defaultChannelId: string | null; routingGroupId: string | null };
 export const checkLabels: Record<string, string> = { UNCHECKED: "待检测", API_VERIFIED: "接口已验证", PAYMENT_VERIFIED: "实付已验证", SIMULATED: "模拟配置通过", NEEDS_PAYMENT: "待实付验证", FAILED: "检测失败" };
@@ -147,7 +148,7 @@ export function Channels() {
       width: 220,
       render: (_: unknown, channel: Channel) => <div {...sortValueProps(channel, SORT_COLUMNS[2])}>
         <HoverDetail text={checkDetail(channel)} tone={channel.checkStatus === "FAILED" ? "danger" : "muted"}><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span></HoverDetail>
-        {channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新做实付验收</div>}
+
       </div>,
     },
     {
