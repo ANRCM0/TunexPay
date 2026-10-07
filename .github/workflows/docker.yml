@@ -61,11 +61,15 @@ jobs:
 
       - name: Resolve release version
         id: version
-        # 与 apps/api/src/lib/version.ts、apps/web/lib/app-version.ts 的格式保持同一套约定：
-        # <提交日期 YYYYMMDD>-<7 位提交号>，日期按 UTC 取提交时间。同一提交重建得到同一个版本号。
-        # 版本号由提交算出，不取决于 tag 名：tag 只是触发器，随便叫 v1.0.0 也不影响界面显示。
+        # 版本号 = tag 去掉 v，形如 0.1.0，与 apps/api/src/lib/version.ts、
+        # apps/web/lib/app-version.ts 的契约一致：tag 就是发布标识，界面左下角、/health、
+        # 镜像 tag 三处同源。tag 不合语义化版本就直接失败，避免发布一个界面读不出来的版本号。
         run: |
-          version="$(date -u -d "@$(git show -s --format=%ct HEAD)" +%Y%m%d)-${GITHUB_SHA::7}"
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::发布 tag 必须是 vMAJOR.MINOR.PATCH 形式（例如 v0.1.0），当前为 ${GITHUB_REF_NAME}"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           {
             echo "### 发布版本号"
@@ -80,12 +84,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # 一次发布打三个 tag：版本号、你推的 tag 名、latest。
+          # tag 名就是版本号，所以一次发布打两个 tag：版本号与 latest。
           # 注意 tags 是 YAML 块标量，块内以 # 开头的行是字面内容、会被当成 tag 属性，所以注释只能写在这里。
-          # tag 名与版本号相同时指向同一个 tag，不会产生冲突。
           tags: |
             type=raw,value=v${{ steps.version.outputs.version }}
-            type=ref,event=tag
             type=raw,value=latest
 
       - name: Build and push

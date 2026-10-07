@@ -29,8 +29,8 @@ export function VersionBadge({ initial }: { initial: AppVersion }) {
   }, []);
 
   const current = runtime ?? initial;
+  // 版本号现在就是发布 tag，只有本地构建才带得出提交号；没有提交号时只报来源。
   const detail = [
-    current.date ? `提交日期 ${current.date}` : null,
     current.commit ? `提交 ${current.commit}` : null,
     `来源：${SOURCE_LABEL[current.source] ?? current.source}`,
   ].filter(Boolean).join(" · ");
