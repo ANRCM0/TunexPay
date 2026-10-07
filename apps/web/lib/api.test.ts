@@ -14,6 +14,15 @@ describe("api", () => {
     await expect(api("/broken")).rejects.toThrow("Bad Gateway");
   });
 
+  it("avoids browser caching of payment administration API responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await api("/orders");
+    expect(fetchMock.mock.calls[0]![1]!.cache).toBe("no-store");
+    await api("/static", { cache: "force-cache" });
+    expect(fetchMock.mock.calls[1]![1]!.cache).toBe("force-cache");
+  });
+
   it("only sends JSON content-type when there is a request body", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } }))
