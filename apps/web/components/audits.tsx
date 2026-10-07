@@ -99,7 +99,7 @@ export function Audits() {
           <FilterSelect value={draftResult} onChange={setDraftResult} options={RESULT_OPTIONS} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={loading} error={error} empty={!data?.length}>
+      <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length}>
         <ListCard
           toolbar={<><ToolbarNote>共 {rows.length} 条操作记录</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
