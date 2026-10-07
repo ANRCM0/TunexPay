@@ -26,10 +26,40 @@
 /* ---- 侧栏菜单：40px 行高 + 4px 间距 + 选中灰底蓝字 ---- */
 
 .app-menu.arco-menu { width: 100%; background: transparent; font-size: 14px; }
+
+/* 一级与二级共用一套「固定图标列 + 文字列」的版式：
+   一级=色块 26px，二级=图标盒 18px，两级的文字起点因此各自成一条竖线。
+   注意 Arco 的分组标题类名是 arco-menu-inline-header（不是 sub-menu-title，
+   后者只在折叠态的弹出层里出现），两者一起写。 */
 .app-menu .arco-menu-item,
-.app-menu .arco-menu-sub-menu-title { height: 40px; line-height: 40px; margin: 0 8px 4px; padding: 0 12px; border-radius: var(--radius-xs); color: var(--ink-2); }
-.menu-group-title { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
-/* 分组图标做成 MPAY 那种彩色方块，二级菜单用小图标区分层级 */
+.app-menu .arco-menu-inline-header,
+.app-menu .arco-menu-sub-menu-title {
+  height: 40px; margin: 0 8px 4px; padding: 0 12px;
+  border-radius: var(--radius-xs); color: var(--ink-2);
+}
+/* 一级更重（字重 + 更深颜色），二级更轻：层级差异靠这三处一起拉开 */
+.app-menu .arco-menu-inline-header,
+.app-menu .arco-menu-sub-menu-title { display: flex; align-items: center; color: var(--ink); font-weight: 500; }
+/* 菜单项内部统一 10px 间距：一级是「色块 + 文字」，二级是「缩进占位 + 内容行」 */
+.app-menu .arco-menu-item { display: flex; align-items: center; gap: 10px; }
+
+/* 内容行。Arco 给这个元素写的是**内联样式** display:block（不是样式表规则），
+   于是图标（inline-flex）与文字（inline）按基线对齐，图标恒高 3px——这就是
+   「图标和字不在一条水平线上」的来源。内联样式只能靠 !important 覆盖，
+   选择器再具体也没用（已实测：规则匹配成功但计算值仍是 block）。 */
+.app-menu .arco-menu-item > .arco-menu-item-inner { display: flex !important; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+/* 分组标题的第一段（图标+标题）吃掉剩余宽度，展开箭头才会被顶到最右 */
+.app-menu .arco-menu-inline-header > span:first-child { flex: 1 1 auto; min-width: 0; }
+
+/* 二级缩进交给 Arco 自带的 indent 占位。默认 20px 宽，这里设成与一级色块等宽（26px）：
+   内容起点 28 + 占位 26 + 间距 10 = 64，正好是一级文字列的位置，二级图标就落在父级文字正下方。 */
+.app-menu .arco-menu-indent { width: 26px; }
+
+.menu-group-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.menu-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 二级图标盒：固定 18px 且内容居中，图标视觉重心才落在同一条竖线上 */
+.menu-icon { flex: 0 0 auto; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+/* 一级图标做成 MPAY 那种彩色方块 */
 .menu-tile { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-sm); color: #fff; }
 .menu-tile.tone-blue { background: var(--primary); }
 .menu-tile.tone-green { background: var(--success); }
@@ -37,21 +67,22 @@
 .menu-tile.tone-purple { background: #7B61FF; }
 .menu-tile.tone-cyan { background: #0FC6C2; }
 .menu-tile.tone-red { background: var(--danger); }
-.app-menu .arco-menu-item .arco-icon,
-.app-menu .arco-menu-sub-menu-title .arco-icon { margin-right: 10px; color: var(--muted); }
+
 .app-menu .arco-menu-item:hover,
+.app-menu .arco-menu-inline-header:hover,
 .app-menu .arco-menu-sub-menu-title:hover { background: var(--fill-2); color: var(--ink); }
-.app-menu .arco-menu-item:hover .arco-icon,
-.app-menu .arco-menu-sub-menu-title:hover .arco-icon { color: var(--ink-2); }
 .app-menu .arco-menu-selected,
 .app-menu .arco-menu-item.arco-menu-selected { background: var(--fill-2); color: var(--primary); font-weight: 500; }
-.app-menu .arco-menu-selected .arco-icon { color: var(--primary); }
-/* 子菜单缩进：与 MPAY 的二级菜单一致，图标列对齐父级 */
-.app-menu .arco-menu-inline .arco-menu-item { padding-left: 36px; }
-.app-menu .arco-menu-inline .arco-menu-item .arco-icon { display: none; }
-/* 折叠态：Arco 走弹出层，这里只保证图标居中 */
+.app-menu .arco-menu-selected .menu-label { color: var(--primary); }
+.app-menu .arco-menu-selected .menu-icon { color: var(--primary); }
+
+/* 折叠态：Arco 走弹出层，这里只留色块并居中 */
 .app-menu.arco-menu-collapse .arco-menu-item,
-.app-menu.arco-menu-collapse .arco-menu-sub-menu-title { margin: 0 8px 4px; padding: 0; justify-content: center; }
+.app-menu.arco-menu-collapse .arco-menu-inline-header,
+.app-menu.arco-menu-collapse .arco-menu-sub-menu-title { margin: 0 8px 4px; padding: 0; gap: 0; justify-content: center; }
+.app-menu.arco-menu-collapse .arco-menu-item-inner { margin-left: 0; justify-content: center; }
+.app-menu.arco-menu-collapse .menu-label { display: none; }
+.app-menu.arco-menu-collapse .menu-group-title { gap: 0; }
 
 .version-badge { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .version-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgba(0, 180, 42, .16); }
@@ -379,7 +410,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .nav-drawer .arco-drawer-header { border-bottom: 1px solid var(--line); }
 .nav-drawer-title { display: inline-flex; align-items: center; gap: 8px; }
 .nav-drawer .arco-drawer-body { padding: 8px 0; }
-.nav-drawer .app-menu .arco-menu-inline .arco-menu-item .arco-icon { display: inline-flex; }
 
 /* Arco Table 不在 .table-wrap 里，窄屏下不会走「折叠成卡片」那套规则。
    列多的表在手机上硬挤会挤成竖排文字，这里改为横向滚动，和 MPAY 的处理一致。 */
@@ -572,14 +602,15 @@ tbody tr:last-child td { border-bottom: 0; }
 [arco-theme="dark"] .sidebar-foot { border-top-color: var(--line); }
 [arco-theme="dark"] .app-menu.arco-menu { background: transparent; }
 [arco-theme="dark"] .app-menu .arco-menu-item,
+[arco-theme="dark"] .app-menu .arco-menu-inline-header,
 [arco-theme="dark"] .app-menu .arco-menu-sub-menu-title { color: var(--ink-2); }
+[arco-theme="dark"] .app-menu .arco-menu-inline-header,
+[arco-theme="dark"] .app-menu .arco-menu-sub-menu-title { color: var(--ink); }
 [arco-theme="dark"] .app-menu .arco-menu-item:hover,
+[arco-theme="dark"] .app-menu .arco-menu-inline-header:hover,
 [arco-theme="dark"] .app-menu .arco-menu-sub-menu-title:hover { background: var(--fill-2); color: var(--ink); }
 [arco-theme="dark"] .app-menu .arco-menu-selected { background: var(--fill-2); color: var(--primary); }
-[arco-theme="dark"] .app-menu .arco-menu-item .arco-icon,
-[arco-theme="dark"] .app-menu .arco-menu-sub-menu-title .arco-icon { color: var(--muted); }
-[arco-theme="dark"] .app-menu .arco-menu-selected .arco-icon { color: var(--primary); }
-/* 折叠态与展开态的箭头图标 */
+[arco-theme="dark"] /* 折叠态与展开态的箭头图标 */
 [arco-theme="dark"] .app-menu .arco-menu-icon-suffix .arco-icon { color: var(--muted); }
 /* 窄屏抽屉里的菜单同样跟随主题 */
 [arco-theme="dark"] .nav-drawer .app-menu.arco-menu { background: transparent; }
