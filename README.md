@@ -60,7 +60,7 @@ WEB_PUBLIC_URL=https://pay.example.com
 
 使用宿主机已有的 MySQL 时，把地址改成 `host.docker.internal:3306`，并只启动应用与 Redis：`docker compose up -d app redis`。
 
-镜像地址由 `.env` 的 `TUNEXPAY_IMAGE` 决定，默认 `ghcr.io/paimoncai/tunexpay`（当前已发布的镜像就在这个路径下）。CI 按仓库归属生成镜像名，仓库若更换归属，发布后的镜像会出现在新归属下，届时同步改 `TUNEXPAY_IMAGE`。
+镜像地址由 `.env` 的 `TUNEXPAY_IMAGE` 决定，默认 `ghcr.io/anrcm0/tunexpay`（当前已发布的镜像就在这个路径下）。CI 按仓库归属生成镜像名，仓库若更换归属，发布后的镜像会出现在新归属下，届时同步改 `TUNEXPAY_IMAGE`。
 
 启动并检查：
 
@@ -111,7 +111,7 @@ npm run build
 ```bash
 docker compose down                # 停止并删除容器与网络，数据卷保留
 docker compose down -v             # 确定不再需要数据时：连同 MySQL / Redis 数据卷一起删除
-docker images --format '{{.Repository}}:{{.Tag}}' ghcr.io/paimoncai/tunexpay | xargs -r docker rmi
+docker images --format '{{.Repository}}:{{.Tag}}' ghcr.io/anrcm0/tunexpay | xargs -r docker rmi
 rm -f .env
 ```
 
@@ -122,7 +122,7 @@ rm -f .env
 每次发布带一个唯一版本号 `v<提交日期 YYYYMMDD>-<7 位提交号>`（如 `v20260830-4f48e61`）：管理台左下角常驻显示，`/health`、系统监控页、MCP `serverInfo` 同源，发布镜像也用同一个版本号打 tag。
 
 ```bash
-docker pull ghcr.io/paimoncai/tunexpay:v20260830-4f48e61
+docker pull ghcr.io/anrcm0/tunexpay:v20260830-4f48e61
 ```
 
 发布即推 tag：CI 检查通过后构建镜像并推送到 GHCR，同时打「版本号」「你推的 tag 名」「latest」三个 tag。完整约定见[版本号与发布](docs/deployment.md#版本号)。

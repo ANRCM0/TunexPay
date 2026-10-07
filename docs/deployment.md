@@ -323,7 +323,7 @@ curl -fsS http://127.0.0.1:3000/health
 默认 Compose 使用：
 
 ```text
-ghcr.io/paimoncai/tunexpay:latest
+ghcr.io/anrcm0/tunexpay:latest
 ```
 
 也可通过：
@@ -373,7 +373,7 @@ CI 先跑检查（typecheck、单测、脚本与 Compose 校验），通过后�
 所以界面上看到的版本号可以直接拿去拉镜像：
 
 ```bash
-docker pull ghcr.io/paimoncai/tunexpay:v20260830-4f48e61
+docker pull ghcr.io/anrcm0/tunexpay:v20260830-4f48e61
 ```
 
 本地构建想带上版本号时显式传 build-arg；不传（或留空）时镜像内是 `0.1.0-dev`，管理台会如实显示这不是一次发布：
