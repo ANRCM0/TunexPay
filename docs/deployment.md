@@ -340,7 +340,59 @@ TUNEXPAY_IMAGE_TAG=<tag>
 docker login ghcr.io
 ```
 
-生产环境建议固定到经过验证的版本或 SHA tag，而不是长期无条件跟随 `latest`。
+生产环境建议固定到经过验证的版本 tag，而不是长期无条件跟随 `latest`。
+
+镜像只在**推 tag** 时产出：分支推送与 PR 只跑检查（`.github/workflows/docker.yml`）。
+
+### 版本号
+
+每次发布带一个唯一版本号：
+
+```text
+v<提交日期 YYYYMMDD>-<7 位提交号>      例：v20260830-4f48e61
+```
+
+- 日期取**提交时间**（UTC）而不是构建时间：同一个提交在任何机器上重建都得到同一个版本号，不同提交必然不同。版本号因此等价于「这批代码的指纹」，可以用来回答「线上跑的到底是哪一版」。
+- 版本号由**提交**算出，不取决于 tag 名：tag 只是发布触发器。tag 名与版本号一致只是便于人工对应，不是要求。
+
+发布流程：
+
+```bash
+git tag v20260830-4f48e61        # 任意 v* tag 都能触发，建议 tag 名直接用版本号
+git push origin v20260830-4f48e61
+```
+
+CI 先跑检查（typecheck、单测、脚本与 Compose 校验），通过后构建镜像并推送到 GHCR。同一个镜像打三个 tag：
+
+| 镜像 tag | 说明 |
+| --- | --- |
+| `v<版本号>` | 例如 `v20260830-4f48e61`，与管理台左下角显示的值逐字一致，**部署与回滚建议按它来** |
+| 你推的 tag 名 | tag 名与版本号不一致时，它是同一镜像的别名；一致时是同一个 tag |
+| `latest` | 最新一次发布 |
+
+所以界面上看到的版本号可以直接拿去拉镜像：
+
+```bash
+docker pull ghcr.io/paimoncai/tunexpay:v20260830-4f48e61
+```
+
+本地构建想带上版本号时显式传 build-arg；不传（或留空）时镜像内是 `0.1.0-dev`，管理台会如实显示这不是一次发布：
+
+```bash
+APP_VERSION=v20260830-4f48e61 docker compose build
+```
+
+在开发机上直接跑 `npm run dev:web` 会从本地 Git 读出 `v<提交日期>-<提交号>-dirty`，`-dirty` 表示构建时工作区有未提交改动。
+
+同一个版本号可以在三处独立核对，任何一处不一致都说明有多个版本在混跑（例如 Web 回滚了但 API 没回滚）：
+
+| 位置 | 取法 |
+| --- | --- |
+| 管理台左下角（悬浮看提交日期/提交号/来源） | 首屏用构建值，加载后向 `/api/version` 核对当前进程的真实值 |
+| API 健康检查 | `curl -s http://127.0.0.1:3000/health` |
+| 系统监控页「API 进程」、MCP `initialize` 的 `serverInfo.version` | 与 `/health` 同源 |
+
+版本号只有一个来源（构建注入 → 本地 Git → 兜底），改格式要同时改 [apps/api/src/lib/version.ts](../apps/api/src/lib/version.ts) 与 [apps/web/lib/app-version.ts](../apps/web/lib/app-version.ts)。
 
 ## 10. 更新
 
@@ -474,3 +526,15 @@ docker compose logs --tail 200 app
 - `ALLOW_PRIVATE_WEBHOOKS=false`。
 - 生产密钥均已替换示例值。
 - 数据库和 `SECRETS_ENCRYPTION_KEY` 已备份。
+
+### 上线前必须完成
+
+v0.1 已具备真实联调所需的主链，但尚不应直接承接无人值守的大额生产资金。正式上线前至少要完成：
+
+1. 支付宝沙箱与小额生产回归，覆盖超时、重复回调、关闭后晚到成功、部分退款，以及「MCP 审批发起退款 → 退款页人工查单确认」这条人工链路。
+2. 接入支付宝日终账单自动下载，并用真实沙箱/生产导出文件回归逐笔匹配；账单收款需配置并验收内置采集器，或接入可用的外部 Watcher。
+3. 为管理员登录增加反向代理限流与审计告警；如果需要多人协作，再接入正式身份系统和 RBAC。
+4. 设置真实 HTTPS 域名，并保持 `ALLOW_PRIVATE_WEBHOOKS=false`、`MOCK_CHANNEL_ENABLED=false`。
+5. 对 `SECRETS_ENCRYPTION_KEY` 做离线备份；丢失后已加密的 ePay/Webhook 密钥无法恢复。
+
+这份边界是刻意保留的：v0.1 先把正确的支付核心跑通，不伪装成已经完成全部生产验证的成熟支付平台。
