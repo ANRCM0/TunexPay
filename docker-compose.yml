@@ -67,7 +67,7 @@ services:
 
   app:
     container_name: ${TUNEXPAY_CONTAINER_NAME:-tunexpay}
-    image: ${TUNEXPAY_IMAGE:-ghcr.io/paimoncai/tunexpay}:${TUNEXPAY_IMAGE_TAG:-latest}
+    image: ${TUNEXPAY_IMAGE:-ghcr.io/anrcm0/tunexpay}:${TUNEXPAY_IMAGE_TAG:-latest}
     build:
       context: .
       # 发布版本号（<提交日期 YYYYMMDD>-<7 位提交号>）。本地 build 时可用
