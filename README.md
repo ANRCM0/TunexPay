@@ -1,4 +1,4 @@
-# TUOXIN Pay
+# TuneXPay
 
 面向自有业务的轻量支付中台（TypeScript / MySQL / Redis）。保留支付系统真正需要的事务、幂等、状态机、异常恢复与可靠通知；不做多商户运营、余额、清算、费率与复杂渠道路由。
 
@@ -17,12 +17,23 @@
 
 细化说明见下方[文档索引](#文档)。
 
+## 管理台
+
+管理台与收银台是 Next.js 应用，与 API 同镜像发布，随管理台一起提供多页签、暗色模式与键盘快捷入口。前端版式对齐 MPAY V2 管理台（SnowAdmin 骨架 + Arco Design 组件体系）：
+
+- **骨架**：侧栏 220px（可折叠到 48px 并记住状态）、品牌区与顶栏各 60px、页签栏 40px；窄屏时侧栏收成抽屉。
+- **列表页**：统一为「查询表单 + 表格 + 分页同处一张卡」，筛选在点「查询」后才生效，列表在本地分页。
+- **交互**：多页签栏（可关闭、刷新、右键菜单，状态持久化）、`Ctrl/Cmd + K` 命令面板、暗色模式（跟随系统并可手动切换）、全屏、路由骨架屏与真实导航进度条。
+- **收银台**：移动端优先，长轮询确认支付结果，自动重试并退避。
+
+实现约定、与上游的差异以及两个容易踩的样式覆盖陷阱，见[前端重构说明](docs/frontend-redesign.md)。
+
 ## 安装
 
 要求 Docker Compose v2。
 
 ```bash
-git clone https://github.com/PaiMonCai/TunexPay.git
+git clone https://github.com/ANRCM0/TunexPay.git
 cd TunexPay
 cp .env.example .env
 ```
@@ -48,6 +59,8 @@ WEB_PUBLIC_URL=https://pay.example.com
 ```
 
 使用宿主机已有的 MySQL 时，把地址改成 `host.docker.internal:3306`，并只启动应用与 Redis：`docker compose up -d app redis`。
+
+镜像地址由 `.env` 的 `TUNEXPAY_IMAGE` 决定，默认 `ghcr.io/paimoncai/tunexpay`（当前已发布的镜像就在这个路径下）。CI 按仓库归属生成镜像名，仓库若更换归属，发布后的镜像会出现在新归属下，届时同步改 `TUNEXPAY_IMAGE`。
 
 启动并检查：
 
@@ -118,6 +131,7 @@ docker pull ghcr.io/paimoncai/tunexpay:v20260830-4f48e61
 
 | 文档 | 内容 |
 | --- | --- |
+| [前端重构说明](docs/frontend-redesign.md) | 管理台版式基准、结构约定、样式覆盖陷阱与验收方式 |
 | [架构说明](docs/architecture.md) | 设计边界、核心不变量、状态模型、支付成功事务、异常恢复 |
 | [部署与升级指南](docs/deployment.md) | 运行拓扑、部署、发布、升级、回滚、故障排查、上线检查清单 |
 | [接入与联调](docs/integration.md) | 应用凭证、下单与支付、支付宝、ePay/NewAPI、Webhook 验签、Mock 全链路 |
