@@ -41,7 +41,7 @@ function expirationDetail(item: Order): string {
 }
 
 export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
-  const { data, loading, error } = useApi<Order[]>("/orders?pageSize=100", 8_000);
+  const { data, loading, error, reload } = useApi<Order[]>("/orders?pageSize=100", 8_000);
   const [draftQuery, setDraftQuery] = useState("");
   const [draftStatus, setDraftStatus] = useState("ALL");
   // 查询条件在点「查询」时才生效：输入过程中每敲一个字都重算整张表，长列表会明显卡顿
@@ -135,7 +135,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       </FilterCard>
       <LoadingState loading={loading} error={error} empty={!data?.length} emptyText="还没有订单">
         <ListCard
-        toolbar={<><ToolbarNote>共 {rows.length} 笔订单</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => setApplied({ query: draftQuery, status: draftStatus })}>刷新</Button></>}
+        toolbar={<><ToolbarNote>共 {rows.length} 笔订单</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
         pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
       >
         <Table<Order>
