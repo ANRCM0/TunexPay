@@ -62,7 +62,7 @@ export function System() {
   const { data, loading, error } = useApi<SystemStatus>("/system", 5_000);
   return <>
     <PageHead eyebrow="System Status" title="系统监控" copy="API、数据库、Redis 与后台 Worker 的运行状态，每 5 秒自动刷新。" />
-    <LoadingState loading={loading} error={error}>
+    <LoadingState loading={loading} error={error} stale={Boolean(data)}>
       {data && <SystemCards data={data} />}
     </LoadingState>
   </>;
