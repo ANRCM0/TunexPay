@@ -1,10 +1,12 @@
 name: Build and Push Image
 
+# main 推送与 PR 只跑检查，不产出镜像，避免每个提交都在 GHCR 里留下一个无人使用的镜像；
+# 只有推 v* tag 才构建并推送镜像（docker job 另有 ref 判断兜底）。
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
-  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -41,7 +43,8 @@ jobs:
         run: docker compose config -q
 
   docker:
-    if: github.event_name != 'pull_request'
+    # 双保险：触发条件已经限定为 tag 推送，这里再按 ref 判断一次，PR 走到这里也会被拦住。
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-24.04
     steps:
@@ -56,14 +59,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve release version
+        id: version
+        # 与 apps/api/src/lib/version.ts、apps/web/lib/app-version.ts 的格式保持同一套约定：
+        # <提交日期 YYYYMMDD>-<7 位提交号>，日期按 UTC 取提交时间。同一提交重建得到同一个版本号。
+        # 版本号由提交算出，不取决于 tag 名：tag 只是触发器，随便叫 v1.0.0 也不影响界面显示。
+        run: |
+          version="$(date -u -d "@$(git show -s --format=%ct HEAD)" +%Y%m%d)-${GITHUB_SHA::7}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 发布版本号"
+            echo
+            echo "- tag：\`${GITHUB_REF_NAME}\`"
+            echo "- 版本号：\`v${version}\`（管理台左下角、\`/health\` 显示的值）"
+            echo "- 拉取：\`docker pull ${REGISTRY}/${IMAGE_NAME}:v${version}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 一次发布打三个 tag：版本号、你推的 tag 名、latest。
+          # 注意 tags 是 YAML 块标量，块内以 # 开头的行是字面内容、会被当成 tag 属性，所以注释只能写在这里。
+          # tag 名与版本号相同时指向同一个 tag，不会产生冲突。
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
+            type=raw,value=v${{ steps.version.outputs.version }}
+            type=ref,event=tag
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -72,5 +95,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
