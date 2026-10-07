@@ -15,7 +15,7 @@ describe("api", () => {
   });
 
   it("avoids browser caching of payment administration API responses", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await api("/orders");
     expect(fetchMock.mock.calls[0]![1]!.cache).toBe("no-store");
