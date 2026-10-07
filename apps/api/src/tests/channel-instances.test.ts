@@ -93,11 +93,13 @@ describe("plugin channel instances", () => {
     expect(verificationStatus({ ...row, checkStatus: "FAILED", checkRevision: 2, checkedAt: new Date(paid.paidAt.getTime() + 1000) }, paid)).toBe("FAILED");
   });
   it("encrypts edits, preserves blank secrets, and invalidates previous check and payment evidence", async () => {
-    row.checkStatus = "API_VERIFIED"; row.checkRevision = 2; row.testRevision = 2;
+    row.checkStatus = "API_VERIFIED"; row.checkRevision = 2; row.testRevision = 2; row.testPaymentNo = "pay_acceptance";
     const previous = decodeChannel(row);
     await saveChannel({ name: "Renamed", plugin: "ALIPAY", enabled: true, revision: 2, settings: { privateKey: "", publicKey: "" } }, row.id);
     expect(JSON.parse(openSealed(row.payloadEncrypted)).privateKey.trim()).toBe(previous.privateKey.trim());
-    expect(row).toMatchObject({ revision: 3, checkStatus: "UNCHECKED", checkRevision: null, testRevision: null });
+    // 验收记录必须一并清掉：只清 testRevision 会留下悬空的 testPaymentNo，
+    // 界面上就是那条「验收记录来自旧配置」的提示，而它能清掉的动作是实付验收。
+    expect(row).toMatchObject({ revision: 3, checkStatus: "UNCHECKED", checkRevision: null, testPaymentNo: null, testRevision: null });
     expect(row.payloadEncrypted).not.toContain("BEGIN PRIVATE KEY");
   });
   it("blocks replacing an account after it has payments", async () => {

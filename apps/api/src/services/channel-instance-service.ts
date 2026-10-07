@@ -191,7 +191,10 @@ export async function saveChannel(raw: unknown, id?: string) {
       await tx.billChannelSettings.upsert({ where: { id: channelId }, create: { id: channelId, payloadEncrypted: seal(JSON.stringify(next)) }, update: { payloadEncrypted: seal(JSON.stringify(next)), revision: { increment: 1 } } });
       await tx.billCollectorState.updateMany({ where: { id: channelId }, data: { nextRunAt: new Date() } });
     }
-    const data = { name: input.name, enabled: input.enabled, payloadEncrypted: seal(JSON.stringify(next)), checkStatus: "UNCHECKED", checkRevision: null, checkMessage: null, checkedAt: null, testRevision: null };
+    // 配置一改，旧的接口检测与实付验收都作废：两处记录一起清掉。
+    // 只清 testRevision 会留下一条「悬空的验收记录」（testPaymentNo 还在、revision 已过期），
+    // 界面上表现为「验收记录来自旧配置」常驻不退，而它要求的动作是实付验收、不是重新检测。
+    const data = { name: input.name, enabled: input.enabled, payloadEncrypted: seal(JSON.stringify(next)), checkStatus: "UNCHECKED", checkRevision: null, checkMessage: null, checkedAt: null, testPaymentNo: null, testRevision: null };
     return current ? tx.channelInstance.update({ where: { id: channelId }, data: { ...data, revision: { increment: 1 } } })
       : tx.channelInstance.create({ data: { ...data, id: channelId, plugin: input.plugin } });
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
