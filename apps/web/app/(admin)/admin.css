@@ -118,7 +118,9 @@
 .page-tabs-action { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
 .page-tabs-action:hover { background: var(--fill-2); color: var(--primary); }
 
-.app-content.arco-layout-content { min-width: 0; padding: 16px; }
+/* 内容区宽度上限：没有它，宽屏（2560）上表格会被拉到 2400+，单列「说明」吃掉整屏。
+   这个上限沿用重构前 .content 的取值，不是新拍的数。 */
+.app-content.arco-layout-content { min-width: 0; width: 100%; max-width: 1560px; margin: 0 auto; padding: 16px; }
 .app-footer.arco-layout-footer { padding: 12px 16px 18px; text-align: center; color: var(--muted); font-size: 12px; background: transparent; }
 
 /* ---- 页头 ---- */
@@ -413,13 +415,6 @@ tbody tr:last-child td { border-bottom: 0; }
 
 /* Arco Table 不在 .table-wrap 里，窄屏下不会走「折叠成卡片」那套规则。
    列多的表在手机上硬挤会挤成竖排文字，这里改为横向滚动，和 MPAY 的处理一致。 */
-@media (max-width: 980px) {
-  .list-table .arco-table-container,
-  .list-table .arco-table-content { overflow-x: auto; }
-  .list-table table { min-width: 880px; }
-  .list-card .arco-table-th, .list-card .arco-table-td { white-space: nowrap; }
-}
-
 /* ---- 窄屏：隐藏侧栏，改用抽屉 ---- */
 @media (max-width: 980px) {
   .app-shell.narrow > .app-sider { display: none; }
@@ -554,6 +549,26 @@ tbody tr:last-child td { border-bottom: 0; }
 .list-table .row-actions .link-button { white-space: nowrap; }
 
 .list-card-pager { display: flex; align-items: center; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line); }
+
+/* ---- 列表表格的统一模型（所有列表页共用；页面里不要再各写各的溢出行为）----
+   之前每页只在列上写死 width，溢出行为没人管，于是宽屏被拉成一条、窄屏各有各的挤法。
+   这里统一三件事：
+     1) 横向溢出只发生在卡片内部：容器始终可横向滚动，绝不撑宽页面；
+     2) 单元格默认允许换行：说明性长文本按容器宽度折行，而不是把列撑开；
+     3) 只有标识符（.mono / code）不换行：订单号、工具名、URL 这类值从词中间劈开
+        会直接失去可读性，让它们按内容取宽，放不下时由容器内部横向滚动兜底。 */
+.list-table .arco-table-container { overflow-x: auto; }
+.list-table .arco-table-td { white-space: normal; }
+/* 表头不换行：列头是固定短标签，放不下时折成两行（「订单状/态」）比缩排更难看，
+   宽度不够应由列宽解决，不是把标签劈开。 */
+.list-table .arco-table-th,
+.list-table .arco-table-th .th-sort-button,
+.list-table .arco-table-th .arco-table-th-item-title { white-space: nowrap; }
+.list-table .arco-table-td .mono,
+.list-table .arco-table-td code { white-space: nowrap; }
+/* 操作列与金额列不参与换行：它们的内容短且需要成组出现 */
+.list-table .arco-table-td .row-actions,
+.list-table .arco-table-td .amount-cell { white-space: nowrap; }
 .list-pager .arco-pagination-total { color: var(--ink-2); font-size: 13px; }
 
 /* ---- 首页 Hero：MPAY 的运营首页同款，左侧标题、右侧平台状态 ---- */

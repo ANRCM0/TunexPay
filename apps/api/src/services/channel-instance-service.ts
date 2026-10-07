@@ -69,7 +69,13 @@ export async function publicChannel(row: ChannelInstance) {
     archivedAt: row.archivedAt,
     settings: publicBillSettings(settings, row.revision, row.updatedAt),
     checkStatus: status, checkMessage: row.checkRevision === row.revision ? row.checkMessage : "配置尚未检测", checkedAt: row.checkedAt,
-    testPayment: test ? { ...test, currentRevision: row.testRevision === row.revision, cashierUrl: `${config().WEB_PUBLIC_URL}/cashier/${test.paymentNo}` } : null,
+    // 只有落在当前 revision 上的验收单才算「记录」。配置一改，旧验收单就作废了：
+    // 继续把它报出去，界面只会常驻一条「验收记录来自旧配置」的提示，而用户能做的
+    // 两个动作（检测、实付验收）里没有一个是「清掉这条旧记录」，于是它永远不退，
+    // 反而盖住了真正该看的信息（验证状态本身）。作废就是作废，不再对外呈现。
+    testPayment: test && row.testRevision === row.revision
+      ? { ...test, cashierUrl: `${config().WEB_PUBLIC_URL}/cashier/${test.paymentNo}` }
+      : null,
     webhookUrl: `${config().API_PUBLIC_URL}/api/v1/channels/alipay/webhook`,
     watcherUrl: `${config().API_PUBLIC_URL}/api/v1/channels/alipay-bill/${row.id}/flows`,
   };
