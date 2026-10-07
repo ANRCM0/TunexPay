@@ -4,6 +4,7 @@ import { Avatar, Breadcrumb, Drawer, Dropdown, Layout, Menu, Tooltip } from "@ar
 import { IconDown, IconFullscreen, IconMenuFold, IconMenuUnfold, IconMoon, IconSearch, IconSun } from "@arco-design/web-react/icon";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import { HOME, NAV_GROUPS, matchNavItem, navGroupOf, navTrail, type NavGroup, type NavItem } from "../lib/nav";
 import { useNavPush } from "../lib/nav-progress";
 import { VersionBadge } from "./version-badge";
@@ -15,6 +16,16 @@ import type { AppVersion } from "../lib/app-version";
 
 const THEME_KEY = "tuoxin.theme";
 const COLLAPSE_KEY = "tuoxin.sider-collapsed";
+
+/**
+ * 导航图标统一出口。
+ *
+ * 图标是纯装饰（文字已经在旁边），所以一律带 aria-hidden；尺寸也从这里统一，
+ * 避免各处直接写 <Xxx size={n} /> 时漏掉无障碍属性或写错尺寸。
+ */
+function NavIcon({ icon: Icon, size }: { icon: LucideIcon; size: number }) {
+  return <Icon size={size} aria-hidden="true" />;
+}
 
 /** 侧栏导航。桌面放 Sider 里，窄屏放抽屉里，所以抽出来复用一份。 */
 function NavMenu({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
@@ -48,24 +59,26 @@ function NavMenu({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: (
     onClickMenuItem={(key: string) => go(key)}
   >
     <Menu.Item key={HOME.href}>
-      {(() => { const Icon = HOME.icon; return <Icon size={17} aria-hidden="true" />; })()}
-      {HOME.title}
+      <span className={`menu-tile tone-${HOME.tone}`}><NavIcon icon={HOME.icon} size={15} /></span>
+      <span className="menu-label">{HOME.title}</span>
     </Menu.Item>
-    {NAV_GROUPS.map((item: NavGroup) => {
-      const GroupIcon = item.icon;
-      return <Menu.SubMenu
+    {NAV_GROUPS.map((item: NavGroup) => (
+      <Menu.SubMenu
         key={item.key}
-        title={<span className="menu-group-title"><span className={`menu-tile tone-${item.tone}`}><GroupIcon size={15} aria-hidden="true" /></span>{item.title}</span>}
+        title={<span className="menu-group-title">
+          <span className={`menu-tile tone-${item.tone}`}><NavIcon icon={item.icon} size={15} /></span>
+          <span className="menu-label">{item.title}</span>
+        </span>}
       >
-        {item.items.map((child: NavItem) => {
-          const ChildIcon = child.icon;
-          return <Menu.Item key={child.href} className={`nav-tone-${child.tone}`}>
-            <ChildIcon size={17} aria-hidden="true" />
-            {child.title}
-          </Menu.Item>;
-        })}
-      </Menu.SubMenu>;
-    })}
+        {item.items.map((child: NavItem) => (
+          // 二级项不放进色块，改用固定宽度的图标盒：图标列与文字列才能逐行对齐
+          <Menu.Item key={child.href} className={`nav-tone-${child.tone}`}>
+            <span className="menu-icon"><NavIcon icon={child.icon} size={16} /></span>
+            <span className="menu-label">{child.title}</span>
+          </Menu.Item>
+        ))}
+      </Menu.SubMenu>
+    ))}
   </Menu>;
 }
 

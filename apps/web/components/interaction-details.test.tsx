@@ -122,8 +122,10 @@ describe("装饰性图标不进入无障碍树", () => {
     const iconTags = shell.match(/<[A-Z][A-Za-z]* size=\{\d+\}[^>]*>/g) ?? [];
     expect(iconTags.length).toBeGreaterThan(0);
     expect(iconTags.filter((tag) => !tag.includes('aria-hidden="true"'))).toEqual([]);
-    // 侧栏图标是动态组件，单独确认渲染处也带了该属性
-    expect(shell).toContain("<Icon size={17} aria-hidden=\"true\" />");
+    // 侧栏图标统一走 NavIcon 包装（尺寸与 aria-hidden 一处收口）：
+    // 确认包装组件本身带了该属性，并且侧栏确实通过它渲染图标，而不是散着写 <Xxx size={n} />。
+    expect(shell).toContain("<Icon size={size} aria-hidden=\"true\" />");
+    expect((shell.match(/<NavIcon /g) ?? []).length).toBeGreaterThan(0);
   });
 });
 
