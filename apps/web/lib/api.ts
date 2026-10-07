@@ -31,7 +31,6 @@ export function useApi<T>(path: string, intervalMs?: number) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [resolvedPath, setResolvedPath] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -44,7 +43,6 @@ export function useApi<T>(path: string, intervalMs?: number) {
     controller.current = current;
     inFlight.current = true;
     lastAttemptAt.current = Date.now();
-    setRefreshing(true);
     try {
       const payload = await api<{ data: T }>(path, { signal: current.signal });
       if (current.signal.aborted) return;
@@ -62,7 +60,6 @@ export function useApi<T>(path: string, intervalMs?: number) {
         inFlight.current = false;
         if (!current.signal.aborted) {
           setLoading(false);
-          setRefreshing(false);
         }
       }
     }
@@ -111,7 +108,6 @@ export function useApi<T>(path: string, intervalMs?: number) {
     data: pathPending ? null : data,
     error: pathPending ? "" : error,
     loading: loading || pathPending,
-    refreshing: refreshing && !loading && !pathPending,
     updatedAt: pathPending ? null : updatedAt,
     reload: run,
   };
