@@ -190,7 +190,7 @@ export function Exceptions() {
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} placeholder="全部状态" />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={loading} error={error} empty={!data?.length}>
+      <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length}>
         <ListCard
           toolbar={<><ToolbarNote>共 {rows.length} 条异常</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
