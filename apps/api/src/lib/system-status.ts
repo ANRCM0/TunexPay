@@ -1,10 +1,9 @@
 import { config } from "../config.js";
 import { db } from "../db.js";
 import { monitorRedis, monitorWebhookQueue } from "../redis.js";
+import { APP_VERSION } from "./version.js";
 
 export const WORKER_HEARTBEAT_KEY = "tuoxin:worker:heartbeat";
-
-const API_VERSION = "0.1.0";
 
 type SubsystemOk = { ok: true; latencyMs: number; version?: string };
 type SubsystemDown = { ok: false; error: string };
@@ -85,7 +84,7 @@ export async function collectSystemStatus() {
   const [mysql, redis, worker, webhookQueue, tasks] = await Promise.all([checkMysql(), checkRedis(), checkWorker(), checkWebhookQueue(), collectTasks()]);
   return {
     api: {
-      version: API_VERSION,
+      version: APP_VERSION,
       nodeEnv: config().NODE_ENV,
       startedAt: new Date(Date.now() - process.uptime() * 1000),
       uptimeSeconds: Math.floor(process.uptime()),

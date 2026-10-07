@@ -4,13 +4,15 @@
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 232px 1fr; transition: grid-template-columns .15s ease; }
 .app-shell.collapsed { grid-template-columns: 64px 1fr; }
-.sidebar { min-width: 0; background: #fff; border-right: 1px solid var(--line); padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-.brand { display: flex; gap: 10px; align-items: center; margin-bottom: 24px; padding: 0 8px; }
+/* 侧边栏自己不平移滚动：品牌在顶、导航占满中间并独立滚动、页脚版本徽标常驻左下角。
+   导航有 14 项，窄屏或矮视口下如果整列一起滚，版本号会被顶到首屏之外，看不到就等于没有。 */
+.sidebar { min-width: 0; display: flex; flex-direction: column; background: #fff; border-right: 1px solid var(--line); padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.brand { display: flex; gap: 10px; align-items: center; margin-bottom: 24px; padding: 0 8px; flex: 0 0 auto; }
 .brand-mark { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; font-weight: 900; box-shadow: 0 3px 8px rgba(37, 99, 235, .35); }
 .brand-title { font-size: 14px; font-weight: 800; letter-spacing: .04em; }
 .brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 10px; }
 .collapsed .brand-text, .collapsed .nav a span, .collapsed .nav-group-label, .collapsed .sidebar-foot { display: none; }
-.nav { display: grid; gap: 4px; }
+.nav { display: grid; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .nav a { display: flex; gap: 11px; align-items: center; padding: 9px 11px; border-radius: 8px; color: #607089; font-size: 13.5px; transition: background .15s ease, color .15s ease; }
 .nav a svg { color: #8b99ad; transition: color .15s ease; }
 .nav a:hover { background: #f2f5fb; color: var(--ink); }
@@ -19,7 +21,13 @@
 .nav a.active svg { color: var(--primary); }
 .nav-group { display: grid; gap: 4px; margin-top: 12px; }
 .nav-group-label { padding: 0 11px 3px; color: #9aa7bd; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
-.sidebar-foot { margin-top: 26px; padding: 14px 11px 4px; border-top: 1px solid var(--line); color: #9aa7bd; font-size: 10px; line-height: 1.6; }
+/* 页脚固定在侧边栏左下角，不随导航滚动。 */
+.sidebar-foot { flex: 0 0 auto; margin-top: auto; padding: 14px 11px 4px; border-top: 1px solid var(--line); color: #9aa7bd; font-size: 10px; line-height: 1.6; }
+.sidebar-foot-note { margin-top: 5px; }
+/* 版本徽标：绿点表示「这就是当前在跑的版本」，悬浮可见提交日期/提交号/来源。 */
+.version-badge { display: flex; align-items: center; gap: 7px; color: #526078; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.version-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .16); }
+.version-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .main { min-width: 0; display: grid; grid-template-rows: auto 1fr; }
 .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 10px 22px; }

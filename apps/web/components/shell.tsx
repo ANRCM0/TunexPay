@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, KeyRound, LayoutDashboard, ListChecks, LogOut, Menu, PanelLeftClose, Puzzle, Shuffle, ReceiptText, RotateCcw, Webhook, X } from "lucide-react";
+import { VersionBadge } from "./version-badge";
+// 只取类型：app-version 里含 node:child_process，客户端组件不能把它拉进浏览器包。
+import type { AppVersion } from "../lib/app-version";
 
 const navigation = [
   { label: "", items: [["/", "总览", LayoutDashboard]] },
@@ -35,7 +38,7 @@ function crumbs(path: string): string[] {
   return CRUMB_MAP.find(([pattern]) => pattern.test(path))?.[1] ?? ["首页"];
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children, version }: { children: React.ReactNode; version: AppVersion }) {
   const path = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
@@ -74,7 +77,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {group.label && <div className="nav-group-label">{group.label}</div>}
         {group.items.map(([href, label, Icon]) => <Link title={label} className={path === href || (href !== "/" && path.startsWith(`${href}/`)) ? "active" : ""} href={href} key={href}><Icon size={17} aria-hidden="true" /><span>{label}</span></Link>)}
       </div>)}</nav>
-      <div className="sidebar-foot">v0.1 · Single-tenant payment core</div>
+      <div className="sidebar-foot">
+        <VersionBadge initial={version} />
+        <div className="sidebar-foot-note">Single-tenant payment core</div>
+      </div>
     </aside>
     <div className="main">
       <header className="topbar">

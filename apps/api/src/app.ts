@@ -7,6 +7,7 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./types.js";
 import { AppError } from "./lib/errors.js";
 import { log } from "./lib/logger.js";
+import { APP_VERSION } from "./lib/version.js";
 import { requestContext } from "./middleware/request-context.js";
 import { adminRoutes } from "./routes/admin.js";
 import { channelRoutes } from "./routes/channels.js";
@@ -19,7 +20,7 @@ app.use("*", secureHeaders());
 app.use("*", cors({ origin: [], allowHeaders: ["content-type", "authorization", "x-api-key", "x-app-id", "idempotency-key", "x-request-id"], allowMethods: ["GET", "POST", "OPTIONS"] }));
 app.use("*", requestContext);
 
-app.get("/health", (c) => c.json({ status: "ok", service: "tuoxin-pay-api", version: "0.1.0" }));
+app.get("/health", (c) => c.json({ status: "ok", service: "tuoxin-pay-api", version: APP_VERSION }));
 app.route("/mcp", mcpRoutes);
 app.route("/api/v1", nativeRoutes);
 app.route("/api/v1/channels", channelRoutes);
