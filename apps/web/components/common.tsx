@@ -3,6 +3,7 @@ import { Drawer as ArcoDrawer, Modal as ArcoModal } from "@arco-design/web-react
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SortColumn } from "../lib/sort";
 import { channelLabel } from "../lib/labels";
+import { refreshClientData } from "../lib/refresh";
 
 export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
@@ -320,7 +321,14 @@ export function HoverDetail({ text, tone = "muted", children }: { text?: string 
 
 export function LoadingState({ loading, error, empty, emptyText = "暂无数据", children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {
   if (loading) return <div className="card skeleton-card" role="status" aria-label="正在加载"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
-  if (error) return <div className="card error" role="alert">{error}</div>;
+  // 后台轮询失败不擦掉上次成功读取的列表；用户可继续查阅，同时明确告知数据可能过期。
+  if (error) return <>
+    <div className="operation-notice error load-error-notice" role="alert">
+      <div className="load-error-copy"><strong>数据更新失败</strong><span>{error}。显示的内容可能不是最新数据。</span></div>
+      <button type="button" className="button secondary load-retry" onClick={refreshClientData}>重新尝试</button>
+    </div>
+    {!empty && children}
+  </>;
   if (empty) return <div className="card empty">{emptyText}</div>;
   return <>{children}</>;
 }
