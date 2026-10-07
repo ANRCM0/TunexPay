@@ -1,12 +1,15 @@
 "use client";
+import { Button, Checkbox, Form, Input, InputNumber, Select, Switch, Table } from "@arco-design/web-react";
+import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import Link from "next/link";
-import { type FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
-import { routingStrategyLabels, type RoutingGroup, type RoutingStrategy } from "../lib/routing-groups";
 import { channelLabel } from "../lib/labels";
+import { routingStrategyLabels, type RoutingGroup, type RoutingStrategy } from "../lib/routing-groups";
+import { sortRows, type SortColumn } from "../lib/sort";
 import { checkLabels, type Channel } from "./channels";
-import { ConfirmModal, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps } from "./common";
+import { ConfirmModal, LoadingState, Modal, PageHead, Status, Toast, sortValueProps } from "./common";
+import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type MemberInput = { channelId: string; weight: number; enabled: boolean };
 
@@ -19,15 +22,38 @@ const SORT_COLUMNS: SortColumn<RoutingGroup>[] = [
   { key: "applicationCount", label: "绑定应用", type: "number" },
 ];
 
+const STRATEGY_OPTIONS = (Object.keys(routingStrategyLabels) as RoutingStrategy[]).map(value => ({ label: routingStrategyLabels[value], value }));
+const ENABLED_OPTIONS = [
+  { label: "全部", value: "ALL" },
+  { label: "仅启用", value: "ON" },
+  { label: "仅停用", value: "OFF" },
+];
+
+// 权重是提交给后端的整数，编辑期允许为空/越界，但保存前必须拦住——
+// 原来是靠原生 number 输入的 min/max 校验，换成 Arco 控件后需要显式说清楚。
+const WEIGHT_MIN = 1;
+const WEIGHT_MAX = 10000;
+
 export function RoutingGroups() {
   const groups = useApi<RoutingGroup[]>("/routing-groups", 10_000);
   const channels = useApi<Channel[]>("/channel-instances", 10_000);
-  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
-  const rows = useMemo(() => sortRows(groups.data ?? [], SORT_COLUMNS, sort), [groups.data, sort]);
+  const { sort, onSort } = useTableSort<RoutingGroup>();
+  const [draft, setDraft] = useState({ query: "", strategy: "ALL", enabled: "ALL" });
+  const [applied, setApplied] = useState({ query: "", strategy: "ALL", enabled: "ALL" });
   const [editing, setEditing] = useState<RoutingGroup | "new" | null>(null);
   const [removing, setRemoving] = useState<RoutingGroup | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const filtered = useMemo(() => (groups.data ?? []).filter(group => {
+    const needle = applied.query.trim().toLowerCase();
+    const matchesQuery = !needle || [group.name, group.id].some(value => value.toLowerCase().includes(needle));
+    const matchesStrategy = applied.strategy === "ALL" || group.strategy === applied.strategy;
+    const matchesEnabled = applied.enabled === "ALL" || (applied.enabled === "ON") === group.enabled;
+    return matchesQuery && matchesStrategy && matchesEnabled;
+  }), [groups.data, applied]);
+  // 先筛选再排序：筛选是用户当前关心的子集，排序只作用于这个子集
+  const rows = useMemo(() => sortRows(filtered, SORT_COLUMNS, sort), [filtered, sort]);
+  const pager = useClientPager(rows, 20);
 
   async function remove(group: RoutingGroup) {
     setBusy(true);
@@ -39,33 +65,94 @@ export function RoutingGroups() {
     finally { setBusy(false); }
   }
 
+  const columns: ColumnProps<RoutingGroup>[] = [
+    {
+      title: sortHeader(SORT_COLUMNS[0], sort, onSort),
+      dataIndex: "name",
+      render: (_: unknown, group: RoutingGroup) => <div {...sortValueProps(group, SORT_COLUMNS[0])}>
+        <strong>{group.name}</strong>
+        <div className="muted mono">{group.id}</div>
+      </div>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[1], sort, onSort),
+      dataIndex: "strategy",
+      width: 140,
+      render: (_: unknown, group: RoutingGroup) => <span {...sortValueProps(group, SORT_COLUMNS[1])}>{routingStrategyLabels[group.strategy]}</span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[2], sort, onSort),
+      dataIndex: "availableChannels",
+      render: (_: unknown, group: RoutingGroup) => <div {...sortValueProps(group, SORT_COLUMNS[2])}>
+        <div>{group.availableChannels} / {group.members.length} 个可用</div>
+        <div className="muted routing-member-summary">{group.members.map(member => `${member.channel.name}${group.strategy === "WEIGHTED_RANDOM" ? `（权重 ${member.weight}）` : ""}${!member.eligible ? " · 不参与" : ""}`).join("、") || "成员已移除，请重新配置"}</div>
+      </div>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[3], sort, onSort),
+      dataIndex: "enabled",
+      width: 140,
+      render: (_: unknown, group: RoutingGroup) => <div {...sortValueProps(group, SORT_COLUMNS[3])}>
+        <Status value={group.enabled ? "ACTIVE" : "DISABLED"} />
+        {group.enabled && !group.availableChannels && <div className="error">无可用通道</div>}
+      </div>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[4], sort, onSort),
+      dataIndex: "applicationCount",
+      width: 120,
+      render: (_: unknown, group: RoutingGroup) => <span {...sortValueProps(group, SORT_COLUMNS[4])}>{group.applicationCount} 个</span>,
+    },
+    {
+      title: "操作",
+      dataIndex: "actions",
+      width: 140,
+      render: (_: unknown, group: RoutingGroup) => <div className="row-actions">
+        <button type="button" className="link-button" onClick={() => setEditing(group)}>配置</button>
+        <button type="button" className="link-button danger-link" disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</button>
+      </div>,
+    },
+  ];
+
   return <>
     <PageHead eyebrow="Routing groups" title="轮询组" copy="将多个通道组成收款路由，应用绑定组后，每次新支付按规则随机选择一个可用通道。" action={<div className="page-head-actions">
       <Link className="button secondary" href="/applications">绑定业务应用</Link>
-      <button className="button" onClick={() => setEditing("new")}>创建轮询组</button>
+      <Button type="primary" onClick={() => setEditing("new")}>创建轮询组</Button>
     </div>} />
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
-    <Section title="轮询组列表" action={<button className="link-button" onClick={() => { void groups.reload(); void channels.reload(); }}>刷新状态</button>}>
+    <ListPage>
+      <FilterCard
+        onSearch={() => setApplied(draft)}
+        onReset={() => { const empty = { query: "", strategy: "ALL", enabled: "ALL" }; setDraft(empty); setApplied(empty); }}
+      >
+        <FilterItem label="关键字">
+          <FilterInput value={draft.query} onChange={value => setDraft({ ...draft, query: value })} placeholder="轮询组名称 / ID" />
+        </FilterItem>
+        <FilterItem label="选路规则">
+          <FilterSelect value={draft.strategy} onChange={value => setDraft({ ...draft, strategy: value })} options={[{ label: "全部规则", value: "ALL" }, ...STRATEGY_OPTIONS]} />
+        </FilterItem>
+        <FilterItem label="状态">
+          <FilterSelect value={draft.enabled} onChange={value => setDraft({ ...draft, enabled: value })} options={ENABLED_OPTIONS} />
+        </FilterItem>
+      </FilterCard>
       <LoadingState loading={groups.loading} error={groups.error} empty={!groups.data?.length} emptyText="还没有轮询组。先创建轮询组、添加通道，再到业务应用中绑定。">
-        <div className="table-wrap"><table><thead><tr>
-          <SortableTh label="轮询组" sortKey="name" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-          <SortableTh label="选路规则" sortKey="strategy" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-          <SortableTh label="成员通道" sortKey="availableChannels" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-          <SortableTh label="状态" sortKey="enabled" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-          <SortableTh label="绑定应用" sortKey="applicationCount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-          <th scope="col">操作</th>
-        </tr></thead><tbody>
-          {rows.map(group => <tr key={group.id}>
-            <td {...sortValueProps(group, SORT_COLUMNS[0])}><strong>{group.name}</strong><div className="muted mono">{group.id}</div></td>
-            <td data-label="选路规则" {...sortValueProps(group, SORT_COLUMNS[1])}>{routingStrategyLabels[group.strategy]}</td>
-            <td data-label="成员通道" {...sortValueProps(group, SORT_COLUMNS[2])}><div>{group.availableChannels} / {group.members.length} 个可用</div><div className="muted routing-member-summary">{group.members.map(member => `${member.channel.name}${group.strategy === "WEIGHTED_RANDOM" ? `（权重 ${member.weight}）` : ""}${!member.eligible ? " · 不参与" : ""}`).join("、") || "成员已移除，请重新配置"}</div></td>
-            <td data-label="状态" {...sortValueProps(group, SORT_COLUMNS[3])}><Status value={group.enabled ? "ACTIVE" : "DISABLED"} />{group.enabled && !group.availableChannels && <div className="error">无可用通道</div>}</td>
-            <td data-label="绑定应用" {...sortValueProps(group, SORT_COLUMNS[4])}>{group.applicationCount} 个</td>
-            <td data-label="操作"><div className="row-actions"><button className="button secondary" onClick={() => setEditing(group)}>配置</button><button className="button danger" disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</button></div></td>
-          </tr>)}
-        </tbody></table></div>
+        <ListCard
+          toolbar={<><ToolbarNote>共 {rows.length} 个轮询组</ToolbarNote><ToolbarSpacer /><Button size="small" onClick={() => { void groups.reload(); void channels.reload(); }}>刷新状态</Button></>}
+          pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
+        >
+          <Table<RoutingGroup>
+            className="list-table"
+            columns={columns}
+            data={pager.rows}
+            rowKey="id"
+            pagination={false}
+            borderCell={false}
+            loading={false}
+            noDataElement={<div className="empty compact">没有符合筛选条件的轮询组</div>}
+          />
+        </ListCard>
       </LoadingState>
-    </Section>
+    </ListPage>
     <p className="muted routing-help">停用、归档、暂停参与或当前配置未通过检测的通道会被跳过。没有可用通道时拒绝新支付，不回退到组外账号。请求结果不确定时不会自动换通道。</p>
     {editing && <Modal title={editing === "new" ? "创建轮询组" : `配置轮询组 · ${editing.name}`} onClose={() => { if (!busy) setEditing(null); }}>
       <LoadingState loading={channels.loading} error={channels.error} empty={false}>
@@ -95,10 +182,15 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
   function changeMember(channelId: string, patch: Partial<MemberInput>) {
     setMembers(current => current.map(member => member.channelId === channelId ? { ...member, ...patch } : member));
   }
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError("");
+  // 表单值仍由本地状态持有：成员列表是"通道 × 成员"的合并视图，做成 Form 的字段集合会更难读懂，
+  // 因此 Form 只承担提交语义与版式，校验在提交时显式完成。
+  async function submit() {
+    setError("");
     if (!members.length) { setError("请至少添加一个通道。"); return; }
     if (members.length > 100) { setError("一个轮询组最多添加 100 个通道。"); return; }
+    if (strategy === "WEIGHTED_RANDOM" && members.some(member => !Number.isInteger(member.weight) || member.weight < WEIGHT_MIN || member.weight > WEIGHT_MAX)) {
+      setError(`权重需为 ${WEIGHT_MIN} 到 ${WEIGHT_MAX} 之间的整数。`); return;
+    }
     setSaving(true); onBusy(true);
     try {
       await api(group ? `/routing-groups/${group.id}` : "/routing-groups", { method: "POST", body: JSON.stringify({ name, strategy, enabled, ...(group ? { revision: group.revision } : {}), members }) });
@@ -106,12 +198,18 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); }
     finally { setSaving(false); onBusy(false); }
   }
-  return <form className="resolution-form" onSubmit={submit}>
+  return <Form layout="vertical" onSubmit={() => void submit()}>
     <fieldset className="routing-editor-fields" disabled={saving}>
-      <label>轮询组名称<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} autoFocus /></label>
-      <label>选路规则<select value={strategy} onChange={event => setStrategy(event.target.value as RoutingStrategy)}><option value="RANDOM">等概率随机</option><option value="WEIGHTED_RANDOM">按权重随机</option></select></label>
+      <Form.Item label="轮询组名称" required>
+        <Input aria-label="轮询组名称" value={name} disabled={saving} required maxLength={120} autoFocus onChange={(value) => setName(value)} />
+      </Form.Item>
+      <Form.Item label="选路规则">
+        <Select aria-label="选路规则" value={strategy} disabled={saving} options={STRATEGY_OPTIONS} onChange={(value) => setStrategy(value as RoutingStrategy)} />
+      </Form.Item>
       <p className="muted">{strategy === "RANDOM" ? "每个可用成员被选中的机会相同；不是按顺序轮流。" : "按可用成员的相对权重抽取。例如权重 1 和 3，概率分别约为 25% 和 75%。"}</p>
-      <label className="toggle-inline"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />启用轮询组</label>
+      <Form.Item label="启用轮询组">
+        <Switch aria-label="启用轮询组" checked={enabled} disabled={saving} onChange={(value) => setEnabled(value)} />
+      </Form.Item>
       <div className="routing-member-heading"><strong>成员通道</strong><span className="muted">已选 {members.length} 个</span></div>
       {!options.length && <p className="muted">还没有通道，请先在支付通道页面创建并完成检测。</p>}
       <div className="routing-member-list">{options.map(channel => {
@@ -119,12 +217,38 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
         const available = channel.enabled && !channel.archivedAt && ["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(channel.checkStatus);
         const share = member?.enabled && available ? strategy === "RANDOM" ? 100 / Math.max(availableMembers.length, 1) : member.weight / Math.max(totalWeight, 1) * 100 : 0;
         return <div className={`routing-member-row${member ? " selected" : ""}`} key={channel.id}>
-          <label className="routing-member-choice"><input type="checkbox" checked={!!member} disabled={!!channel.archivedAt && !member} onChange={event => setMembers(current => event.target.checked ? [...current, { channelId: channel.id, weight: 1, enabled: true }] : current.filter(item => item.channelId !== channel.id))} /><span><strong>{channel.name}</strong><span className="muted">{channelLabel(channel.plugin)} · {channel.archivedAt ? "已归档，请移除" : checkLabels[channel.checkStatus] ?? channel.checkStatus}{!channel.enabled ? " · 已停用" : ""}</span></span></label>
-          {member && <div className="routing-member-controls"><label className="toggle-inline"><input type="checkbox" checked={member.enabled} onChange={event => changeMember(channel.id, { enabled: event.target.checked })} />参与</label>{strategy === "WEIGHTED_RANDOM" && <label className="routing-weight">权重<input aria-label={`${channel.name} 权重`} type="number" min={1} max={10000} step={1} required value={member.weight} onChange={event => changeMember(channel.id, { weight: Number(event.target.value) })} /></label>}<span className="muted">{member.enabled && available ? `${share.toFixed(1)}%` : "暂不选路"}</span></div>}
+          <label className="routing-member-choice">
+            <Checkbox
+              aria-label={`选择通道 ${channel.name}`}
+              checked={!!member}
+              disabled={saving || (!!channel.archivedAt && !member)}
+              onChange={(checked) => setMembers(current => checked ? [...current, { channelId: channel.id, weight: 1, enabled: true }] : current.filter(item => item.channelId !== channel.id))}
+            />
+            <span><strong>{channel.name}</strong><span className="muted">{channelLabel(channel.plugin)} · {channel.archivedAt ? "已归档，请移除" : checkLabels[channel.checkStatus] ?? channel.checkStatus}{!channel.enabled ? " · 已停用" : ""}</span></span>
+          </label>
+          {member && <div className="routing-member-controls">
+            {/* 用 span 而不是 label 包住 Switch：label 只会关联可标注的表单控件，按钮型控件的名字得靠 aria-label */}
+            <span className="toggle-inline"><Switch size="small" aria-label={`${channel.name} 参与选路`} checked={member.enabled} disabled={saving} onChange={(value) => changeMember(channel.id, { enabled: value })} />参与</span>
+            {strategy === "WEIGHTED_RANDOM" && <label className="routing-weight">权重
+              <InputNumber
+                aria-label={`${channel.name} 权重`}
+                min={WEIGHT_MIN}
+                max={WEIGHT_MAX}
+                step={1}
+                value={member.weight}
+                disabled={saving}
+                onChange={(value) => changeMember(channel.id, { weight: Number.isFinite(Number(value)) ? Number(value) : 0 })}
+              />
+            </label>}
+            <span className="muted">{member.enabled && available ? `${share.toFixed(1)}%` : "暂不选路"}</span>
+          </div>}
         </div>;
       })}</div>
       {error && <div className="error" role="alert">{error}</div>}
-      <div className="dialog-actions"><button className="button" type="submit" disabled={!name.trim() || !members.length}>{saving ? "保存中…" : "保存轮询组"}</button><button className="button secondary" type="button" onClick={onClose}>取消</button></div>
+      <div className="dialog-actions">
+        <Button type="primary" htmlType="submit" disabled={!name.trim() || !members.length}>{saving ? "保存中…" : "保存轮询组"}</Button>
+        <Button type="secondary" disabled={saving} onClick={onClose}>取消</Button>
+      </div>
     </fieldset>
-  </form>;
+  </Form>;
 }

@@ -1,11 +1,14 @@
 "use client";
 
+import { Button, Table } from "@arco-design/web-react";
+import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { Plus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
-import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
-import { CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Toast, sortValueProps } from "./common";
-import { ChannelEditor } from "./channel-editor";
 import { useApi } from "../lib/api";
+import { sortRows, type SortColumn } from "../lib/sort";
+import { ChannelEditor } from "./channel-editor";
+import { CopyValue, LoadingState, Modal, PageHead, Toast, sortValueProps } from "./common";
+import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Plugin = { code: string; name: string; description: string; capabilities: string[] };
 
@@ -22,36 +25,100 @@ export function Plugins() {
   // 从插件行点进来时带上该插件作为默认选择；也可以从页面顶部直接创建后再选插件。
   const [editor, setEditor] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
-  const rows = useMemo(() => sortRows(plugins.data ?? [], SORT_COLUMNS, sort), [plugins.data, sort]);
+  const { sort, onSort } = useTableSort<Plugin>();
+  // 查询条件在点「查询」时才生效，避免输入过程中反复重算整张表
+  const [draft, setDraft] = useState({ query: "", capability: "ALL" });
+  const [applied, setApplied] = useState({ query: "", capability: "ALL" });
+  // 能力标签是插件自带的展示串（"扫码支付" 等），从数据里取并集，
+  // 后端给插件加能力时筛选项自动跟着出现，不用维护第二份字典。
+  const capabilityOptions = useMemo(() => {
+    const values = Array.from(new Set((plugins.data ?? []).flatMap(item => item.capabilities)));
+    return [{ label: "全部能力", value: "ALL" }, ...values.map(value => ({ label: value, value }))];
+  }, [plugins.data]);
+  const filtered = useMemo(() => (plugins.data ?? []).filter(plugin => {
+    const needle = applied.query.trim().toLowerCase();
+    const matchesQuery = !needle || [plugin.code, plugin.name, plugin.description].some(value => value.toLowerCase().includes(needle));
+    const matchesCapability = applied.capability === "ALL" || plugin.capabilities.includes(applied.capability);
+    return matchesQuery && matchesCapability;
+  }), [plugins.data, applied]);
+  // 先筛选再排序：筛选是用户当前关心的子集，排序只作用于这个子集
+  const rows = useMemo(() => sortRows(filtered, SORT_COLUMNS, sort), [filtered, sort]);
+  const pager = useClientPager(rows, 20);
+
+  const columns: ColumnProps<Plugin>[] = [
+    {
+      title: sortHeader(SORT_COLUMNS[0], sort, onSort),
+      dataIndex: "code",
+      render: (_: unknown, plugin: Plugin) => <span {...sortValueProps(plugin, SORT_COLUMNS[0])}>
+        <div className="id-line"><code>{plugin.code}</code><CopyValue value={plugin.code} label="复制插件编码" /></div>
+      </span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[1], sort, onSort),
+      dataIndex: "name",
+      width: 200,
+      render: (_: unknown, plugin: Plugin) => <strong {...sortValueProps(plugin, SORT_COLUMNS[1])}>{plugin.name}</strong>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[2], sort, onSort),
+      dataIndex: "description",
+      render: (_: unknown, plugin: Plugin) => <span className="muted" {...sortValueProps(plugin, SORT_COLUMNS[2])}>{plugin.description}</span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[3], sort, onSort),
+      dataIndex: "capabilities",
+      width: 260,
+      render: (_: unknown, plugin: Plugin) => <div {...sortValueProps(plugin, SORT_COLUMNS[3])}>
+        <div className="plugin-capabilities">{plugin.capabilities.map(item => <span key={item}>{item}</span>)}</div>
+      </div>,
+    },
+    {
+      title: "操作",
+      dataIndex: "actions",
+      width: 130,
+      render: (_: unknown, plugin: Plugin) => <button type="button" className="link-button" onClick={() => setEditor(plugin.code)}><Plus size={13} aria-hidden="true" />创建通道</button>,
+    },
+  ];
+
   return <>
     {notice && <Toast text={notice} onClose={() => setNotice("")} />}
     <PageHead eyebrow="Payment Plugins" title="支付插件" copy="每个插件是一种收款能力；创建通道时必须选择一个插件作为对接，配置验证后分配给业务应用。" action={
       <div className="page-head-actions">
-        <button className="button secondary" onClick={() => void plugins.reload()}><RefreshCw size={14} />刷新</button>
-        <button className="button" onClick={() => setEditor("")}><Plus size={14} />创建通道</button>
+        <Button type="secondary" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={() => void plugins.reload()}>刷新</Button>
+        <Button type="primary" icon={<Plus size={14} aria-hidden="true" />} onClick={() => setEditor("")}>创建通道</Button>
       </div>
     } />
-    <Section title="插件列表" action={<span className="muted">{plugins.data?.length ?? 0} 个插件</span>}>
+    <ListPage>
+      <FilterCard
+        onSearch={() => setApplied(draft)}
+        onReset={() => { const empty = { query: "", capability: "ALL" }; setDraft(empty); setApplied(empty); }}
+      >
+        <FilterItem label="关键字">
+          <FilterInput value={draft.query} onChange={value => setDraft({ ...draft, query: value })} placeholder="插件编码 / 名称 / 说明" />
+        </FilterItem>
+        <FilterItem label="支持能力">
+          <FilterSelect value={draft.capability} onChange={value => setDraft({ ...draft, capability: value })} options={capabilityOptions} />
+        </FilterItem>
+      </FilterCard>
       <LoadingState loading={plugins.loading} error={plugins.error} empty={!plugins.data?.length} emptyText="当前没有可用的支付插件">
-        <div className="table-wrap"><table>
-          <thead><tr>
-            <SortableTh label="插件编码" sortKey="code" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="名称" sortKey="name" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="说明" sortKey="description" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="支持能力" sortKey="capabilities" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <th scope="col">操作</th>
-          </tr></thead>
-          <tbody>{rows.map(plugin => <tr key={plugin.code}>
-            <td {...sortValueProps(plugin, SORT_COLUMNS[0])}><div className="id-line"><code>{plugin.code}</code><CopyValue value={plugin.code} label="复制插件编码" /></div></td>
-            <td data-label="名称" {...sortValueProps(plugin, SORT_COLUMNS[1])}><strong>{plugin.name}</strong></td>
-            <td data-label="说明" {...sortValueProps(plugin, SORT_COLUMNS[2])}><span className="muted">{plugin.description}</span></td>
-            <td data-label="支持能力" {...sortValueProps(plugin, SORT_COLUMNS[3])}><div className="plugin-capabilities">{plugin.capabilities.map(item => <span key={item}>{item}</span>)}</div></td>
-            <td data-label="操作"><button className="button secondary" onClick={() => setEditor(plugin.code)}><Plus size={14} />创建通道</button></td>
-          </tr>)}</tbody>
-        </table></div>
+        <ListCard
+          toolbar={<><ToolbarNote>共 {rows.length} 个插件</ToolbarNote><ToolbarSpacer /><Button size="small" onClick={() => void plugins.reload()}>刷新</Button></>}
+          pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
+        >
+          <Table<Plugin>
+            className="list-table"
+            columns={columns}
+            data={pager.rows}
+            // 插件没有 id 字段，编码才是它的稳定主键（也是通道绑定插件时的取值）
+            rowKey="code"
+            pagination={false}
+            borderCell={false}
+            loading={false}
+            noDataElement={<div className="empty compact">没有符合筛选条件的插件</div>}
+          />
+        </ListCard>
       </LoadingState>
-    </Section>
+    </ListPage>
     {editor !== null && <Modal title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
   </>;
 }

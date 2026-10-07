@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@arco-design/web-react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { useApi } from "../lib/api";
@@ -11,8 +12,9 @@ type Collector = { enabled: boolean; status: string; cursorAt?: string; lastSucc
 export function BillChannel() {
   const { data: collector, loading, error, reload } = useApi<Collector>("/channels/alipay-bill/collector", 10_000);
   return <>
+    {/* 返回渠道状态保留 <Link>：它是导航不是表单控件，换成 button 会丢掉中键新开与「复制链接」这些浏览器自带行为 */}
     <PageHead eyebrow="Alipay Bill" title="账单收款配置" copy="个人收款码承接、流水识别与内置采集器；保存后动态生效，无需重启。" action={<Link className="button secondary" href="/channels">返回渠道状态</Link>} />
-    <Section title="采集器状态" action={<button className="button secondary" onClick={() => void reload()}><RefreshCw size={13} />刷新</button>}>
+    <Section title="采集器状态" action={<Button size="small" onClick={() => void reload()}><RefreshCw size={13} aria-hidden="true" />刷新</Button>}>
       <LoadingState loading={loading} error={error}>
         {collector && <div className="detail-list">
           <Row label="运行状态" value={<Status value={collector.enabled ? "ACTIVE" : "DISABLED"} />} />
