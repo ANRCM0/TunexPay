@@ -133,7 +133,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={loading} error={error} empty={!data?.length} emptyText="还没有订单">
+      <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length} emptyText="还没有订单">
         <ListCard
         toolbar={<><ToolbarNote>共 {rows.length} 笔订单</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
         pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
