@@ -253,7 +253,7 @@ export function McpAccessPanel(){
     <PageHead eyebrow="MCP Access" title="MCP / Agent Access" copy="TuneXPay 不运行 Agent；这里只给 Codex、Hermes、OpenClaw、DSH 等外部 Agent 发放 MCP 权限和工具。" />
 
     <Section title="MCP Endpoint">
-      <LoadingState loading={infoLoading} error={infoError}>{info&&/* 服务信息用 Descriptions：标签与值的对齐交给组件库，长 Endpoint 由 credential-secret 负责换行 */<Descriptions
+      <LoadingState loading={infoLoading} error={infoError} stale={Boolean(info)}>{info&&/* 服务信息用 Descriptions：标签与值的对齐交给组件库，长 Endpoint 由 credential-secret 负责换行 */<Descriptions
         column={1}
         border
         data={[
@@ -285,7 +285,7 @@ export function McpAccessPanel(){
     {/* 相邻两张 ListPage 之间没有现成的外边距规则（admin.css 已冻结），用外层 div 补 16px */}
     <div style={{ marginTop: 16 }}>
       <ListPage>
-        <LoadingState loading={loading} error={error} empty={!clients?.length} emptyText="还没有外部 Agent 客户端">
+        <LoadingState loading={loading} error={error} stale={Boolean(clients)} empty={!clients?.length} emptyText="还没有外部 Agent 客户端">
           <ListCard
             toolbar={<><strong>MCP 客户端</strong><ToolbarNote>共 {clients?.length ?? 0} 个</ToolbarNote><ToolbarSpacer/><Button size="small" onClick={()=>void reload()}>刷新</Button></>}
             pagination={<Pager total={clientPager.total} page={clientPager.page} pageSize={clientPager.pageSize} onChange={clientPager.setPage} onPageSizeChange={clientPager.setPageSize}/>}
@@ -298,7 +298,7 @@ export function McpAccessPanel(){
 
     <div style={{ marginTop: 16 }}>
       <ListPage>
-        <LoadingState loading={approvalsLoading} error={approvalsError} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
+        <LoadingState loading={approvalsLoading} error={approvalsError} stale={Boolean(approvals)} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
           <ListCard
             toolbar={<><strong>资金 / 状态动作审批</strong><ToolbarNote>FINANCIAL 工具只能创建这里的待审批请求</ToolbarNote></>}
             pagination={<Pager total={approvalPager.total} page={approvalPager.page} pageSize={approvalPager.pageSize} onChange={approvalPager.setPage} onPageSizeChange={approvalPager.setPageSize}/>}
