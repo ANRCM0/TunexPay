@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Button, Input, Table, Tag } from "@arco-design/web-react";
+import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
-import { CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, sortValueProps, money, time } from "./common";
+import { sortRows, type SortColumn } from "../lib/sort";
+import { CopyValue, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
+import { FilterCard, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useClientPager, useTableSort } from "./list";
 import { eventSourceLabel, exceptionSeverityLabel, exceptionTypeLabel } from "../lib/labels";
 
 type PaymentException = {
@@ -35,17 +38,35 @@ const SORT_COLUMNS: SortColumn<PaymentException>[] = [
   { key: "detectedAt", label: "发现时间", type: "date" },
 ];
 
+// 异常状态筛选沿用服务端参数（会改变请求 URL），选项顺序与处置流程一致：
+// 待处理 → 处理中 → 已解决/已忽略，管理员按队列往下走即可
+const STATUS_OPTIONS = [
+  { label: "全部状态", value: "" },
+  { label: "待处理", value: "OPEN" },
+  { label: "处理中", value: "PROCESSING" },
+  { label: "已解决", value: "RESOLVED" },
+  { label: "已忽略", value: "IGNORED" },
+];
+
+// 风险等级用 Arco Tag 呈现：它本质是标签而不是动作，Tag 自带配色比手写 CSS 更一致；
+// 颜色只做分级提示，文案仍来自 labels，避免把等级判断散落在组件里。
+const SEVERITY_TAG_COLOR: Record<string, string> = { MEDIUM: "orange", HIGH: "red", CRITICAL: "red" };
+
 export function Exceptions() {
-  const [status, setStatus] = useState("");
-  const { data, loading, error, reload } = useApi<PaymentException[]>(`/exceptions?pageSize=100${status ? `&status=${status}` : ""}`, 10_000);
-  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const [draftStatus, setDraftStatus] = useState("");
+  // 筛选在点「查询」时才生效：切换状态会改变请求 URL 并整表重新加载，
+  // 让下拉每变一次就发一次请求，会让管理员在选择过程中看到反复闪烁的空表
+  const [appliedStatus, setAppliedStatus] = useState("");
+  const { data, loading, error, reload } = useApi<PaymentException[]>(`/exceptions?pageSize=100${appliedStatus ? `&status=${appliedStatus}` : ""}`, 10_000);
+  const { sort, onSort } = useTableSort<PaymentException>();
   const [working, setWorking] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState<{ item: PaymentException; next: FinalAction } | null>(null);
   const [resolution, setResolution] = useState("");
   const [resolutionRef, setResolutionRef] = useState("");
-  // 状态筛选由服务端完成（会改变请求 URL），所以这里只负责排序
+  // 状态筛选由服务端完成（会改变请求 URL），所以这里只负责排序与分页
   const rows = useMemo(() => sortRows(data ?? [], SORT_COLUMNS, sort), [data, sort]);
+  const pager = useClientPager(rows, 20);
 
   async function update(item: PaymentException, next: "PROCESSING" | FinalAction, body?: { resolution: string; resolutionRef?: string }) {
     setWorking(item.id);
@@ -78,80 +99,115 @@ export function Exceptions() {
       resolution: resolution.trim(),
       resolutionRef: pending.next === "RESOLVED" ? resolutionRef.trim() || undefined : undefined,
     });
+    // 只有落库成功才关弹窗：失败时保留已填的说明，管理员不必重打一遍
     if (ok) setPending(null);
   }
 
-  const statusFilter = <select value={status} onChange={event => setStatus(event.target.value)} aria-label="异常状态">
-    <option value="">全部状态</option>
-    <option value="OPEN">待处理</option>
-    <option value="PROCESSING">处理中</option>
-    <option value="RESOLVED">已解决</option>
-    <option value="IGNORED">已忽略</option>
-  </select>;
+  const columns: ColumnProps<PaymentException>[] = [
+    {
+      title: sortHeader(SORT_COLUMNS[0], sort, onSort),
+      dataIndex: "exceptionNo",
+      render: (_: unknown, item: PaymentException) => <span {...sortValueProps(item, SORT_COLUMNS[0])}>
+        <strong>{exceptionTypeLabel(item.type)}</strong>
+        <div className="row-error">{item.summary}</div>
+        <div className="id-line"><span className="mono muted">{item.exceptionNo}</span><CopyValue value={item.exceptionNo} label="复制异常单号" /></div>
+        <div className="muted">{eventSourceLabel(item.source)}</div>
+      </span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[1], sort, onSort),
+      dataIndex: "order",
+      width: 240,
+      render: (_: unknown, item: PaymentException) => <span {...sortValueProps(item, SORT_COLUMNS[1])}>
+        {item.order ? <>
+          <Link className="data-link" href={`/orders/${item.order.orderNo}`}><strong>{item.order.subject}</strong></Link>
+          <div className="id-line"><span className="mono muted">{item.order.orderNo}</span><CopyValue value={item.order.orderNo} label="复制订单号" /></div>
+        </> : "—"}
+        {item.payment && <div className="id-line"><span className="mono muted">{item.payment.paymentNo}</span><CopyValue value={item.payment.paymentNo} label="复制支付单号" /></div>}
+      </span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[2], sort, onSort),
+      dataIndex: "amount",
+      align: "right",
+      width: 180,
+      render: (_: unknown, item: PaymentException) => <span {...sortValueProps(item, SORT_COLUMNS[2])}>
+        {item.payment ? <>
+          <strong>{money(item.payment.receivedAmount ?? item.payment.amount)}</strong>
+          {item.payment.receivedAmount && item.payment.receivedAmount !== item.payment.amount && <div className="muted">业务金额 {money(item.payment.amount)}</div>}
+          {item.payment.channelTradeNo
+            ? <div className="id-line"><span className="mono muted">{item.payment.channelTradeNo}</span><CopyValue value={item.payment.channelTradeNo} label="复制渠道流水" /></div>
+            : <div className="muted">无渠道流水</div>}
+        </> : "—"}
+      </span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[3], sort, onSort),
+      dataIndex: "status",
+      width: 160,
+      render: (_: unknown, item: PaymentException) => <span {...sortValueProps(item, SORT_COLUMNS[3])}>
+        <Status value={item.status} />
+        {/* 外层沿用既有的 .severity 提供行距，颜色交给 Tag —— 等级配色不该只存在于 CSS 里 */}
+        <div className="severity"><Tag size="small" color={SEVERITY_TAG_COLOR[item.severity] ?? "gray"}>{exceptionSeverityLabel(item.severity)}</Tag></div>
+        {item.resolution && <div className="muted">{item.resolution}</div>}
+        {item.resolutionRef && <div className="id-line"><span className="mono muted">{item.resolutionRef}</span><CopyValue value={item.resolutionRef} label="复制处置凭证" /></div>}
+      </span>,
+    },
+    {
+      title: sortHeader(SORT_COLUMNS[4], sort, onSort),
+      dataIndex: "detectedAt",
+      width: 200,
+      render: (_: unknown, item: PaymentException) => <span {...sortValueProps(item, SORT_COLUMNS[4])}>
+        {time(item.detectedAt)}
+        {item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}
+      </span>,
+    },
+    {
+      title: "处置",
+      dataIndex: "actions",
+      width: 170,
+      // 行内动作用链接式按钮：一张表里会同时出现三个动作，实心按钮会把「可读的数据行」压成按钮墙
+      render: (_: unknown, item: PaymentException) => <div className="row-actions">
+        {item.status === "OPEN" && <button type="button" className="link-button" disabled={working !== ""} onClick={() => void update(item, "PROCESSING")}>{working === item.id ? "处理中…" : "开始处理"}</button>}
+        {["OPEN", "PROCESSING"].includes(item.status) && <>
+          <button type="button" className="link-button" disabled={working !== ""} onClick={() => openFinal(item, "RESOLVED")}>标记解决</button>
+          <button type="button" className="link-button danger-link" disabled={working !== ""} onClick={() => openFinal(item, "IGNORED")}>忽略</button>
+        </>}
+      </div>,
+    },
+  ];
 
   return <>
     <PageHead eyebrow="Payment Exceptions" title="支付异常" copy="晚到重复付款、流水多候选和状态冲突必须在这里形成明确处置记录。" />
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
 
-    <Section title="异常处置队列" action={statusFilter}>
+    <ListPage>
+      <FilterCard
+        onSearch={() => setAppliedStatus(draftStatus)}
+        onReset={() => { setDraftStatus(""); setAppliedStatus(""); }}
+      >
+        <FilterItem label="异常状态">
+          <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} placeholder="全部状态" />
+        </FilterItem>
+      </FilterCard>
       <LoadingState loading={loading} error={error} empty={!data?.length}>
-        <div className="table-wrap"><table>
-          <thead><tr>
-            <SortableTh label="异常 / 风险" sortKey="exceptionNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="订单与支付" sortKey="order" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="金额 / 渠道流水" sortKey="amount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} alignRight />
-            <SortableTh label="状态" sortKey="status" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <SortableTh label="发现时间" sortKey="detectedAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
-            <th scope="col">处置</th>
-          </tr></thead>
-          <tbody>{rows.map(item => <tr key={item.id}>
-            <td {...sortValueProps(item, SORT_COLUMNS[0])}>
-              <strong>{exceptionTypeLabel(item.type)}</strong>
-              <div className="row-error">{item.summary}</div>
-              <div className="id-line"><span className="mono muted">{item.exceptionNo}</span><CopyValue value={item.exceptionNo} label="复制异常单号" /></div>
-              <div className="muted">{eventSourceLabel(item.source)}</div>
-            </td>
-
-            <td data-label="订单与支付" {...sortValueProps(item, SORT_COLUMNS[1])}>
-              {item.order ? <>
-                <Link className="data-link" href={`/orders/${item.order.orderNo}`}><strong>{item.order.subject}</strong></Link>
-                <div className="id-line"><span className="mono muted">{item.order.orderNo}</span><CopyValue value={item.order.orderNo} label="复制订单号" /></div>
-              </> : "—"}
-              {item.payment && <div className="id-line"><span className="mono muted">{item.payment.paymentNo}</span><CopyValue value={item.payment.paymentNo} label="复制支付单号" /></div>}
-            </td>
-
-            <td data-label="金额 / 流水" {...sortValueProps(item, SORT_COLUMNS[2])}>
-              {item.payment ? <>
-                <strong>{money(item.payment.receivedAmount ?? item.payment.amount)}</strong>
-                {item.payment.receivedAmount && item.payment.receivedAmount !== item.payment.amount && <div className="muted">业务金额 {money(item.payment.amount)}</div>}
-                {item.payment.channelTradeNo
-                  ? <div className="id-line"><span className="mono muted">{item.payment.channelTradeNo}</span><CopyValue value={item.payment.channelTradeNo} label="复制渠道流水" /></div>
-                  : <div className="muted">无渠道流水</div>}
-              </> : "—"}
-            </td>
-
-            <td data-label="状态" {...sortValueProps(item, SORT_COLUMNS[3])}>
-              <Status value={item.status} />
-              <div className={`severity ${item.severity}`}>{exceptionSeverityLabel(item.severity)}</div>
-              {item.resolution && <div className="muted">{item.resolution}</div>}
-              {item.resolutionRef && <div className="id-line"><span className="mono muted">{item.resolutionRef}</span><CopyValue value={item.resolutionRef} label="复制处置凭证" /></div>}
-            </td>
-
-            <td data-label="发现时间" {...sortValueProps(item, SORT_COLUMNS[4])}>{time(item.detectedAt)}{item.resolvedAt && <div className="muted">完成 {time(item.resolvedAt)}</div>}</td>
-
-            <td data-label="处置">
-              <div className="row-actions">
-                {item.status === "OPEN" && <button className="button secondary" disabled={working !== ""} onClick={() => void update(item, "PROCESSING")}>{working === item.id ? "处理中…" : "开始处理"}</button>}
-                {["OPEN", "PROCESSING"].includes(item.status) && <>
-                  <button className="button" disabled={working !== ""} onClick={() => openFinal(item, "RESOLVED")}>标记解决</button>
-                  <button className="button danger" disabled={working !== ""} onClick={() => openFinal(item, "IGNORED")}>忽略</button>
-                </>}
-              </div>
-            </td>
-          </tr>)}</tbody>
-        </table></div>
+        <ListCard
+          toolbar={<><ToolbarNote>共 {rows.length} 条异常</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
+          pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
+        >
+          <Table<PaymentException>
+            className="list-table"
+            columns={columns}
+            data={pager.rows}
+            rowKey="id"
+            pagination={false}
+            borderCell={false}
+            loading={false}
+            noDataElement={<div className="empty compact">没有符合筛选条件的异常</div>}
+          />
+        </ListCard>
       </LoadingState>
-    </Section>
+    </ListPage>
 
     {pending && <Modal
       title={pending.next === "RESOLVED" ? "记录异常解决结果" : "确认忽略异常"}
@@ -166,10 +222,10 @@ export function Exceptions() {
 
         <label>
           {pending.next === "RESOLVED" ? "解决说明" : "忽略原因"}
-          <textarea
+          <Input.TextArea
             rows={4}
             value={resolution}
-            onChange={event => setResolution(event.target.value)}
+            onChange={setResolution}
             placeholder={pending.next === "RESOLVED" ? "例如：已核对渠道流水并完成原路退款" : "例如：确认是测试交易，无需继续处置"}
             autoFocus
           />
@@ -177,16 +233,17 @@ export function Exceptions() {
 
         {pending.next === "RESOLVED" && <label>
           处置凭证（可选）
-          <input value={resolutionRef} onChange={event => setResolutionRef(event.target.value)} placeholder="退款单号 / 外部凭证号" />
+          <Input value={resolutionRef} onChange={setResolutionRef} placeholder="退款单号 / 外部凭证号" />
         </label>}
 
         {pending.next === "IGNORED" && <div className="dialog-warning">忽略后该异常将退出待处理队列，但处置记录仍会永久保留。</div>}
 
         <div className="dialog-actions">
-          <button className={pending.next === "IGNORED" ? "button danger" : "button"} disabled={!resolution.trim() || working !== ""} onClick={() => void submitFinal()}>
+          {/* 忽略是「不再处理」，主按钮改成 danger 主题，让确认动作与后果一致 */}
+          <Button type="primary" status={pending.next === "IGNORED" ? "danger" : undefined} disabled={!resolution.trim() || working !== ""} onClick={() => void submitFinal()}>
             {working ? "提交中…" : pending.next === "RESOLVED" ? "确认解决" : "确认忽略"}
-          </button>
-          <button className="button secondary" disabled={working !== ""} onClick={() => setPending(null)}>取消</button>
+          </Button>
+          <Button disabled={working !== ""} onClick={() => setPending(null)}>取消</Button>
         </div>
       </div>
     </Modal>}

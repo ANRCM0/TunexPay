@@ -1,9 +1,12 @@
 "use client";
 
+import { Button, DatePicker, Descriptions, Form, Input, Select, Switch, Table } from "@arco-design/web-react";
+import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
-import { CopyValue, LoadingState, Modal, PageHead, Section, SortableTh, Status, Toast, Toggle, sortValueProps, time, toLocalDateTimeInput } from "./common";
+import { sortRows, type SortColumn } from "../lib/sort";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
+import { ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Scope = "READ" | "OPERATE" | "FINANCIAL";
 type Tool = { name:string; description:string; inputSchema:Record<string,unknown>; scope:Scope };
@@ -28,58 +31,84 @@ const scopeCopy:Record<Scope,string>={
   FINANCIAL:"运维 + 创建需要人工批准的资金动作",
 };
 
+// Scope 选项沿用原来的展示文案：FINANCIAL 带 -request 后缀，提醒这一类动作只会创建待审批请求。
+const SCOPE_OPTIONS = [
+  { label: "READ", value: "READ" },
+  { label: "OPERATE", value: "OPERATE" },
+  { label: "FINANCIAL-request", value: "FINANCIAL" },
+];
+
 function eligibleTools(tools:Tool[]|null|undefined,scope:Scope){ return (tools??[]).filter(tool=>rank[tool.scope]<=rank[scope]); }
 
-function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|null|undefined;scope:Scope;selected:string[];onChange:(value:string[])=>void}){
-  const eligible=eligibleTools(tools,scope);
-  const groups=(["READ","OPERATE","FINANCIAL"] as Scope[]).map(group=>[group,eligible.filter(tool=>tool.scope===group)] as const).filter(([,items])=>items.length);
-  const set=new Set(selected);
-  return <div className="settings-events">{groups.flatMap(([group,items])=>[
-    <div className="muted" key={`head-${group}`} style={{gridColumn:"1 / -1",marginTop:6}}><strong>{group}</strong> · {scopeCopy[group]}</div>,
-    ...items.map(tool=><label className="event-option" key={tool.name}>
-      <input type="checkbox" checked={set.has(tool.name)} onChange={event=>{
-        const next=new Set(selected); if(event.target.checked)next.add(tool.name);else next.delete(tool.name); onChange([...next]);
-      }}/>
-      <span><strong>{tool.name}</strong><em>{tool.description}</em></span>
-    </label>)
-  ])}</div>;
+// DatePicker 回传 "YYYY-MM-DD HH:mm"，toLocalDateTimeInput 回传 "YYYY-MM-DDTHH:mm"。
+// 两种形式都按本地时间解析：ES 只保证带 T 的形式是本地时间，所以先把空格换成 T。
+function toIsoOrNull(value:string):string|null {
+  return value ? new Date(value.replace(" ", "T")).toISOString() : null;
+}
+function toPickerDate(value:string):Date|undefined {
+  return value ? new Date(value.replace(" ", "T")) : undefined;
 }
 
-function ClientCard({client,tools,busy,onBusy,onNotice,reload,onToken}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onToken:(token:string,name:string)=>void}){
+/**
+ * 工具选择表：勾选行即加入 Tool Allowlist。
+ *
+ * 原来按 Scope 分组的标题（"READ · 只读查询"）搬到了 Scope 列里，
+ * 说明文案一字未改；用表而不是复选框清单，是为了和其余三张表保持同一套版式。
+ */
+function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|null|undefined;scope:Scope;selected:string[];onChange:(value:string[])=>void}){
+  const rows=useMemo(()=>eligibleTools(tools,scope).sort((a,b)=>rank[a.scope]-rank[b.scope]),[tools,scope]);
+  const columns:ColumnProps<Tool>[]=[
+    {title:"Tool",dataIndex:"name",width:220,render:(_:unknown,tool:Tool)=><code>{tool.name}</code>},
+    {title:"Scope",dataIndex:"scope",width:250,render:(_:unknown,tool:Tool)=><><code>{tool.scope}</code><div className="muted">{scopeCopy[tool.scope]}</div></>},
+    {title:"说明",dataIndex:"description"},
+  ];
+  return <Table<Tool>
+    className="list-table"
+    columns={columns}
+    data={rows}
+    rowKey="name"
+    pagination={false}
+    borderCell={false}
+    rowSelection={{selectedRowKeys:selected,onChange:(keys)=>onChange(keys.map(String))}}
+    noDataElement={<div className="empty compact">当前 Scope 下没有可用工具</div>}
+  />;
+}
+
+/** 客户端编辑表单：从表格的「编辑」进来，保存后关掉弹窗并提示。 */
+function ClientEditor({client,tools,busy,onBusy,onNotice,reload,onSaved}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onSaved:()=>void}){
   const [name,setName]=useState(client.name),[scope,setScope]=useState<Scope>(client.scope),[enabled,setEnabled]=useState(client.enabled);
   const [expiresAt,setExpiresAt]=useState(toLocalDateTimeInput(client.expiresAt));
   const [allowed,setAllowed]=useState(client.allowedTools);
   useEffect(()=>{setName(client.name);setScope(client.scope);setEnabled(client.enabled);setExpiresAt(toLocalDateTimeInput(client.expiresAt));setAllowed(client.allowedTools);},[client]);
-  function changeScope(next:Scope){setScope(next);const eligible=new Set(eligibleTools(tools,next).map(t=>t.name));setAllowed(current=>current.filter(name=>eligible.has(name)));}
+  function changeScope(next:Scope){setScope(next);const eligible=new Set(eligibleTools(tools,next).map(t=>t.name));setAllowed(current=>current.filter(value=>eligible.has(value)));}
 
   async function save(){
     onBusy(true);onNotice(null);
     try{
       await api(`/mcp/clients/${client.id}`,{method:"POST",body:JSON.stringify({
-        revision:client.revision,name,scope,enabled,allowedTools:allowed,expiresAt:expiresAt?new Date(expiresAt).toISOString():null,
+        revision:client.revision,name,scope,enabled,allowedTools:allowed,expiresAt:toIsoOrNull(expiresAt),
       })});
-      await reload();onNotice({type:"ok",text:`${name} 权限已保存。`});
+      await reload();onNotice({type:"ok",text:`${name} 权限已保存。`});onSaved();
     }catch(cause){onNotice({type:"error",text:cause instanceof Error?cause.message:"保存失败"});}finally{onBusy(false);}
   }
-  async function rotate(){
-    if(!window.confirm(`轮换「${client.name}」的 MCP Token？旧 Token 会立即失效。`))return;
-    onBusy(true);onNotice(null);
-    try{
-      const result=await api<{data:{client:Client;token:string}}>(`/mcp/clients/${client.id}/rotate`,{method:"POST",body:"{}"});
-      onToken(result.data.token,client.name);await reload();
-    }catch(cause){onNotice({type:"error",text:cause instanceof Error?cause.message:"轮换失败"});}finally{onBusy(false);}
-  }
-  return <fieldset className="settings-group" disabled={busy}>
-    <div className="settings-group-head"><div><h3>{client.name}</h3><p><code>{client.tokenPrefix}</code> · 上次使用 {time(client.lastUsedAt)}</p></div><Toggle checked={enabled} onChange={setEnabled} label="允许访问"/></div>
-    <div className="settings-grid">
-      <label>名称<input value={name} maxLength={120} onChange={e=>setName(e.target.value)}/></label>
-      <label>最大 Scope<select value={scope} onChange={e=>changeScope(e.target.value as Scope)}><option value="READ">READ</option><option value="OPERATE">OPERATE</option><option value="FINANCIAL">FINANCIAL-request</option></select></label>
-      <label>有效期（空=不过期）<input type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/></label>
-    </div>
-    <div className="settings-group-head"><div><h3>Tool Allowlist</h3><p>Scope 只是上限；真正暴露给外部 Agent 的工具还必须在这里被勾选。</p></div></div>
-    <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
-    <div className="settings-actions"><button className="button" type="button" onClick={()=>void save()}>保存权限</button><button className="button secondary" type="button" onClick={()=>void rotate()}>轮换 Token</button></div>
-  </fieldset>;
+
+  return <Form layout="vertical" onSubmit={()=>void save()}>
+    <fieldset className="settings-group" disabled={busy}>
+      {/* 组头保留原来的名称、Token 前缀与上次使用时间，并把「允许访问」开关留在这里 */}
+      <div className="settings-group-head">
+        <div><h3>{client.name}</h3><p><code>{client.tokenPrefix}</code> · 上次使用 {time(client.lastUsedAt)}</p></div>
+        <label style={{display:"inline-flex",alignItems:"center",gap:8}}><Switch checked={enabled} onChange={setEnabled} aria-label="允许访问"/><span>允许访问</span></label>
+      </div>
+      <div className="settings-grid">
+        <label>名称<Input value={name} maxLength={120} onChange={setName}/></label>
+        <label>最大 Scope<Select value={scope} onChange={value=>changeScope(value as Scope)} options={SCOPE_OPTIONS}/></label>
+        <label>有效期（空=不过期）<DatePicker value={toPickerDate(expiresAt)} showTime format="YYYY-MM-DD HH:mm" style={{width:"100%"}} onChange={value=>setExpiresAt(value??"")}/></label>
+      </div>
+      <div className="settings-group-head"><div><h3>Tool Allowlist</h3><p>Scope 只是上限；真正暴露给外部 Agent 的工具还必须在这里被勾选。</p></div></div>
+      <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
+      <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy}>保存权限</Button><Button type="secondary" disabled={busy} onClick={onSaved}>取消</Button></div>
+    </fieldset>
+  </Form>;
 }
 
 // 审批表：状态列展示审批状态，排序按状态枚举码。
@@ -109,33 +138,82 @@ export function McpAccessPanel(){
   const {data:clients,loading,error,reload}=useApi<Client[]>("/mcp/clients");
   const {data:audits,loading:auditsLoading,error:auditsError,reload:reloadAudits}=useApi<Audit[]>("/mcp/audits?limit=100",5000);
   const {data:approvals,loading:approvalsLoading,error:approvalsError,reload:reloadApprovals}=useApi<Approval[]>("/mcp/approvals",5000);
-  const [approvalSort, setApprovalSort] = useState(() => null as ReturnType<typeof nextSortState>);
-  const [auditSort, setAuditSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const { sort: approvalSort, onSort: onApprovalSort } = useTableSort<Approval>();
+  const { sort: auditSort, onSort: onAuditSort } = useTableSort<Audit>();
   const approvalRows = useMemo(() => sortRows(approvals ?? [], APPROVAL_COLUMNS, approvalSort), [approvals, approvalSort]);
   const auditRows = useMemo(() => sortRows(audits ?? [], MCP_AUDIT_COLUMNS, auditSort), [audits, auditSort]);
+  const approvalPager = useClientPager(approvalRows, 20);
+  const auditPager = useClientPager(auditRows, 20);
+  const clientPager = useClientPager(clients ?? [], 20);
   const [name,setName]=useState("Hermes"),[scope,setScope]=useState<Scope>("READ"),[enabled,setEnabled]=useState(true),[expiresAt,setExpiresAt]=useState("");
   const [allowed,setAllowed]=useState<string[]>([]);
   const [issued,setIssued]=useState<{token:string;name:string}|null>(null);
+  // 编辑、轮换、审批三件事各自需要一次确认：分别用三个状态驱动弹窗，避免用 window.confirm 这种浏览器原生对话框
+  const [editing,setEditing]=useState<Client|null>(null);
+  const [rotating,setRotating]=useState<Client|null>(null);
+  const [deciding,setDeciding]=useState<{row:Approval;decision:"approve"|"reject"}|null>(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState<{type:"ok"|"error";text:string}|null>(null);
   const eligible=useMemo(()=>eligibleTools(tools,scope),[tools,scope]);
   useEffect(()=>{ if(tools?.length&&!allowed.length)setAllowed(eligible.map(tool=>tool.name)); },[tools,scope]);
 
   function changeScope(next:Scope){setScope(next);setAllowed(eligibleTools(tools,next).map(tool=>tool.name));}
-  async function create(event:React.FormEvent){
-    event.preventDefault();setBusy(true);setNotice(null);
+  async function create(){
+    setBusy(true);setNotice(null);
     try{
       const result=await api<{data:{client:Client;token:string}}>("/mcp/clients",{method:"POST",body:JSON.stringify({
-        name,scope,enabled,allowedTools:allowed,expiresAt:expiresAt?new Date(expiresAt).toISOString():null,
+        name,scope,enabled,allowedTools:allowed,expiresAt:toIsoOrNull(expiresAt),
       })});
       setIssued({token:result.data.token,name:result.data.client.name});await reload();setNotice({type:"ok",text:"MCP 客户端已创建。Token 只会显示这一次。"});
     }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"创建失败"});}finally{setBusy(false);}
   }
-  async function decide(id:string,decision:"approve"|"reject"){
-    if(decision==="approve"&&!window.confirm("批准后会立即调用 TuneXPay 原有支付服务执行该动作。确认继续？"))return;
+  async function rotate(client:Client){
     setBusy(true);setNotice(null);
-    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});await reloadApprovals();setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});}
+    try{
+      const result=await api<{data:{client:Client;token:string}}>(`/mcp/clients/${client.id}/rotate`,{method:"POST",body:"{}"});
+      setRotating(null);setIssued({token:result.data.token,name:client.name});await reload();
+    }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"轮换失败"});}finally{setBusy(false);}
+  }
+  async function decide(id:string,decision:"approve"|"reject"){
+    setBusy(true);setNotice(null);
+    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});setDeciding(null);await reloadApprovals();setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});}
     catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"处理失败"});}finally{setBusy(false);}
   }
+
+  const clientColumns:ColumnProps<Client>[]=[
+    {title:"客户端",dataIndex:"name",render:(_:unknown,client:Client)=><><strong>{client.name}</strong><div className="id-line"><span className="mono muted">{client.tokenPrefix}</span></div></>},
+    {title:"最大 Scope",dataIndex:"scope",width:250,render:(_:unknown,client:Client)=><><code>{client.scope}</code><div className="muted">{scopeCopy[client.scope]}</div></>},
+    {title:"工具",dataIndex:"allowedTools",width:150,render:(_:unknown,client:Client)=><>{client.allowedTools.length} 个<div className="muted">当前 Scope 共 {eligibleTools(tools,client.scope).length} 个</div></>},
+    {title:"状态",dataIndex:"enabled",width:110,render:(_:unknown,client:Client)=><Status value={client.enabled?"ACTIVE":"DISABLED"}/>},
+    {title:"有效期",dataIndex:"expiresAt",width:180,render:(_:unknown,client:Client)=>client.expiresAt?time(client.expiresAt):"不过期"},
+    {title:"上次使用",dataIndex:"lastUsedAt",width:180,render:(_:unknown,client:Client)=>time(client.lastUsedAt)},
+    {title:"操作",dataIndex:"actions",width:180,render:(_:unknown,client:Client)=><>
+      <button type="button" className="link-button" disabled={busy} onClick={()=>setEditing(client)}>编辑</button>{" "}
+      <button type="button" className="link-button" disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</button>
+    </>},
+  ];
+
+  const approvalColumns:ColumnProps<Approval>[]=[
+    {title:sortHeader(APPROVAL_COLUMNS[0],approvalSort,onApprovalSort),dataIndex:"createdAt",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[0])}>{time(row.createdAt)}</span>},
+    {title:sortHeader(APPROVAL_COLUMNS[1],approvalSort,onApprovalSort),dataIndex:"requester",width:170,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[1])}><code>{row.clientId??row.requestedBy}</code></span>},
+    {title:sortHeader(APPROVAL_COLUMNS[2],approvalSort,onApprovalSort),dataIndex:"action",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[2])}><code>{row.action}</code></span>},
+    {title:sortHeader(APPROVAL_COLUMNS[3],approvalSort,onApprovalSort),dataIndex:"summary",render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[3])}>{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</span>},
+    {title:sortHeader(APPROVAL_COLUMNS[4],approvalSort,onApprovalSort),dataIndex:"status",width:130,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[4])}><Status value={row.status}/></span>},
+    {title:sortHeader(APPROVAL_COLUMNS[5],approvalSort,onApprovalSort),dataIndex:"expiresAt",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</span>},
+    {title:"操作",dataIndex:"actions",width:140,render:(_:unknown,row:Approval)=>row.status==="PENDING"?<>
+      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</button>{" "}
+      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</button>
+    </>:null},
+  ];
+
+  const auditColumns:ColumnProps<Audit>[]=[
+    {title:sortHeader(MCP_AUDIT_COLUMNS[0],auditSort,onAuditSort),dataIndex:"createdAt",width:180,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[0])}>{time(row.createdAt)}</span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[1],auditSort,onAuditSort),dataIndex:"clientName",width:180,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[1])}>{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[2],auditSort,onAuditSort),dataIndex:"scope",width:130,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[2])}><code>{row.scope}</code></span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[3],auditSort,onAuditSort),dataIndex:"tool",width:220,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[3])}><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[4],auditSort,onAuditSort),dataIndex:"success",width:130,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[4])}><Status value={row.success?"SUCCESS":"FAILED"}/></span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[5],auditSort,onAuditSort),dataIndex:"durationMs",width:110,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[5])}>{row.durationMs} ms</span>},
+    {title:sortHeader(MCP_AUDIT_COLUMNS[6],auditSort,onAuditSort),dataIndex:"ipAddress",width:180,render:(_:unknown,row:Audit)=><span {...sortValueProps(row,MCP_AUDIT_COLUMNS[6])}>{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></span>},
+  ];
 
   return <>
     {notice&&<Toast type={notice.type} text={notice.text} onClose={()=>setNotice(null)}/>}
@@ -143,70 +221,105 @@ export function McpAccessPanel(){
       <p className="dialog-copy">把它保存到 {issued.name} 的 MCP 配置中。TuneXPay 只保存哈希，关闭后无法再次查看明文。</p>
       <div className="credential-secret"><code>{issued.token}</code><CopyValue value={issued.token} label="复制 Token"/></div>
       {info?.endpoint&&<><p className="dialog-copy">Streamable HTTP Endpoint</p><div className="credential-secret"><code>{info.endpoint}</code><CopyValue value={info.endpoint} label="复制地址"/></div></>}
-      <div className="dialog-actions"><button className="button" type="button" onClick={()=>setIssued(null)}>我已保存</button></div>
+      <div className="dialog-actions"><Button type="primary" onClick={()=>setIssued(null)}>我已保存</Button></div>
     </Modal>}
+
+    {editing&&<Modal title={`编辑客户端 · ${editing.name}`} onClose={()=>{ if(!busy)setEditing(null); }} dismissible={!busy}>
+      <ClientEditor client={editing} tools={tools} busy={busy} onBusy={setBusy} onNotice={setNotice} reload={reload} onSaved={()=>setEditing(null)}/>
+    </Modal>}
+
+    {rotating&&<ConfirmModal
+      title={`轮换「${rotating.name}」的 MCP Token`}
+      copy="旧 Token 会立即失效，正在使用它的 Agent 会立刻被拒绝。"
+      warning="请先确认新的 Token 已经能写进 Agent 配置：这里一旦轮换，旧 Token 无法恢复。"
+      danger
+      confirmLabel="轮换 Token"
+      working={busy}
+      onClose={()=>{ if(!busy)setRotating(null); }}
+      onConfirm={()=>void rotate(rotating)}
+    />}
+
+    {deciding&&<ConfirmModal
+      title={deciding.decision==="approve"?`批准动作 · ${deciding.row.action}`:`拒绝动作 · ${deciding.row.action}`}
+      copy={deciding.decision==="approve"?"批准后会立即调用 TuneXPay 原有支付服务执行该动作。确认继续？":"拒绝后该动作不会执行，需要时请让客户端重新发起审批。"}
+      warning="批准即代表你已核对动作说明里的金额与对象；执行后管理台不提供撤销入口。"
+      danger={deciding.decision==="approve"}
+      confirmLabel={deciding.decision==="approve"?"批准并执行":"拒绝"}
+      working={busy}
+      onClose={()=>{ if(!busy)setDeciding(null); }}
+      onConfirm={()=>void decide(deciding.row.id,deciding.decision)}
+    />}
 
     <PageHead eyebrow="MCP Access" title="MCP / Agent Access" copy="TuneXPay 不运行 Agent；这里只给 Codex、Hermes、OpenClaw、DSH 等外部 Agent 发放 MCP 权限和工具。" />
 
     <Section title="MCP Endpoint">
-      <LoadingState loading={infoLoading} error={infoError}>{info&&<div className="settings-group">
-        <div><strong>{info.enabled?"MCP 已启用":"MCP 未启用"}</strong><p className="muted">环境变量里的旧 MCP_TOKEN 仍保留为兼容的 READ-only 凭证；新 Agent 请使用下面的独立客户端。</p></div>
-        <div className="credential-secret"><code>{info.endpoint}</code><CopyValue value={info.endpoint} label="复制地址"/></div>
-      </div>}</LoadingState>
+      <LoadingState loading={infoLoading} error={infoError}>{info&&/* 服务信息用 Descriptions：标签与值的对齐交给组件库，长 Endpoint 由 credential-secret 负责换行 */<Descriptions
+        column={1}
+        border
+        data={[
+          { label: "运行状态", value: <strong>{info.enabled?"MCP 已启用":"MCP 未启用"}</strong> },
+          { label: "Streamable HTTP Endpoint", value: <div className="credential-secret"><code>{info.endpoint}</code><CopyValue value={info.endpoint} label="复制地址"/></div> },
+          { label: "旧凭证兼容", value: <span className="muted">环境变量里的旧 MCP_TOKEN 仍保留为兼容的 READ-only 凭证；新 Agent 请使用下面的独立客户端。</span> },
+        ]}
+      />}</LoadingState>
     </Section>
 
-    <Section title="创建外部 Agent 凭证">
-      <LoadingState loading={toolsLoading} error={toolsError}>
-        <form onSubmit={event=>void create(event)}><fieldset className="settings-group" disabled={busy}>
-          <div className="settings-grid">
-            <label>客户端名称<input required value={name} maxLength={120} placeholder="Hermes / Codex / OpenClaw" onChange={e=>setName(e.target.value)}/></label>
-            <label>最大 Scope<select value={scope} onChange={e=>changeScope(e.target.value as Scope)}><option value="READ">READ</option><option value="OPERATE">OPERATE</option><option value="FINANCIAL">FINANCIAL-request</option></select></label>
-            <label>有效期（空=不过期）<input type="datetime-local" value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/></label>
-          </div>
-          <Toggle checked={enabled} onChange={setEnabled} label="创建后立即启用"/>
-          <div className="settings-group-head"><div><h3>允许的工具</h3><p>默认选择当前 Scope 下所有工具；可以收窄成某个 Agent 的最小权限集合。</p></div></div>
-          <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
-          <div className="settings-actions"><button className="button" type="submit">生成独立 MCP Token</button></div>
-        </fieldset></form>
-      </LoadingState>
-    </Section>
+    <ListPage>
+      <ListCard toolbar={<><strong>创建外部 Agent 凭证</strong><ToolbarNote>Token 只在创建时显示一次</ToolbarNote></>}>
+        <LoadingState loading={toolsLoading} error={toolsError}>
+          <Form layout="vertical" onSubmit={()=>void create()}><fieldset className="settings-group" disabled={busy}>
+            <div className="settings-grid">
+              <label>客户端名称<Input required value={name} maxLength={120} placeholder="Hermes / Codex / OpenClaw" onChange={setName}/></label>
+              <label>最大 Scope<Select value={scope} onChange={value=>changeScope(value as Scope)} options={SCOPE_OPTIONS}/></label>
+              <label>有效期（空=不过期）<DatePicker value={toPickerDate(expiresAt)} showTime format="YYYY-MM-DD HH:mm" style={{width:"100%"}} onChange={value=>setExpiresAt(value??"")}/></label>
+            </div>
+            <label style={{display:"inline-flex",alignItems:"center",gap:8}}><Switch checked={enabled} onChange={setEnabled} aria-label="创建后立即启用"/><span>创建后立即启用</span></label>
+            <div className="settings-group-head"><div><h3>允许的工具</h3><p>默认选择当前 Scope 下所有工具；可以收窄成某个 Agent 的最小权限集合。</p></div></div>
+            <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
+            <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy}>生成独立 MCP Token</Button></div>
+          </fieldset></Form>
+        </LoadingState>
+      </ListCard>
+    </ListPage>
 
-    <Section title="MCP 客户端" action={<button className="link-button" onClick={()=>void reload()} type="button">刷新</button>}>
-      <LoadingState loading={loading} error={error} empty={!clients?.length} emptyText="还没有外部 Agent 客户端">
-        {clients?.map(client=><ClientCard key={client.id} client={client} tools={tools} busy={busy} onBusy={setBusy} onNotice={setNotice} reload={reload} onToken={(token,name)=>setIssued({token,name})}/>)}
-      </LoadingState>
-    </Section>
+    {/* 相邻两张 ListPage 之间没有现成的外边距规则（admin.css 已冻结），用外层 div 补 16px */}
+    <div style={{ marginTop: 16 }}>
+      <ListPage>
+        <LoadingState loading={loading} error={error} empty={!clients?.length} emptyText="还没有外部 Agent 客户端">
+          <ListCard
+            toolbar={<><strong>MCP 客户端</strong><ToolbarNote>共 {clients?.length ?? 0} 个</ToolbarNote><ToolbarSpacer/><Button size="small" onClick={()=>void reload()}>刷新</Button></>}
+            pagination={<Pager total={clientPager.total} page={clientPager.page} pageSize={clientPager.pageSize} onChange={clientPager.setPage} onPageSizeChange={clientPager.setPageSize}/>}
+          >
+            <Table<Client> className="list-table" columns={clientColumns} data={clientPager.rows} rowKey="id" pagination={false} borderCell={false} loading={false} noDataElement={<div className="empty compact">还没有外部 Agent 客户端</div>}/>
+          </ListCard>
+        </LoadingState>
+      </ListPage>
+    </div>
 
-    <Section title="资金 / 状态动作审批" action={<span className="muted">FINANCIAL 工具只能创建这里的待审批请求</span>}>
-      <LoadingState loading={approvalsLoading} error={approvalsError} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
-        <div className="table-wrap"><table><thead><tr>
-            <SortableTh label="时间" sortKey="createdAt" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <SortableTh label="来源" sortKey="requester" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <SortableTh label="动作" sortKey="action" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <SortableTh label="说明" sortKey="summary" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <SortableTh label="状态" sortKey="status" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <SortableTh label="到期" sortKey="expiresAt" sort={approvalSort} onSort={key => setApprovalSort(nextSortState(approvalSort, key))} />
-            <th scope="col"></th>
-          </tr></thead>
-          <tbody>{approvalRows.map(row=><tr key={row.id}><td {...sortValueProps(row, APPROVAL_COLUMNS[0])}>{time(row.createdAt)}</td><td data-label="来源" {...sortValueProps(row, APPROVAL_COLUMNS[1])}><code>{row.clientId??row.requestedBy}</code></td><td data-label="动作" {...sortValueProps(row, APPROVAL_COLUMNS[2])}><code>{row.action}</code></td><td data-label="说明" {...sortValueProps(row, APPROVAL_COLUMNS[3])}>{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</td><td data-label="状态" {...sortValueProps(row, APPROVAL_COLUMNS[4])}><Status value={row.status}/></td><td data-label="到期" {...sortValueProps(row, APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</td><td data-label="操作">{row.status==="PENDING"&&<><button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"approve")}>批准</button> <button type="button" className="link-button" disabled={busy} onClick={()=>void decide(row.id,"reject")}>拒绝</button></>}</td></tr>)}</tbody>
-        </table></div>
-      </LoadingState>
-    </Section>
+    <div style={{ marginTop: 16 }}>
+      <ListPage>
+        <LoadingState loading={approvalsLoading} error={approvalsError} empty={!approvals?.length} emptyText="暂无待审批或历史动作">
+          <ListCard
+            toolbar={<><strong>资金 / 状态动作审批</strong><ToolbarNote>FINANCIAL 工具只能创建这里的待审批请求</ToolbarNote></>}
+            pagination={<Pager total={approvalPager.total} page={approvalPager.page} pageSize={approvalPager.pageSize} onChange={approvalPager.setPage} onPageSizeChange={approvalPager.setPageSize}/>}
+          >
+            <Table<Approval> className="list-table" columns={approvalColumns} data={approvalPager.rows} rowKey="id" pagination={false} borderCell={false} loading={false} noDataElement={<div className="empty compact">没有待审批或历史动作</div>}/>
+          </ListCard>
+        </LoadingState>
+      </ListPage>
+    </div>
 
-    <Section title="MCP Tool 调用审计" action={<button className="link-button" onClick={()=>void reloadAudits()} type="button">刷新</button>}>
-      <LoadingState loading={auditsLoading} error={auditsError} empty={!audits?.length} emptyText="还没有 MCP Tool 调用">
-        <div className="table-wrap"><table><thead><tr>
-            <SortableTh label="时间" sortKey="createdAt" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="客户端" sortKey="clientName" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="Scope" sortKey="scope" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="Tool" sortKey="tool" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="结果" sortKey="success" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="耗时" sortKey="durationMs" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-            <SortableTh label="来源" sortKey="ipAddress" sort={auditSort} onSort={key => setAuditSort(nextSortState(auditSort, key))} />
-          </tr></thead>
-          <tbody>{auditRows.map(row=><tr key={row.id}><td {...sortValueProps(row, MCP_AUDIT_COLUMNS[0])}>{time(row.createdAt)}</td><td data-label="客户端" {...sortValueProps(row, MCP_AUDIT_COLUMNS[1])}>{row.clientName}<div className="mono muted">{row.clientId??"legacy env"}</div></td><td data-label="Scope" {...sortValueProps(row, MCP_AUDIT_COLUMNS[2])}><code>{row.scope}</code></td><td data-label="Tool" {...sortValueProps(row, MCP_AUDIT_COLUMNS[3])}><code>{row.tool}</code>{row.errorCode&&<div className="row-error">{row.errorCode}</div>}</td><td data-label="结果" {...sortValueProps(row, MCP_AUDIT_COLUMNS[4])}><Status value={row.success?"SUCCESS":"FAILED"}/></td><td data-label="耗时" {...sortValueProps(row, MCP_AUDIT_COLUMNS[5])}>{row.durationMs} ms</td><td data-label="来源" {...sortValueProps(row, MCP_AUDIT_COLUMNS[6])}>{row.ipAddress??"—"}<div className="mono muted">{row.requestId??"—"}</div></td></tr>)}</tbody>
-        </table></div>
-      </LoadingState>
-    </Section>
+    <div style={{ marginTop: 16 }}>
+      <ListPage>
+        <LoadingState loading={auditsLoading} error={auditsError} empty={!audits?.length} emptyText="还没有 MCP Tool 调用">
+          <ListCard
+            toolbar={<><strong>MCP Tool 调用审计</strong><ToolbarNote>共 {auditRows.length} 次调用</ToolbarNote><ToolbarSpacer/><Button size="small" onClick={()=>void reloadAudits()}>刷新</Button></>}
+            pagination={<Pager total={auditPager.total} page={auditPager.page} pageSize={auditPager.pageSize} onChange={auditPager.setPage} onPageSizeChange={auditPager.setPageSize}/>}
+          >
+            <Table<Audit> className="list-table" columns={auditColumns} data={auditPager.rows} rowKey="id" pagination={false} borderCell={false} loading={false} noDataElement={<div className="empty compact">还没有 MCP Tool 调用</div>}/>
+          </ListCard>
+        </LoadingState>
+      </ListPage>
+    </div>
   </>;
 }

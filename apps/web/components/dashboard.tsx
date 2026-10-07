@@ -1,6 +1,6 @@
 "use client";
 
-import { LoadingState, PageHead, Section, Stat, money, time, type StatTone } from "./common";
+import { LoadingState, Section, Stat, money, time, type StatTone } from "./common";
 import { useApi } from "../lib/api";
 import { eventLabel, eventSourceLabel, eventTone } from "../lib/labels";
 
@@ -30,8 +30,29 @@ function alertItems(data: Dashboard): AlertItem[] {
 export function Dashboard() {
   const { data, loading, error } = useApi<Dashboard>("/dashboard", 10_000);
   const alerts = data ? alertItems(data) : [];
+  // 数据更新时刻放在 hero 里：轮询页面（10 秒一次）最容易被误解成"看到的就是此刻"，
+  // 明确标出取样时间，用户才知道这屏数据有多新。
+  const updatedAt = time(new Date().toISOString());
   return <>
-    <PageHead eyebrow="Operations" title="支付运行总览" copy="今天的交易、异常状态和通知投递，集中在这一页。" />
+    <section className="card hero-card">
+      <div className="hero-main">
+        <div className="eyebrow">Operations</div>
+        <h1>支付运行总览</h1>
+        <p className="page-copy">今天的交易、异常状态和通知投递，集中在这一页。</p>
+      </div>
+      <div className="hero-status">
+        <div className="hero-status-item">
+          <span>平台状态</span>
+          <strong className={data && alerts.length ? "tone-bad" : "tone-ok"}>{data ? (alerts.length ? "异常" : "正常") : "—"}</strong>
+        </div>
+        <div className="hero-status-item">
+          <span>活跃应用</span>
+          <strong>{data ? `${data.applications} 个` : "—"}</strong>
+        </div>
+        <div className="hero-status-foot muted">{data ? <>数据更新于 {updatedAt}</> : "正在读取运行状态"}</div>
+        {data && alerts.length > 0 && <span className="hero-badge">{alerts.length} 项待处理</span>}
+      </div>
+    </section>
     <LoadingState loading={loading} error={error}>
       {data && <>
         <div className="grid stats">

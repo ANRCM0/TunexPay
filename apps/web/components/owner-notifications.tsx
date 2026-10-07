@@ -1,10 +1,13 @@
 "use client";
 
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Select, Switch, Table } from "@arco-design/web-react";
+import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { sortRows, type SortColumn } from "../lib/sort";
 import { eventLabel, notificationChannelLabel } from "../lib/labels";
-import { HoverDetail, LoadingState, Section, SortableTh, Status, Toast, Toggle, sortValueProps, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, Status, Toast, sortValueProps, time } from "./common";
+import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Field = {
   key: string;
@@ -33,6 +36,32 @@ const EVENTS = [
   ["COLLECTOR_FAILURE", "采集连续失败", "账单采集连续失败至少三次"],
 ] as const;
 const ALL_EVENTS = EVENTS.map(([value]) => value);
+// 事件选项带上说明文字：只写事件名的话，配置的人无法判断自己会不会收到不该收的通知。
+const EVENT_OPTIONS = EVENTS.map(([value, label, description]) => ({ value, label: `${label} · ${description}` }));
+
+const INSTANCE_STATUS_OPTIONS = [
+  { label: "全部状态", value: "ALL" },
+  { label: "已启用", value: "ENABLED" },
+  { label: "已停用", value: "DISABLED" },
+];
+
+const DELIVERY_STATUS_OPTIONS = [
+  { label: "全部状态", value: "ALL" },
+  { label: "待发送", value: "PENDING" },
+  { label: "发送中", value: "PROCESSING" },
+  { label: "成功", value: "SUCCESS" },
+  { label: "重试耗尽", value: "DEAD" },
+  { label: "已取消", value: "CANCELLED" },
+];
+
+const DELIVERY_COLUMNS: SortColumn<Delivery>[] = [
+  { key: "createdAt", label: "时间", type: "date" },
+  { key: "instance", label: "实例", accessor: (row) => row.instance?.name ?? row.channel },
+  { key: "eventType", label: "事件", accessor: (row) => row.eventType ?? "" },
+  { key: "title", label: "标题" },
+  { key: "status", label: "状态" },
+  { key: "attempts", label: "尝试", type: "number" },
+];
 
 function defaultsFor(plugin: Plugin | undefined): Record<string, unknown> {
   if (!plugin) return {};
@@ -53,54 +82,200 @@ function formValue(field: Field, raw: string): unknown {
   return raw;
 }
 
-function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, clearSecrets, onClearSecret }: {
+function reason(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
+
+/**
+ * 必填校验。
+ *
+ * 原来是原生 `<form required>` 拦空值；控件换成 Arco 受控组件后浏览器不再代劳，
+ * 所以在提交前显式检查一遍，保持「必填项留空就不发请求」的行为。
+ * 密钥字段只看"本次是否填了新值或此前已配置"，避免把已保存的密钥当成缺失。
+ */
+function missingRequired(fields: Field[], config: Record<string, unknown>, secrets: Record<string, string>): string | null {
+  for (const field of fields) {
+    if (!field.required) continue;
+    if (field.secret) {
+      const configured = Boolean(config[`${field.key}Configured`]);
+      if (!configured && !(secrets[field.key] ?? "").trim()) return field.label;
+    } else if (String(config[field.key] ?? "").trim() === "") return field.label;
+  }
+  return null;
+}
+
+/** 插件配置字段：按插件声明的类型渲染成 Arco 控件，密钥一律走 Input.Password 且不回显已保存的值。 */
+function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, clearSecrets, onClearSecret, disabled }: {
   plugin: Plugin; config: Record<string, unknown>; onChange: (key: string, value: unknown) => void;
   secretValues: Record<string, string>; onSecretChange: (key: string, value: string) => void;
   clearSecrets?: Set<string>; onClearSecret?: (key: string, clear: boolean) => void;
+  disabled?: boolean;
 }) {
   return <div className="settings-grid">{plugin.fields.map(field => {
     const configured = Boolean(config[`${field.key}Configured`]);
     const value = field.secret ? (secretValues[field.key] ?? "") : String(config[field.key] ?? "");
     const clearing = Boolean(field.secret && clearSecrets?.has(field.key));
+    // 已保存过的密钥不必重填，只有"从未配置"的必填密钥才要求输入
     const required = Boolean(field.required && (!field.secret || !configured));
-    const control = field.type === "select"
-      ? <select required={required} value={value} onChange={event => onChange(field.key, formValue(field, event.target.value))}>{field.options?.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select>
-      : <input required={required} disabled={clearing} type={field.secret ? "password" : field.type === "number" ? "number" : "text"} value={value} placeholder={field.placeholder} autoComplete={field.secret ? "new-password" : "off"} onChange={event => field.secret ? onSecretChange(field.key, event.target.value) : onChange(field.key, formValue(field, event.target.value))} />;
-    return <label key={field.key}>
-      {field.label}{field.secret && configured ? "（已配置，留空保留）" : ""}
-      {control}
-      {field.secret && configured && !field.required && onClearSecret && <span className="field-clear"><input type="checkbox" checked={clearSecrets?.has(field.key) ?? false} onChange={event => onClearSecret(field.key, event.target.checked)} />清除已保存的值</span>}
-    </label>;
+    const label = field.secret && configured ? `${field.label}（已配置，留空保留）` : field.label;
+
+    return <Form.Item key={field.key} label={label} required={required}>
+      {field.type === "select"
+        ? <Select
+          value={value || undefined}
+          disabled={disabled}
+          placeholder={field.placeholder}
+          options={field.options?.map(option => ({ label: option.label, value: option.value })) ?? []}
+          onChange={raw => onChange(field.key, formValue(field, String(raw ?? "")))}
+        />
+        : field.type === "number"
+          ? <InputNumber
+            value={value === "" ? undefined : Number(value)}
+            disabled={disabled}
+            placeholder={field.placeholder}
+            onChange={raw => onChange(field.key, formValue(field, raw === null || raw === undefined ? "" : String(raw)))}
+          />
+          : field.secret
+            ? <Input.Password
+              value={value}
+              disabled={disabled || clearing}
+              placeholder={field.placeholder}
+              autoComplete="new-password"
+              onChange={raw => onSecretChange(field.key, raw)}
+            />
+            : <Input
+              value={value}
+              disabled={disabled}
+              placeholder={field.placeholder}
+              autoComplete="off"
+              onChange={raw => onChange(field.key, formValue(field, raw))}
+            />}
+      {field.secret && configured && !field.required && onClearSecret && <span className="field-clear">
+        <Checkbox checked={clearSecrets?.has(field.key) ?? false} disabled={disabled} onChange={checked => onClearSecret(field.key, checked)}>清除已保存的值</Checkbox>
+      </span>}
+    </Form.Item>;
   })}</div>;
 }
 
+/** 事件订阅多选：用 Checkbox.Group 而不是手写复选框，全选/受控/禁用由组件统一处理。 */
 function EventPicker({ selected, onChange, disabled }: { selected: string[]; onChange: (events: string[]) => void; disabled?: boolean }) {
-  const set = new Set(selected);
-  return <div className="settings-events">{EVENTS.map(([value, label, description]) => <label className="event-option" key={value}>
-    <input type="checkbox" disabled={disabled} checked={set.has(value)} onChange={event => {
-      const next = new Set(selected); if (event.target.checked) next.add(value); else next.delete(value); onChange([...next]);
-    }} />
-    <span><strong>{label}</strong><em>{description}</em></span>
-  </label>)}</div>;
+  return <Checkbox.Group
+    className="settings-events"
+    value={selected}
+    options={EVENT_OPTIONS}
+    disabled={disabled}
+    onChange={values => onChange(values as string[])}
+  />;
 }
 
-function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reloadDeliveries }: {
-  instance: Instance; plugin: Plugin; busy: boolean; onBusy: (busy: boolean) => void;
+/** 创建段：插件选择在前，字段随插件切换而整套重置。 */
+function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
+  plugins: Plugin[];
+  busy: boolean;
+  onBusy: (busy: boolean) => void;
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
-  reload: () => Promise<void>; reloadDeliveries: () => Promise<void>;
+  onCreated: () => Promise<void>;
+}) {
+  const [pluginCode, setPluginCode] = useState("");
+  const selectedPlugin = useMemo(() => plugins.find(plugin => plugin.code === pluginCode) ?? plugins[0], [plugins, pluginCode]);
+  const [name, setName] = useState("");
+  const [id, setId] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [config, setConfig] = useState<Record<string, unknown>>({});
+  const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [events, setEvents] = useState<string[]>(ALL_EVENTS);
+  const [error, setError] = useState("");
+
+  // 换插件等于换一整套配置字段：重置成新插件的默认值，免得上一个插件的键被带过去。
+  useEffect(() => {
+    if (!selectedPlugin) return;
+    setPluginCode(selectedPlugin.code);
+    setName(selectedPlugin.name);
+    setConfig(defaultsFor(selectedPlugin));
+    setSecrets({});
+    setEvents(ALL_EVENTS);
+    setError("");
+  }, [selectedPlugin?.code]);
+
+  async function create() {
+    if (!selectedPlugin) return;
+    const missing = missingRequired(selectedPlugin.fields, config, secrets);
+    if (missing) { setError(`请填写「${missing}」`); return; }
+    onBusy(true); onNotice(null); setError("");
+    try {
+      const payload: Record<string, unknown> = {};
+      for (const field of selectedPlugin.fields) {
+        const value = field.secret ? secrets[field.key] : config[field.key];
+        if (value !== undefined && value !== "") payload[field.key] = value;
+      }
+      await api("/notification-instances", { method: "POST", body: JSON.stringify({ ...(id ? { id } : {}), name, plugin: selectedPlugin.code, enabled, config: payload, events }) });
+      setId(""); setEnabled(false); setConfig(defaultsFor(selectedPlugin)); setSecrets({});
+      await onCreated();
+      onNotice({ type: "ok", text: "通知实例已创建。" });
+    } catch (cause) { onNotice({ type: "error", text: reason(cause, "创建失败") }); }
+    finally { onBusy(false); }
+  }
+
+  if (!selectedPlugin) return null;
+
+  return <Form layout="vertical" onSubmit={() => void create()}>
+    <div className="settings-grid">
+      <Form.Item label="插件" required>
+        <Select
+          value={selectedPlugin.code}
+          disabled={busy}
+          options={plugins.map(plugin => ({ label: plugin.name, value: plugin.code }))}
+          onChange={value => setPluginCode(String(value))}
+        />
+      </Form.Item>
+      <Form.Item label="实例名称" required>
+        <Input value={name} maxLength={120} disabled={busy} onChange={setName} />
+      </Form.Item>
+      <Form.Item label="实例 ID（可留空自动生成）">
+        <Input value={id} maxLength={60} placeholder="notify-ops-tg" disabled={busy} onChange={value => setId(value.toLowerCase())} />
+      </Form.Item>
+    </div>
+    <ConfigFields
+      plugin={selectedPlugin}
+      config={config}
+      disabled={busy}
+      secretValues={secrets}
+      onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))}
+      onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))}
+    />
+    <div className="settings-group-head">
+      <div><h3>默认订阅</h3><p>创建后仍可逐实例调整。</p></div>
+      <span className="field-clear">
+        <Switch size="small" checked={enabled} disabled={busy} onChange={setEnabled} aria-label="创建后立即启用" />
+        <span>创建后立即启用</span>
+      </span>
+    </div>
+    <EventPicker selected={events} onChange={setEvents} disabled={busy} />
+    {error && <div className="error">{error}</div>}
+    <div className="settings-actions">
+      <Button type="primary" htmlType="submit" loading={busy}>{busy ? "创建中…" : "创建通知实例"}</Button>
+    </div>
+  </Form>;
+}
+
+/** 实例编辑：弹窗内的表单，保存/测试/删除都与列表共用父级的同一套动作。 */
+function InstanceEditor({ instance, plugin, busy, onBusy, onNotice, onSaved, onTest, onRemove, onClose }: {
+  instance: Instance; plugin: Plugin; busy: boolean;
+  onBusy: (busy: boolean) => void;
+  onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
+  onSaved: () => Promise<void>;
+  onTest: () => Promise<void>;
+  onRemove: () => Promise<boolean>;
+  onClose: () => void;
 }) {
   const [name, setName] = useState(instance.name);
   const [enabled, setEnabled] = useState(instance.enabled);
   const [config, setConfig] = useState<Record<string, unknown>>(instance.config);
-  const [events, setEvents] = useState(instance.events);
+  const [events, setEvents] = useState<string[]>(instance.events);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [clearSecrets, setClearSecrets] = useState<Set<string>>(new Set());
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    setName(instance.name); setEnabled(instance.enabled); setConfig(instance.config); setEvents(instance.events);
-    setSecrets({}); setClearSecrets(new Set());
-  }, [instance]);
-
+  // 只回传"本次要改动的配置"：密钥留空表示保留原值，勾选清除才显式送 null。
+  // 把已保存的密钥原样回传既做不到（后端不解密回显），也没必要。
   function payloadConfig() {
     const value: Record<string, unknown> = {};
     for (const field of plugin.fields) {
@@ -113,102 +288,124 @@ function InstanceCard({ instance, plugin, busy, onBusy, onNotice, reload, reload
   }
 
   async function save() {
-    onBusy(true); onNotice(null);
+    const missing = missingRequired(plugin.fields, config, secrets);
+    if (missing) { setError(`请填写「${missing}」`); return; }
+    onBusy(true); onNotice(null); setError("");
     try {
       await api(`/notification-instances/${instance.id}`, { method: "POST", body: JSON.stringify({ name, plugin: instance.plugin, enabled, revision: instance.revision, config: payloadConfig(), events }) });
-      await reload();
+      await onSaved();
       onNotice({ type: "ok", text: `${name} 已保存。` });
-    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "保存失败" }); }
+      // 保存成功后 revision 已经 +1，弹窗里握的还是旧版本号：直接关闭，避免下一次保存撞 409。
+      onClose();
+    } catch (cause) { onNotice({ type: "error", text: reason(cause, "保存失败") }); }
     finally { onBusy(false); }
   }
 
-  async function test() {
-    onBusy(true); onNotice(null);
-    try {
-      await api(`/notification-instances/${instance.id}/test`, { method: "POST", body: "{}" });
-      await reloadDeliveries();
-      onNotice({ type: "ok", text: "测试任务已排队；SUCCESS 才表示上游已接受。" });
-    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "测试失败" }); }
-    finally { onBusy(false); }
-  }
-
-  async function remove() {
-    if (!window.confirm(`删除通知实例「${instance.name}」？有历史投递时会归档并停止未发送任务。`)) return;
-    onBusy(true); onNotice(null);
-    try {
-      await api(`/notification-instances/${instance.id}/delete`, { method: "POST", body: "{}" });
-      await reload();
-      onNotice({ type: "ok", text: "通知实例已删除或归档。" });
-    } catch (cause) { onNotice({ type: "error", text: cause instanceof Error ? cause.message : "删除失败" }); }
-    finally { onBusy(false); }
-  }
-
-  return <form onSubmit={event => { event.preventDefault(); void save(); }}><fieldset className="settings-group" disabled={busy}>
+  return <Form layout="vertical" onSubmit={() => void save()}>
+    <div className="settings-grid">
+      <Form.Item label="实例名称" required>
+        <Input value={name} maxLength={120} disabled={busy} onChange={setName} />
+      </Form.Item>
+      <Form.Item label="启用状态">
+        <span className="field-clear">
+          <Switch checked={enabled} disabled={busy} onChange={setEnabled} aria-label="启用通知实例" />
+          <span>{enabled ? "启用通知实例" : "已停用，不会投递通知"}</span>
+        </span>
+      </Form.Item>
+    </div>
+    <ConfigFields
+      plugin={plugin}
+      config={config}
+      disabled={busy}
+      secretValues={secrets}
+      onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))}
+      onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))}
+      clearSecrets={clearSecrets}
+      onClearSecret={(key, clear) => setClearSecrets(current => { const next = new Set(current); if (clear) next.add(key); else next.delete(key); return next; })}
+    />
     <div className="settings-group-head">
-      <div><h3>{instance.name}</h3><p>{plugin.name} · {instance.id} · {plugin.description}</p></div>
-      <Toggle checked={enabled} onChange={setEnabled} label="启用通知实例" />
+      <div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div>
     </div>
-    <div className="settings-grid"><label>实例名称<input required value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label></div>
-    <ConfigFields plugin={plugin} config={config} onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))} secretValues={secrets} onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))} clearSecrets={clearSecrets} onClearSecret={(key, clear) => setClearSecrets(current => { const next = new Set(current); if (clear) next.add(key); else next.delete(key); return next; })} />
-    <div className="settings-group-head"><div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div></div>
-    <EventPicker selected={events} onChange={setEvents} />
+    <EventPicker selected={events} onChange={setEvents} disabled={busy} />
+    {error && <div className="error">{error}</div>}
     <div className="settings-actions">
-      <button className="button" type="submit">保存</button>
-      <button className="button secondary" type="button" disabled={!instance.enabled} onClick={() => void test()}>发送测试</button>
-      <button className="link-button" type="button" onClick={() => void remove()}>删除</button>
+      <Button type="primary" htmlType="submit" loading={busy}>保存</Button>
+      {/* 停用的实例发不出测试消息，这个禁用条件沿用原来的判断 */}
+      <Button disabled={!instance.enabled || busy} onClick={() => void onTest()}>发送测试</Button>
+      <button type="button" className="link-button danger-link" disabled={busy} onClick={() => void onRemove().then(removed => { if (removed) onClose(); })}>删除</button>
     </div>
-  </fieldset></form>;
+  </Form>;
 }
-
-const DELIVERY_COLUMNS: SortColumn<Delivery>[] = [
-  { key: "createdAt", label: "时间", type: "date" },
-  { key: "instance", label: "实例", accessor: (row) => row.instance?.name ?? row.channel },
-  { key: "eventType", label: "事件", accessor: (row) => row.eventType ?? "" },
-  { key: "title", label: "标题" },
-  { key: "status", label: "状态" },
-  { key: "attempts", label: "尝试", type: "number" },
-];
 
 export function OwnerNotificationsPanel() {
   const { data: plugins, loading: pluginsLoading, error: pluginsError } = useApi<Plugin[]>("/notification-plugins");
   const { data: instances, loading, error, reload } = useApi<Instance[]>("/notification-instances");
   const { data: deliveries, loading: deliveriesLoading, error: deliveriesError, reload: reloadDeliveries } = useApi<Delivery[]>("/notification-deliveries", 10000);
-  const [deliverySort, setDeliverySort] = useState(() => null as ReturnType<typeof nextSortState>);
-  const deliveryRows = useMemo(() => sortRows(deliveries ?? [], DELIVERY_COLUMNS, deliverySort), [deliveries, deliverySort]);
-  const [pluginCode, setPluginCode] = useState("");
-  const selectedPlugin = useMemo(() => plugins?.find(plugin => plugin.code === pluginCode) ?? plugins?.[0], [plugins, pluginCode]);
-  const [newId, setNewId] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newEnabled, setNewEnabled] = useState(false);
-  const [newConfig, setNewConfig] = useState<Record<string, unknown>>({});
-  const [newSecrets, setNewSecrets] = useState<Record<string, string>>({});
-  const [newEvents, setNewEvents] = useState<string[]>(ALL_EVENTS);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [editor, setEditor] = useState<Instance | null>(null);
 
-  useEffect(() => {
-    if (!selectedPlugin) return;
-    setPluginCode(selectedPlugin.code);
-    setNewName(selectedPlugin.name);
-    setNewConfig(defaultsFor(selectedPlugin));
-    setNewSecrets({});
-    setNewEvents(ALL_EVENTS);
-  }, [selectedPlugin?.code]);
+  // 实例筛选：草稿 + 已应用两份状态，点「查询」才生效（输入即过滤在长列表上会明显卡顿）
+  const [draftInstance, setDraftInstance] = useState({ plugin: "ALL", keyword: "", status: "ALL" });
+  const [appliedInstance, setAppliedInstance] = useState({ plugin: "ALL", keyword: "", status: "ALL" });
+  const { sort: instanceSort, onSort: onInstanceSort } = useTableSort<Instance>();
+  // 插件列的展示名与排序列用同一份文本，否则用户看到的顺序会和列头语义对不上
+  const instanceColumns = useMemo<SortColumn<Instance>[]>(() => [
+    { key: "name", label: "实例" },
+    { key: "plugin", label: "插件", accessor: row => plugins?.find(plugin => plugin.code === row.plugin)?.name ?? row.plugin },
+    { key: "status", label: "状态", accessor: row => row.enabled ? "已启用" : "已停用" },
+    { key: "updatedAt", label: "更新时间", type: "date" },
+  ], [plugins]);
+  const instanceRows = useMemo(() => sortRows((instances ?? []).filter(item => {
+    const matchesPlugin = appliedInstance.plugin === "ALL" || item.plugin === appliedInstance.plugin;
+    const matchesStatus = appliedInstance.status === "ALL" || (appliedInstance.status === "ENABLED" ? item.enabled : !item.enabled);
+    const needle = appliedInstance.keyword.trim().toLowerCase();
+    const matchesKeyword = !needle || [item.name, item.id].some(value => value.toLowerCase().includes(needle));
+    return matchesPlugin && matchesStatus && matchesKeyword;
+  }), instanceColumns, instanceSort), [instances, appliedInstance, instanceColumns, instanceSort]);
+  const instancePager = useClientPager(instanceRows, 20);
 
-  async function create(event: React.FormEvent) {
-    event.preventDefault(); if (!selectedPlugin) return;
+  const [draftDelivery, setDraftDelivery] = useState({ instance: "ALL", keyword: "", status: "ALL" });
+  const [appliedDelivery, setAppliedDelivery] = useState({ instance: "ALL", keyword: "", status: "ALL" });
+  const { sort: deliverySort, onSort: onDeliverySort } = useTableSort<Delivery>();
+  const deliveryRows = useMemo(() => sortRows((deliveries ?? []).filter(row => {
+    const matchesInstance = appliedDelivery.instance === "ALL"
+      || (appliedDelivery.instance === "LEGACY" ? !row.instance : row.instance?.id === appliedDelivery.instance);
+    const matchesStatus = appliedDelivery.status === "ALL" || row.status === appliedDelivery.status;
+    const needle = appliedDelivery.keyword.trim().toLowerCase();
+    const matchesKeyword = !needle || [row.title, row.eventType ?? "", row.instance?.name ?? ""].some(value => value.toLowerCase().includes(needle));
+    return matchesInstance && matchesStatus && matchesKeyword;
+  }), DELIVERY_COLUMNS, deliverySort), [deliveries, appliedDelivery, deliverySort]);
+  const deliveryPager = useClientPager(deliveryRows, 20);
+
+  const editorPlugin = editor ? plugins?.find(plugin => plugin.code === editor.plugin) : undefined;
+  const pluginOptions = [{ label: "全部插件", value: "ALL" }, ...(plugins ?? []).map(plugin => ({ label: plugin.name, value: plugin.code }))];
+  const deliveryInstanceOptions = [
+    { label: "全部实例", value: "ALL" },
+    ...(instances ?? []).map(item => ({ label: item.name, value: item.id })),
+    { label: "旧版渠道（无实例）", value: "LEGACY" },
+  ];
+
+  async function testInstance(instance: Instance) {
     setBusy(true); setNotice(null);
     try {
-      const config: Record<string, unknown> = {};
-      for (const field of selectedPlugin.fields) {
-        const value = field.secret ? newSecrets[field.key] : newConfig[field.key];
-        if (value !== undefined && value !== "") config[field.key] = value;
-      }
-      await api("/notification-instances", { method: "POST", body: JSON.stringify({ ...(newId ? { id: newId } : {}), name: newName, plugin: selectedPlugin.code, enabled: newEnabled, config, events: newEvents }) });
-      setNewId(""); setNewEnabled(false); setNewConfig(defaultsFor(selectedPlugin)); setNewSecrets({});
+      await api(`/notification-instances/${instance.id}/test`, { method: "POST", body: "{}" });
+      await reloadDeliveries();
+      setNotice({ type: "ok", text: "测试任务已排队；SUCCESS 才表示上游已接受。" });
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, "测试失败") }); }
+    finally { setBusy(false); }
+  }
+
+  /** 删除实例。返回是否真的删了，调用方据此决定要不要关闭弹窗。 */
+  async function removeInstance(instance: Instance): Promise<boolean> {
+    if (!window.confirm(`删除通知实例「${instance.name}」？有历史投递时会归档并停止未发送任务。`)) return false;
+    setBusy(true); setNotice(null);
+    try {
+      await api(`/notification-instances/${instance.id}/delete`, { method: "POST", body: "{}" });
       await reload();
-      setNotice({ type: "ok", text: "通知实例已创建。" });
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "创建失败" }); }
+      setNotice({ type: "ok", text: "通知实例已删除或归档。" });
+      return true;
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, "删除失败") }); return false; }
     finally { setBusy(false); }
   }
 
@@ -218,66 +415,237 @@ export function OwnerNotificationsPanel() {
       await api(`/notification-deliveries/${id}/retry`, { method: "POST", body: "{}" });
       await reloadDeliveries();
       setNotice({ type: "ok", text: "通知已重新进入待发送队列。" });
-    } catch (cause) { setNotice({ type: "error", text: cause instanceof Error ? cause.message : "重试失败" }); }
+    } catch (cause) { setNotice({ type: "error", text: reason(cause, "重试失败") }); }
     finally { setBusy(false); }
   }
 
+  const instanceTableColumns: ColumnProps<Instance>[] = [
+    {
+      title: sortHeader(instanceColumns[0], instanceSort, onInstanceSort),
+      dataIndex: "name",
+      render: (_: unknown, item: Instance) => <span {...sortValueProps(item, instanceColumns[0])}>
+        <strong>{item.name}</strong>{item.archivedAt && <span className="tag-archived">已归档</span>}
+        <div className="id-line"><span className="mono muted">{item.id}</span><CopyValue value={item.id} label="复制实例 ID" /></div>
+      </span>,
+    },
+    {
+      title: sortHeader(instanceColumns[1], instanceSort, onInstanceSort),
+      dataIndex: "plugin",
+      width: 220,
+      render: (_: unknown, item: Instance) => {
+        const plugin = plugins?.find(candidate => candidate.code === item.plugin);
+        return <span {...sortValueProps(item, instanceColumns[1])}>
+          {plugin?.name ?? item.plugin}
+          <div className="muted">{plugin ? plugin.description : "插件不可用，无法在此编辑"}</div>
+        </span>;
+      },
+    },
+    {
+      // 事件订阅是一组多选值，没有单一可比较的排序键，因此不参与排序也不标注 data-sort-value
+      title: "事件订阅",
+      dataIndex: "events",
+      render: (_: unknown, item: Instance) => <div className="muted">{item.events.length ? item.events.map(eventLabel).join("、") : "未订阅事件"}</div>,
+    },
+    {
+      title: sortHeader(instanceColumns[2], instanceSort, onInstanceSort),
+      dataIndex: "status",
+      width: 110,
+      render: (_: unknown, item: Instance) => <span {...sortValueProps(item, instanceColumns[2])}><Status value={item.enabled ? "ACTIVE" : "DISABLED"} /></span>,
+    },
+    {
+      title: sortHeader(instanceColumns[3], instanceSort, onInstanceSort),
+      dataIndex: "updatedAt",
+      width: 180,
+      render: (_: unknown, item: Instance) => <span {...sortValueProps(item, instanceColumns[3])}>{time(item.updatedAt)}</span>,
+    },
+    {
+      title: "操作",
+      dataIndex: "actions",
+      width: 220,
+      render: (_: unknown, item: Instance) => {
+        if (item.archivedAt) return <span className="muted">已归档，仅作追溯</span>;
+        // 插件缺失（例如插件被下线）时连配置字段都渲染不出来，编辑入口直接禁用更诚实
+        const editable = Boolean(plugins?.some(plugin => plugin.code === item.plugin));
+        return <div className="row-actions">
+          <button type="button" className="link-button" disabled={busy || !editable} onClick={() => setEditor(item)}>编辑</button>
+          <button type="button" className="link-button" disabled={busy || !editable || !item.enabled} onClick={() => void testInstance(item)}>发送测试</button>
+          <button type="button" className="link-button danger-link" disabled={busy} onClick={() => void removeInstance(item)}>删除</button>
+        </div>;
+      },
+    },
+  ];
+
+  const deliveryTableColumns: ColumnProps<Delivery>[] = [
+    {
+      title: sortHeader(DELIVERY_COLUMNS[0], deliverySort, onDeliverySort),
+      dataIndex: "createdAt",
+      width: 180,
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[0])}>{time(row.createdAt)}</span>,
+    },
+    {
+      title: sortHeader(DELIVERY_COLUMNS[1], deliverySort, onDeliverySort),
+      dataIndex: "instance",
+      width: 200,
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[1])}>
+        <strong>{row.instance?.name ?? notificationChannelLabel(row.channel)}</strong>
+        <div className="muted">{notificationChannelLabel(row.instance?.plugin ?? row.channel)}</div>
+      </span>,
+    },
+    {
+      title: sortHeader(DELIVERY_COLUMNS[2], deliverySort, onDeliverySort),
+      dataIndex: "eventType",
+      width: 160,
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[2])}>{eventLabel(row.eventType ?? "—")}</span>,
+    },
+    {
+      title: sortHeader(DELIVERY_COLUMNS[3], deliverySort, onDeliverySort),
+      dataIndex: "title",
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[3])}>{row.title}</span>,
+    },
+    {
+      title: sortHeader(DELIVERY_COLUMNS[4], deliverySort, onDeliverySort),
+      dataIndex: "status",
+      width: 120,
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[4])}>
+        {/* 失败原因默认收起，悬浮或聚焦徽章才展开 —— 与订单、通道列表保持同一套交互 */}
+        <HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail>
+      </span>,
+    },
+    {
+      title: sortHeader(DELIVERY_COLUMNS[5], deliverySort, onDeliverySort),
+      dataIndex: "attempts",
+      width: 90,
+      align: "right",
+      render: (_: unknown, row: Delivery) => <span {...sortValueProps(row, DELIVERY_COLUMNS[5])}>{row.attempts}</span>,
+    },
+    {
+      title: "操作",
+      dataIndex: "actions",
+      width: 90,
+      render: (_: unknown, row: Delivery) => row.status === "DEAD" && row.instance
+        ? <button type="button" className="link-button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>
+        : null,
+    },
+  ];
+
   return <>
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
-    <Section title="通知插件" action={<span className="muted">业务 Webhook 不在这里配置</span>}>
-      <LoadingState loading={pluginsLoading} error={pluginsError} empty={!plugins?.length} emptyText="没有可用的通知插件">
-        <form onSubmit={event => void create(event)}>
-          <fieldset className="settings-group" disabled={busy || !selectedPlugin}>
-            <div className="settings-group-head">
-              <div><h3>创建通知实例</h3><p>一个插件可以创建多个独立实例，例如不同 TG 群或飞书应用。</p></div>
-              <Toggle checked={newEnabled} onChange={setNewEnabled} label="创建后立即启用" />
-            </div>
-            <div className="settings-grid">
-              <label>插件<select required value={selectedPlugin?.code ?? ""} onChange={event => setPluginCode(event.target.value)}>{plugins?.map(plugin => <option value={plugin.code} key={plugin.code}>{plugin.name}</option>)}</select></label>
-              <label>实例名称<input required value={newName} maxLength={120} onChange={event => setNewName(event.target.value)} /></label>
-              <label>实例 ID（可留空自动生成）<input value={newId} maxLength={60} placeholder="notify-ops-tg" onChange={event => setNewId(event.target.value.toLowerCase())} /></label>
-            </div>
-            {selectedPlugin && <ConfigFields plugin={selectedPlugin} config={newConfig} onChange={(key, value) => setNewConfig(current => ({ ...current, [key]: value }))} secretValues={newSecrets} onSecretChange={(key, value) => setNewSecrets(current => ({ ...current, [key]: value }))} />}
-            <div className="settings-group-head"><div><h3>默认订阅</h3><p>创建后仍可逐实例调整。</p></div></div>
-            <EventPicker selected={newEvents} onChange={setNewEvents} />
-            <div className="settings-actions"><button className="button" type="submit" disabled={busy || !selectedPlugin}>{busy ? "创建中…" : "创建通知实例"}</button></div>
-          </fieldset>
-        </form>
-      </LoadingState>
-    </Section>
 
-    <Section title="通知实例" action={<button className="link-button" type="button" disabled={busy} onClick={() => void reload()}>重新加载</button>}>
-      <LoadingState loading={loading} error={error} empty={!instances?.length} emptyText="还没有通知实例；先从上方选择一个插件创建">
-        {instances?.map(instance => {
-          const plugin = plugins?.find(item => item.code === instance.plugin);
-          return plugin ? <InstanceCard key={instance.id} instance={instance} plugin={plugin} busy={busy} onBusy={setBusy} onNotice={setNotice} reload={reload} reloadDeliveries={reloadDeliveries} /> : null;
-        })}
-      </LoadingState>
-    </Section>
+    {/* 一、插件选择与创建：仍然是 ListCard，但控件全部换成 Arco（Select / Input / Switch / Checkbox.Group） */}
+    <ListPage>
+      <ListCard toolbar={<><strong>通知插件</strong><ToolbarNote>业务 Webhook 不在这里配置</ToolbarNote></>}>
+        <LoadingState loading={pluginsLoading} error={pluginsError} empty={!plugins?.length} emptyText="没有可用的通知插件">
+          <CreateInstancePanel
+            plugins={plugins ?? []}
+            busy={busy}
+            onBusy={setBusy}
+            onNotice={setNotice}
+            onCreated={async () => { await reload(); }}
+          />
+        </LoadingState>
+      </ListCard>
+    </ListPage>
 
-    <Section title="通知投递" action={<span className="muted">最近 50 条 · 自动刷新</span>} className="detail-section">
-      <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录">
-        <div className="table-wrap"><table>
-          <thead><tr>
-            <SortableTh label="时间" sortKey="createdAt" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <SortableTh label="实例" sortKey="instance" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <SortableTh label="事件" sortKey="eventType" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <SortableTh label="标题" sortKey="title" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <SortableTh label="状态" sortKey="status" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <SortableTh label="尝试" sortKey="attempts" sort={deliverySort} onSort={key => setDeliverySort(nextSortState(deliverySort, key))} />
-            <th scope="col"></th>
-          </tr></thead>
-          <tbody>{deliveryRows.map(row => <tr key={row.id}>
-            <td {...sortValueProps(row, DELIVERY_COLUMNS[0])}>{time(row.createdAt)}</td>
-            <td data-label="实例" {...sortValueProps(row, DELIVERY_COLUMNS[1])}><strong>{row.instance?.name ?? notificationChannelLabel(row.channel)}</strong><div className="muted">{notificationChannelLabel(row.instance?.plugin ?? row.channel)}</div></td>
-            <td data-label="事件" {...sortValueProps(row, DELIVERY_COLUMNS[2])}>{eventLabel(row.eventType ?? "—")}</td>
-            <td data-label="标题" {...sortValueProps(row, DELIVERY_COLUMNS[3])}>{row.title}</td>
-            <td data-label="状态" {...sortValueProps(row, DELIVERY_COLUMNS[4])}><HoverDetail text={row.lastError} tone="danger"><Status value={row.status} /></HoverDetail></td>
-            <td data-label="尝试" {...sortValueProps(row, DELIVERY_COLUMNS[5])}>{row.attempts}</td>
-            <td data-label="操作">{row.status === "DEAD" && row.instance && <button className="link-button" type="button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>}</td>
-          </tr>)}</tbody>
-        </table></div>
-      </LoadingState>
-    </Section>
+    {/* ListPage 是一张卡：相邻两张卡之间没有现成的间距规则（admin.css 已冻结），
+        因此这里显式给后续两张卡补上外边距，避免三张卡贴在一起。 */}
+    <div>
+      <ListPage>
+        <FilterCard
+          onSearch={() => setAppliedInstance(draftInstance)}
+          onReset={() => { const empty = { plugin: "ALL", keyword: "", status: "ALL" }; setDraftInstance(empty); setAppliedInstance(empty); }}
+        >
+          <FilterItem label="插件"><FilterSelect value={draftInstance.plugin} onChange={plugin => setDraftInstance(current => ({ ...current, plugin }))} options={pluginOptions} /></FilterItem>
+          <FilterItem label="关键字"><FilterInput value={draftInstance.keyword} onChange={keyword => setDraftInstance(current => ({ ...current, keyword }))} placeholder="实例名称 / 实例 ID" /></FilterItem>
+          <FilterItem label="状态"><FilterSelect value={draftInstance.status} onChange={status => setDraftInstance(current => ({ ...current, status }))} options={INSTANCE_STATUS_OPTIONS} /></FilterItem>
+        </FilterCard>
+        <LoadingState loading={loading} error={error} empty={!instances?.length} emptyText="还没有通知实例；先从上方选择一个插件创建">
+          <ListCard
+            toolbar={<>
+              <strong>通知实例</strong>
+              <ToolbarNote>共 {instanceRows.length} 个</ToolbarNote>
+              <ToolbarSpacer />
+              <Button size="small" disabled={busy} onClick={() => void reload()}>刷新</Button>
+            </>}
+            pagination={<Pager total={instancePager.total} page={instancePager.page} pageSize={instancePager.pageSize} onChange={instancePager.setPage} onPageSizeChange={instancePager.setPageSize} />}
+          >
+            <Table<Instance>
+              className="list-table"
+              columns={instanceTableColumns}
+              data={instancePager.rows}
+              rowKey="id"
+              pagination={false}
+              borderCell={false}
+              loading={false}
+              rowClassName={item => item.archivedAt ? "row-archived" : ""}
+              noDataElement={<div className="empty compact">没有符合筛选条件的通知实例</div>}
+            />
+          </ListCard>
+        </LoadingState>
+      </ListPage>
+    </div>
+
+    <div>
+      <ListPage>
+        <FilterCard
+          onSearch={() => setAppliedDelivery(draftDelivery)}
+          onReset={() => { const empty = { instance: "ALL", keyword: "", status: "ALL" }; setDraftDelivery(empty); setAppliedDelivery(empty); }}
+        >
+          <FilterItem label="实例"><FilterSelect value={draftDelivery.instance} onChange={instance => setDraftDelivery(current => ({ ...current, instance }))} options={deliveryInstanceOptions} /></FilterItem>
+          <FilterItem label="状态"><FilterSelect value={draftDelivery.status} onChange={status => setDraftDelivery(current => ({ ...current, status }))} options={DELIVERY_STATUS_OPTIONS} /></FilterItem>
+          <FilterItem label="关键字"><FilterInput value={draftDelivery.keyword} onChange={keyword => setDraftDelivery(current => ({ ...current, keyword }))} placeholder="标题 / 事件 / 实例" /></FilterItem>
+        </FilterCard>
+        <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录">
+          <ListCard
+            toolbar={<>
+              <strong>通知投递</strong>
+              <ToolbarNote>共 {deliveryRows.length} 条 · 接口固定返回最近 50 条 · 自动刷新</ToolbarNote>
+              <ToolbarSpacer />
+              <Button size="small" onClick={() => void reloadDeliveries()}>刷新</Button>
+            </>}
+            pagination={<Pager total={deliveryPager.total} page={deliveryPager.page} pageSize={deliveryPager.pageSize} onChange={deliveryPager.setPage} onPageSizeChange={deliveryPager.setPageSize} />}
+          >
+            <Table<Delivery>
+              className="list-table"
+              columns={deliveryTableColumns}
+              data={deliveryPager.rows}
+              rowKey="id"
+              pagination={false}
+              borderCell={false}
+              loading={false}
+              noDataElement={<div className="empty compact">没有符合筛选条件的投递记录</div>}
+            />
+          </ListCard>
+        </LoadingState>
+      </ListPage>
+    </div>
+
+    {/* 实例编辑放在弹窗里：表格负责"看"，改动集中在一处提交，和应用的编辑入口保持一致 */}
+    {editor && editorPlugin && <Modal
+      className="app-modal"
+      title={`编辑通知实例 · ${editor.name}`}
+      visible
+      onCancel={() => { if (!busy) setEditor(null); }}
+      footer={null}
+      closable={!busy}
+      maskClosable={!busy}
+      escToExit={!busy}
+      autoFocus
+      focusLock
+      alignCenter
+      unmountOnExit
+    >
+      <InstanceEditor
+        key={editor.id}
+        instance={editor}
+        plugin={editorPlugin}
+        busy={busy}
+        onBusy={setBusy}
+        onNotice={setNotice}
+        onSaved={async () => { await reload(); }}
+        onTest={() => testInstance(editor)}
+        onRemove={() => removeInstance(editor)}
+        onClose={() => setEditor(null)}
+      />
+    </Modal>}
   </>;
 }

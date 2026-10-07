@@ -1,45 +1,8 @@
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, Copy, X } from "lucide-react";
+import { Drawer as ArcoDrawer, Modal as ArcoModal } from "@arco-design/web-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SortColumn } from "../lib/sort";
 import { channelLabel } from "../lib/labels";
-
-// 对话框统一行为：Esc 关闭、打开时接管焦点、Tab 在对话框内循环、关闭后把焦点还给原来的触发元素
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
-
-function useDialog(onClose: () => void, dismissible = true) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  const dismissibleRef = useRef(dismissible);
-  closeRef.current = onClose;
-  dismissibleRef.current = dismissible;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    const node = ref.current;
-    const preferred = node?.querySelector<HTMLElement>("[autofocus]");
-    (preferred ?? node)?.focus();
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && dismissibleRef.current) { closeRef.current(); return; }
-      if (event.key !== "Tab" || !node) return;
-      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (!items.length) { event.preventDefault(); node.focus(); return; }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (!active || !node.contains(active)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); return; }
-      if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previous?.focus?.();
-    };
-  }, []);
-  return ref;
-}
 
 export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
@@ -164,23 +127,37 @@ export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = fa
 }
 
 export function Drawer({ title, onClose, wide = false, dismissible = true, children }: { title: string; onClose: () => void; wide?: boolean; dismissible?: boolean; children: React.ReactNode }) {
-  const ref = useDialog(onClose, dismissible);
-  return <div className="drawer-mask" onClick={dismissible ? onClose : undefined}>
-    <div ref={ref} tabIndex={-1} className={wide ? "drawer drawer-wide" : "drawer"} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="drawer-head"><h2>{title}</h2>{dismissible && <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>}</div>
-      <div className="drawer-body">{children}</div>
-    </div>
-  </div>;
+  // 换成 Arco 的 Drawer：焦点管理、Esc 关闭、遮罩点击都由组件库负责，
+  // 与本项目原来手写的那套行为一致（Esc 关闭、打开时接管焦点、关闭后归还焦点）。
+  return <ArcoDrawer
+    className={wide ? "drawer-wide" : undefined}
+    width={wide ? "min(960px, 100vw)" : 560}
+    title={title}
+    visible
+    onCancel={onClose}
+    footer={null}
+    closable={dismissible}
+    maskClosable={dismissible}
+    escToExit={dismissible}
+    unmountOnExit
+  >{children}</ArcoDrawer>;
 }
 
 export function Modal({ title, onClose, dismissible = true, children }: { title: string; onClose: () => void; dismissible?: boolean; children: React.ReactNode }) {
-  const ref = useDialog(onClose, dismissible);
-  return <div className="drawer-mask modal-mask" onClick={dismissible ? onClose : undefined}>
-    <div ref={ref} tabIndex={-1} className="modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="drawer-head"><h2>{title}</h2>{dismissible && <button type="button" className="drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>}</div>
-      <div className="drawer-body">{children}</div>
-    </div>
-  </div>;
+  return <ArcoModal
+    className="app-modal"
+    title={title}
+    visible
+    onCancel={onClose}
+    footer={null}
+    closable={dismissible}
+    maskClosable={dismissible}
+    escToExit={dismissible}
+    autoFocus
+    focusLock
+    alignCenter
+    unmountOnExit
+  >{children}</ArcoModal>;
 }
 
 // 标签页遵循 WAI-ARIA tabs 模式：只有当前标签可 Tab 聚焦（roving tabindex），
