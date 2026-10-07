@@ -333,7 +333,7 @@ export function Applications() {
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} />
         </FilterItem>
       </FilterCard>
-      <LoadingState loading={loading} error={error} empty={!data?.length} emptyText={showArchived ? "没有可显示的应用记录" : "还没有业务应用，点击右上角「新建应用」创建一个"}>
+      <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length} emptyText={showArchived ? "没有可显示的应用记录" : "还没有业务应用，点击右上角「新建应用」创建一个"}>
         <ListCard
           toolbar={<>
             <ToolbarNote>共 {rows.length} 个应用</ToolbarNote>
