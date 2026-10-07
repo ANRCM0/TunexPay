@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { LoadingState, Section, Stat, money, time, type StatTone } from "./common";
 import { useApi } from "../lib/api";
 import { eventLabel, eventSourceLabel, eventTone } from "../lib/labels";
@@ -30,11 +29,8 @@ function alertItems(data: Dashboard): AlertItem[] {
 }
 
 export function Dashboard() {
-  const { data, loading, error } = useApi<Dashboard>("/dashboard", 10_000);
+  const { data, loading, error, updatedAt } = useApi<Dashboard>("/dashboard", 10_000);
   const alerts = data ? alertItems(data) : [];
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
-  // 仅成功获取新数据时更新时间，避免普通重渲染把旧数据误报为最新。
-  useEffect(() => { if (data) setLastUpdatedAt(new Date().toISOString()); }, [data]);
   const riskTone = alerts.some(item => item.tone === "red") ? "tone-bad" : alerts.length ? "tone-warn" : "tone-ok";
   return <>
     <section className="card hero-card">
@@ -55,7 +51,7 @@ export function Dashboard() {
           <strong>{data ? `${data.applications} 个` : "—"}</strong>
         </div>
         <div className="hero-status-foot muted">
-          {lastUpdatedAt ? `${error ? "上次成功更新" : "数据更新于"} ${time(lastUpdatedAt)}` : error ? "暂时无法读取数据" : "正在读取运行状态"}
+          {updatedAt ? `${error ? "上次成功更新" : "数据更新于"} ${time(new Date(updatedAt).toISOString())}` : error ? "暂时无法读取数据" : "正在读取运行状态"}
         </div>
         {data && !error && alerts.length > 0 && <span className="hero-badge">可进入对应页面查看详情</span>}
       </div>
