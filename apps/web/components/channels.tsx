@@ -147,7 +147,7 @@ export function Channels() {
       width: 220,
       render: (_: unknown, channel: Channel) => <div {...sortValueProps(channel, SORT_COLUMNS[2])}>
         <HoverDetail text={checkDetail(channel)} tone={channel.checkStatus === "FAILED" ? "danger" : "muted"}><span className={`badge badge-${channel.checkStatus === "FAILED" ? "danger" : ["PAYMENT_VERIFIED", "API_VERIFIED"].includes(channel.checkStatus) ? "success" : "warning"}`}>{checkLabels[channel.checkStatus]}</span></HoverDetail>
-        {channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新检测</div>}
+        {channel.testPayment && !channel.testPayment.currentRevision && <div className="recovery-note">验收记录来自旧配置，请重新做实付验收</div>}
       </div>,
     },
     {
