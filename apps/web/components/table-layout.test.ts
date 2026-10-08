@@ -10,14 +10,14 @@ describe("list row layout", () => {
   it("reserves a standard row height and keeps horizontal scrolling inside the list", () => {
     expect(css).toMatch(/--list-row-height:\s*88px/);
     expect(css).toMatch(/\.list-table \.arco-table-tr\s*\{\s*height:\s*var\(--list-row-height\)/);
-    expect(css).toMatch(/\.list-table \.arco-table-td\s*\{[^}]*vertical-align:\s*middle/s);
-    expect(css).toMatch(/\.list-table \.arco-table-container[^}]*overflow-x:\s*auto/s);
+    expect(css).toMatch(/\.list-table \.arco-table-td\s*\{[^}]*vertical-align:\s*middle/);
+    expect(css).toMatch(/\.list-table \.arco-table-container[^}]*overflow-x:\s*auto/);
   });
 
   it("enforces a non-wrapping action row, including channel and legacy tables", () => {
-    expect(css).toMatch(/\.list-table \.row-actions,\s*\.list-table \.channel-actions\s*\{[^}]*flex-wrap:\s*nowrap/s);
-    expect(css).toMatch(/\.list-table \.row-actions\s*>\s*\*,\s*\.list-table \.channel-actions\s*>\s*\*\s*\{[^}]*flex:\s*0 0 auto/s);
-    expect(css).toMatch(/\.table-wrap \.row-actions\s*\{[^}]*overflow-x:\s*auto/s);
+    expect(css).toMatch(/\.list-table \.row-actions,\s*\.list-table \.channel-actions\s*\{[^}]*flex-wrap:\s*nowrap/);
+    expect(css).toMatch(/\.list-table \.row-actions\s*>\s*\*,\s*\.list-table \.channel-actions\s*>\s*\*\s*\{[^}]*flex:\s*0 0 auto/);
+    expect(css).toMatch(/\.table-wrap \.row-actions\s*\{[^}]*overflow-x:\s*auto/);
   });
 
   it.each([
