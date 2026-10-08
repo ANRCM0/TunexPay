@@ -176,7 +176,7 @@ export function McpAccessPanel(){
       const result=await api<{data:{client:Client;token:string}}>("/mcp/clients",{method:"POST",body:JSON.stringify({
         name,scope,enabled,allowedTools:allowed,expiresAt:toIsoOrNull(expiresAt),
       })});
-      setIssued({token:result.data.token,name:result.data.client.name});await reload();setNotice({type:"ok",text:"MCP 客户端已创建。Token 只会显示这一次。"});
+      setIssued({token:result.data.token,name:result.data.client.name});setNotice({type:"ok",text:"MCP 客户端已创建。Token 只会显示这一次。"});void reload().catch(()=>setNotice({type:"error",text:"MCP 客户端已创建，但列表刷新失败；请先保存新 Token，不要重复创建。"}));
     }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"创建失败"});}finally{setBusy(false);}
   }
   async function rotate(client:Client){
