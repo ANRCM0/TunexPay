@@ -3,7 +3,8 @@
 import { Button, Checkbox, Form, Input, Select, Switch } from "@arco-design/web-react";
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
-import { LoadingState, Section } from "./common";
+import { CHANNEL_NUMERIC_BOUNDS } from "../lib/settings-validation";
+import { ConfirmModal, LoadingState, Section } from "./common";
 
 type Draft = {
   revision: number; enabled: boolean; collectorEnabled: boolean; appId: string; userId: string;
@@ -29,14 +30,33 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
   const [clear, setClear] = useState(emptyClear);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmReload, setConfirmReload] = useState(false);
+  const [confirmSecretClear, setConfirmSecretClear] = useState(false);
+  const hasSecretClear = Object.values(clear).some(Boolean);
+  const dirty = Boolean(draft && data && (
+    Object.entries(draft).some(([key, value]) => data[key as keyof View] !== value) ||
+    Object.values(secrets).some(Boolean) || hasSecretClear
+  ));
+  const requestReload = () => {
+    if (saving) return;
+    if (dirty) setConfirmReload(true);
+    else void reload();
+  };
   useEffect(() => {
     if (!data) return;
     const { privateKeyConfigured: _private, publicKeyConfigured: _public, watcherTokenConfigured: _token, updatedAt: _updated, ...values } = data;
     setDraft(values); setSecrets(emptySecrets); setClear(emptyClear);
   }, [data]);
   function update<K extends keyof Draft>(key: K, value: Draft[K]) { setDraft(current => current ? { ...current, [key]: value } : current); }
-  async function save() {
-    if (!draft) return;
+  async function save(confirmedClear = false) {
+    if (!draft || saving) return;
+    if (!draft.gateway.trim()) { setNotice({ ok: false, text: "请填写支付宝官方网关。" }); return; }
+    const invalid = CHANNEL_NUMERIC_BOUNDS.find(([key, , min, max]) => {
+      const value = draft[key];
+      return typeof value !== "number" || !Number.isInteger(value) || value < min || value > max;
+    });
+    if (invalid) { setNotice({ ok: false, text: `${invalid[1]}必须为 ${invalid[2]} 到 ${invalid[3]} 之间的整数。` }); return; }
+    if (hasSecretClear && !confirmedClear) { setConfirmSecretClear(true); return; }
     setSaving(true); setNotice(null);
     try {
       await api("/channels/alipay-bill/settings", { method: "POST", body: JSON.stringify({ ...draft,
@@ -46,11 +66,14 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
       }) });
       setSecrets(emptySecrets); setClear(emptyClear);
       setNotice({ ok: true, text: "已保存。新订单立即使用新配置，采集器会在当前页结束后切换，无需重启容器。" });
-      await reload(); await onSaved();
+      try { await reload(); await onSaved(); }
+      catch { setNotice({ ok: false, text: "账单配置已保存，但读取最新配置失败，请手动重新加载；不要重复保存。" }); }
     } catch (cause) { setNotice({ ok: false, text: cause instanceof Error ? cause.message : "保存失败" }); }
     finally { setSaving(false); }
   }
   return <Section title="支付宝账单收款配置" action={<span className="muted">数据库持久化 · 密钥加密 · 仅影响账单通道</span>} className="detail-section">
+    {confirmReload && <ConfirmModal title="放弃未保存的账单配置？" copy="当前的配置修改和临时输入的密钥将丢失，并重新读取服务器已保存的内容。" danger confirmLabel="放弃并重新加载" onClose={() => setConfirmReload(false)} onConfirm={() => { setConfirmReload(false); void reload(); }} />}
+    {confirmSecretClear && <ConfirmModal title="确认清除已保存密钥？" copy="你选择了清除已保存的密钥或令牌。保存后可能立即影响支付验签或账单采集，且无法从管理台恢复原密钥。" danger confirmLabel="确认清除并保存" working={saving} onClose={() => setConfirmSecretClear(false)} onConfirm={() => { setConfirmSecretClear(false); void save(true); }} />}
     {notice && <div className={`operation-notice ${notice.ok ? "ok" : "error"}`}>{notice.text}</div>}
     <LoadingState loading={loading} error={error}>
       {draft && data && /* Arco Form 负责提交与校验编排；字段本身仍是受控的本地草稿，
@@ -86,9 +109,11 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
             <div className="bill-settings-switches">{(["privateKey", "publicKey", "watcherToken"] as const).map(key => <Checkbox key={key} checked={clear[key]} onChange={checked => setClear(current => ({ ...current, [key]: checked }))}>清除{key === "privateKey" ? "应用私钥" : key === "publicKey" ? "支付宝公钥" : "外部令牌"}</Checkbox>)}</div>
           </details>
           <p className="muted">已有账单支付记录或采集断点后，禁止直接更换账号、网关和收款码。密钥可轮换；清除必需密钥前请关闭相应开关。首次回看参数不会重置已有断点。</p>
+          {hasSecretClear && <div className="dialog-warning" role="status">保存将清除选中的已保存密钥或令牌；请确认相关收款与采集能力不会因此中断。</div>}
+          <p className="muted" role="status">{dirty ? "有未保存的账单配置修改。" : "当前配置与服务器一致。"}</p>
           <div className="bill-settings-actions">
-            <Button type="primary" htmlType="submit" loading={saving}>{saving ? "保存中…" : "保存账单配置"}</Button>
-            <Button type="secondary" onClick={() => void reload()}>重新加载（放弃未保存修改）</Button>
+            <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>{saving ? "保存中…" : dirty ? "保存账单配置" : "尚无修改"}</Button>
+            <Button type="secondary" disabled={saving} onClick={requestReload}>重新加载{dirty ? "（有未保存修改）" : ""}</Button>
             <span className="muted">版本 {data.revision}</span>
           </div>
         </fieldset>
@@ -100,5 +125,5 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
 function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   // 保留 type=number + required/min/max 的原生约束：浏览器会在提交前拦住空值与越界值，
   // 与迁移前那批 <input type="number"> 的行为一致，不必再手写一套校验提示。
-  return <label>{label}<Input type="number" value={String(value)} min={min} max={max} step={1} required onChange={next => onChange(Number(next))} /></label>;
+  return <label>{label}<Input type="number" value={Number.isFinite(value) ? String(value) : ""} min={min} max={max} step={1} required onChange={next => onChange(next.trim() === "" ? NaN : Number(next))} /></label>;
 }

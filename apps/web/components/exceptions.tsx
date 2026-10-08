@@ -6,7 +6,7 @@ import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { CopyValue, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
+import { CopyValue, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time, RowAction } from "./common";
 import { FilterCard, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useClientPager, useTableSort } from "./list";
 import { eventSourceLabel, exceptionSeverityLabel, exceptionTypeLabel } from "../lib/labels";
 
@@ -77,7 +77,7 @@ export function Exceptions() {
         : { status: next, resolution: body?.resolution, resolutionRef: body?.resolutionRef || undefined };
       await api(`/exceptions/${item.id}/status`, { method: "POST", body: JSON.stringify(payload) });
       setNotice({ type: "ok", text: `异常单 ${item.exceptionNo} 已更新。` });
-      await reload();
+      void reload().catch(() => setNotice({ type: "error", text: "异常单状态已更新，但列表刷新失败，请手动刷新。" }));
       return true;
     } catch (cause) {
       setNotice({ type: "error", text: cause instanceof Error ? cause.message : "异常单更新失败" });
@@ -168,10 +168,10 @@ export function Exceptions() {
       width: 170,
       // 行内动作用链接式按钮：一张表里会同时出现三个动作，实心按钮会把「可读的数据行」压成按钮墙
       render: (_: unknown, item: PaymentException) => <div className="row-actions">
-        {item.status === "OPEN" && <button type="button" className="link-button" disabled={working !== ""} onClick={() => void update(item, "PROCESSING")}>{working === item.id ? "处理中…" : "开始处理"}</button>}
+        {item.status === "OPEN" && <RowAction disabled={working !== ""} busy={working === item.id} onClick={() => void update(item, "PROCESSING")}>{working === item.id ? "处理中…" : "开始处理"}</RowAction>}
         {["OPEN", "PROCESSING"].includes(item.status) && <>
-          <button type="button" className="link-button" disabled={working !== ""} onClick={() => openFinal(item, "RESOLVED")}>标记解决</button>
-          <button type="button" className="link-button danger-link" disabled={working !== ""} onClick={() => openFinal(item, "IGNORED")}>忽略</button>
+          <RowAction disabled={working !== ""} onClick={() => openFinal(item, "RESOLVED")}>标记解决</RowAction>
+          <RowAction danger disabled={working !== ""} onClick={() => openFinal(item, "IGNORED")}>忽略</RowAction>
         </>}
       </div>,
     },

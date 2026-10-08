@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CopyValue, SortableTh, Tabs, Toast } from "./common";
+import { CopyValue, RowAction, SortableTh, Tabs, Toast } from "./common";
 
 // 这些是「交互细节」的回归护栏。项目没有 jsdom，所以这里只验证标记层面能确定的部分：
 // 读屏器依赖的角色/属性、表格列头关联、以及装饰图标不该被朗读。
@@ -185,5 +185,32 @@ describe("标签页的 roving tabindex", () => {
   it("tablist 容器存在，方向键处理挂在其上", () => {
     const html = renderToStaticMarkup(<Tabs items={items} active="概览" onChange={() => undefined} />);
     expect(html).toContain('role="tablist"');
+  });
+});
+
+describe("行操作按钮的交互一致性", () => {
+  it("危险操作仍是原生按钮且有统一的危险色和可点击区域", () => {
+    const html = renderToStaticMarkup(<RowAction danger onClick={() => undefined}>删除</RowAction>);
+    expect(html).toContain('type="button"');
+    expect(html).toContain("danger-link");
+    expect(html).toContain("row-action");
+    expect(html).toContain(">删除</button>");
+  });
+
+  it("处理中禁止重复触发，向读屏器说明 busy，显示加载标识", () => {
+    const html = renderToStaticMarkup(<RowAction busy onClick={() => undefined}>保存中…</RowAction>);
+    expect(html).toContain('disabled=""');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("action-spinner");
+    expect(html).toContain('aria-hidden="true"');
+  });
+
+  it("禁用状态附带可读的原因，不误用表单提交按钮", () => {
+    const html = renderToStaticMarkup(
+      <RowAction disabled title="请先启用通道" onClick={() => undefined}>验收</RowAction>,
+    );
+    expect(html).toContain('title="请先启用通道"');
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('type="submit"');
   });
 });

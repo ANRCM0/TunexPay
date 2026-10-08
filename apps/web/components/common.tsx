@@ -96,15 +96,39 @@ export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; t
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const timer = window.setTimeout(() => closeRef.current(), 3200);
+    // 错误通常包含排障信息，不能和简短成功提示一样很快消失。
+    const lifetime = type === "error" ? Math.min(16_000, Math.max(8_000, 2_500 + text.length * 80)) : Math.min(8_000, Math.max(3_500, 1_500 + text.length * 55));
+    const timer = window.setTimeout(() => closeRef.current(), lifetime);
     return () => window.clearTimeout(timer);
-  }, [text]);
+  }, [text, type]);
 
   return <div className={`toast toast-${type}`} role={type === "error" ? "alert" : "status"} aria-live="polite">
     <span className="toast-icon" aria-hidden="true">{type === "error" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}</span>
     <span>{text}</span>
     <button type="button" onClick={onClose} aria-label="关闭提示"><X size={14} aria-hidden="true" /></button>
   </div>;
+}
+
+/**
+ * Consistent row action: visual label, loading state and touch target in one place.
+ * All mutations stay in the parent's handler; this control never fires while busy.
+ */
+export function RowAction({ children, onClick, disabled = false, busy = false, danger = false, title }: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  danger?: boolean;
+  title?: string;
+}) {
+  return <button
+    type="button"
+    className={danger ? "link-button danger-link row-action" : "link-button row-action"}
+    onClick={onClick}
+    disabled={disabled || busy}
+    aria-busy={busy || undefined}
+    title={title}
+  >{busy && <span className="action-spinner" aria-hidden="true" />}{children}</button>;
 }
 
 export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = false, warning, working = false, onConfirm, onClose }: {
@@ -121,7 +145,7 @@ export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = fa
     <p className="dialog-copy">{copy}</p>
     {danger && <div className="dialog-warning">{warning || "这是影响当前交易状态的操作，请确认你已经核对支付单信息。"}</div>}
     <div className="dialog-actions">
-      <button type="button" className={danger ? "button danger" : "button"} disabled={working} onClick={onConfirm}>{working ? "处理中…" : confirmLabel}</button>
+      <button type="button" className={danger ? "button danger" : "button"} disabled={working} aria-busy={working || undefined} onClick={onConfirm}>{working && <span className="action-spinner" aria-hidden="true" />}{working ? "处理中…" : confirmLabel}</button>
       <button type="button" className="button secondary" disabled={working} onClick={onClose}>取消</button>
     </div>
   </Modal>;

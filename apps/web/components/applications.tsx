@@ -5,7 +5,7 @@ import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { ConfirmModal, CopyValue, LoadingState, PageHead, Status, Toast, sortValueProps, time } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, PageHead, Status, Toast, sortValueProps, time , RowAction } from "./common";
 import { assignable, type Channel } from "./channels";
 import { applicationRoutingTarget, assignPaymentRouting, routingCreateInput } from "./routing-target";
 import { canAssignGroup, routingStrategyLabels, type RoutingGroup } from "../lib/routing-groups";
@@ -129,6 +129,7 @@ export function Applications() {
   const [confirmName, setConfirmName] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [removed, setRemoved] = useState<DeleteResult | null>(null);
+  const [confirmDiscardCreate, setConfirmDiscardCreate] = useState(false);
   const [pendingDisable, setPendingDisable] = useState<Application | null>(null);
 
   const routingDisabled = groups.loading || channels.loading || !!groups.error || !!channels.error;
@@ -140,7 +141,15 @@ export function Applications() {
     setCreating(true);
   }
 
+  const draftCreateDirty = Boolean(draft.name.trim() || draft.webhookUrl.trim() || draft.routingTarget);
   function closeCreate() {
+    if (saving) return;
+    if (!credentials && draftCreateDirty) { setConfirmDiscardCreate(true); return; }
+    setCreating(false); setCredentials(null); setFormError("");
+  }
+  function discardCreate() {
+    setConfirmDiscardCreate(false);
+    setDraft({ name: "", webhookUrl: "", routingTarget: "" });
     setCreating(false); setCredentials(null); setFormError("");
   }
 
@@ -162,7 +171,8 @@ export function Applications() {
       });
       setCredentials(response.data.credentials);
       setDraft({ name: "", webhookUrl: "", routingTarget: "" });
-      await reload();
+      try { await reload(); }
+      catch { setFormError("应用创建成功，但列表刷新失败。请先保存已显示的凭证，不要重复创建。"); }
     } catch (cause) { setFormError(reason(cause, "创建失败")); }
     finally { setSaving(false); }
   }
@@ -201,7 +211,7 @@ export function Applications() {
     try {
       await api(`/applications/${application.id}/status`, { method: "POST", body: JSON.stringify({ status: next }) });
       setNotice({ type: "ok", text: next === "DISABLED" ? `「${application.name}」已停用。` : `「${application.name}」已启用。` });
-      await reload();
+      void reload().catch(() => setNotice({ type: "error", text: "应用状态已更新，但列表刷新失败，请手动刷新。" }));
       return true;
     } catch (cause) {
       setNotice({ type: "error", text: reason(cause, next === "DISABLED" ? "停用失败" : "启用失败") });
@@ -224,7 +234,7 @@ export function Applications() {
       setRemoved(response.data);
       setNotice({ type: "ok", text: response.data.archived ? `「${application.name}」已删除，业务数据已归档。` : `「${application.name}」已删除。` });
       setConfirmName("");
-      await reload();
+      void reload().catch(() => setRemoveError("应用已删除或归档，但列表刷新失败。请手动刷新，不要重复删除。"));
     } catch (cause) { setRemoveError(reason(cause, "删除失败")); }
     finally { setBusy(""); }
   }
@@ -304,10 +314,10 @@ export function Applications() {
         ? <span className="muted">已归档，仅作追溯</span>
         : <>
           <div className="row-actions">
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => openEdit(item)}>编辑</button>
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => { setRotated(null); setRotating(item); }}>重置凭证</button>
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => void toggleStatus(item)}>{busy === item.id ? "处理中…" : item.status === "ACTIVE" ? "停用" : "启用"}</button>
-            <button type="button" className="link-button danger-link" disabled={busy !== ""} title="删除该应用" onClick={() => { setConfirmName(""); setRemoveError(""); setRemoved(null); setRemoving(item); }}>删除</button>
+            <RowAction disabled={busy !== ""} onClick={() => openEdit(item)}>编辑</RowAction>
+            <RowAction disabled={busy !== ""} onClick={() => { setRotated(null); setRotating(item); }}>重置凭证</RowAction>
+            <RowAction disabled={busy !== ""} busy={busy === item.id} onClick={() => void toggleStatus(item)}>{busy === item.id ? "处理中…" : item.status === "ACTIVE" ? "停用" : "启用"}</RowAction>
+            <RowAction danger disabled={busy !== ""} title="删除该应用" onClick={() => { setConfirmName(""); setRemoveError(""); setRemoved(null); setRemoving(item); }}>删除</RowAction>
           </div>
         </>,
     },
@@ -362,6 +372,7 @@ export function Applications() {
 
     {/* 新建/编辑表单放在弹窗里，列表页因此只保留「查询 + 表格 + 分页」一张卡。
         凭证只显示一次：展示期间不允许点遮罩或按 Esc 顺手关掉，必须走「我已保存，关闭」。 */}
+    {confirmDiscardCreate && <ConfirmModal title="放弃新建应用？" copy="应用名称、Webhook 地址和所选收款路由尚未保存。关闭后这些输入将丢失。" danger confirmLabel="放弃填写" onClose={() => setConfirmDiscardCreate(false)} onConfirm={discardCreate} />}
     {creating && <Modal
       className="app-modal"
       title={credentials ? "创建成功：请立即保存凭证" : "新建应用"}
@@ -378,6 +389,7 @@ export function Applications() {
     >
       {credentials ? <>
         <p className="muted">凭证只显示一次，关闭后无法再次查看；请把 API Key、Webhook Secret 与 ePay 凭证同步到业务侧配置。</p>
+        {formError && <div className="operation-notice error" role="alert">{formError}</div>}
         <CredentialBlock title="请立即保存以下凭证。" items={[
           ["API Key", credentials.apiKey], ["Webhook Secret", credentials.webhookSecret], ["ePay PID", credentials.epayPid], ["ePay Key", credentials.epayKey],
         ]} />
@@ -487,9 +499,10 @@ export function Applications() {
     </Modal>}
 
     {/* 删除弹窗保持原来「随时可关闭」的手感（遮罩 / Esc / 关闭按钮都保留默认值） */}
-    {removing && <Modal title="删除应用" visible onCancel={closeRemove} footer={null} autoFocus focusLock alignCenter unmountOnExit>
+    {removing && <Modal title="删除应用" visible onCancel={() => { if (busy !== removing.id) closeRemove(); }} closable={busy !== removing.id} maskClosable={busy !== removing.id} escToExit={busy !== removing.id} footer={null} autoFocus focusLock alignCenter unmountOnExit>
       {removed ? <>
         <p>应用「<strong>{removed.name}</strong>」已删除。</p>
+        {removeError && <div className="operation-notice error" role="alert">{removeError}</div>}
         <div className={`dialog-warning ${removed.archived ? "is-info" : ""}`}>
           {removed.archived
             ? `该应用承载过业务数据，已归档清理：${clearedSummary(removed.cleared)}。`

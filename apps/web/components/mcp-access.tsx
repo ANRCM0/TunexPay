@@ -4,8 +4,9 @@ import { Button, DatePicker, Descriptions, Form, Input, Select, Switch, Table } 
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { retainAllowedTools } from "../lib/form-safety";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, RowAction, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
 import { ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Scope = "READ" | "OPERATE" | "FINANCIAL";
@@ -75,20 +76,27 @@ function ToolPicker({tools,scope,selected,onChange}:{tools:Tool[]|null|undefined
 }
 
 /** 客户端编辑表单：从表格的「编辑」进来，保存后关掉弹窗并提示。 */
-function ClientEditor({client,tools,busy,onBusy,onNotice,reload,onSaved}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onSaved:()=>void}){
+function ClientEditor({client,tools,busy,onBusy,onDirtyChange,onNotice,reload,onSaved,onCancel}:{client:Client;tools:Tool[]|null|undefined;busy:boolean;onBusy:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void;onNotice:(v:{type:"ok"|"error";text:string}|null)=>void;reload:()=>Promise<void>;onSaved:()=>void;onCancel:()=>void}){
   const [name,setName]=useState(client.name),[scope,setScope]=useState<Scope>(client.scope),[enabled,setEnabled]=useState(client.enabled);
   const [expiresAt,setExpiresAt]=useState(toLocalDateTimeInput(client.expiresAt));
   const [allowed,setAllowed]=useState(client.allowedTools);
+  const [fieldError,setFieldError]=useState("");
+  const dirty=name!==client.name || scope!==client.scope || enabled!==client.enabled || expiresAt!==toLocalDateTimeInput(client.expiresAt) || JSON.stringify([...allowed].sort())!==JSON.stringify([...client.allowedTools].sort());
+  useEffect(()=>{onDirtyChange(dirty);},[dirty,onDirtyChange]);
   useEffect(()=>{setName(client.name);setScope(client.scope);setEnabled(client.enabled);setExpiresAt(toLocalDateTimeInput(client.expiresAt));setAllowed(client.allowedTools);},[client]);
   function changeScope(next:Scope){setScope(next);const eligible=new Set(eligibleTools(tools,next).map(t=>t.name));setAllowed(current=>current.filter(value=>eligible.has(value)));}
 
   async function save(){
-    onBusy(true);onNotice(null);
+    if(busy) return;
+    if(!name.trim()){setFieldError("请填写客户端名称");return;}
+    if(expiresAt && (!Number.isFinite(Date.parse(expiresAt.replace(" ","T"))) || Date.parse(expiresAt.replace(" ","T"))<=Date.now())){setFieldError("有效期必须晚于当前时间；留空表示不过期");return;}
+    setFieldError("");onBusy(true);onNotice(null);
     try{
       await api(`/mcp/clients/${client.id}`,{method:"POST",body:JSON.stringify({
         revision:client.revision,name,scope,enabled,allowedTools:allowed,expiresAt:toIsoOrNull(expiresAt),
       })});
-      await reload();onNotice({type:"ok",text:`${name} 权限已保存。`});onSaved();
+      onNotice({type:"ok",text:`${name} 权限已保存（${allowed.length} 个 Tool）。`});onSaved();
+      void reload().catch(()=>onNotice({type:"error",text:"权限已保存，但列表刷新失败，请稍后点击刷新。"}));
     }catch(cause){onNotice({type:"error",text:cause instanceof Error?cause.message:"保存失败"});}finally{onBusy(false);}
   }
 
@@ -106,7 +114,9 @@ function ClientEditor({client,tools,busy,onBusy,onNotice,reload,onSaved}:{client
       </div>
       <div className="settings-group-head"><div><h3>Tool Allowlist</h3><p>Scope 只是上限；真正暴露给外部 Agent 的工具还必须在这里被勾选。</p></div></div>
       <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
-      <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy}>保存权限</Button><Button type="secondary" disabled={busy} onClick={onSaved}>取消</Button></div>
+      <p className="muted" role="status">已授权 {allowed.length} / {eligibleTools(tools,scope).length} 个工具{allowed.length===0?"（当前客户端没有可调用的工具）":""}。{dirty?"修改尚未保存。":"当前配置与服务器一致。"}</p>
+      {fieldError&&<div className="operation-notice error" role="alert">{fieldError}</div>}
+      <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy} disabled={!dirty||busy}>{busy?"保存中…":dirty?"保存权限":"没有需要保存的修改"}</Button><Button type="secondary" disabled={busy} onClick={onCancel}>取消</Button></div>
     </fieldset>
   </Form>;
 }
@@ -150,32 +160,35 @@ export function McpAccessPanel(){
   const [issued,setIssued]=useState<{token:string;name:string}|null>(null);
   // 编辑、轮换、审批三件事各自需要一次确认：分别用三个状态驱动弹窗，避免用 window.confirm 这种浏览器原生对话框
   const [editing,setEditing]=useState<Client|null>(null);
+  const [editingDirty,setEditingDirty]=useState(false);
+  const [confirmDiscardEditing,setConfirmDiscardEditing]=useState(false);
+  const requestCloseEditing=()=>{if(busy)return;if(editingDirty)setConfirmDiscardEditing(true);else setEditing(null);};
   const [rotating,setRotating]=useState<Client|null>(null);
   const [deciding,setDeciding]=useState<{row:Approval;decision:"approve"|"reject"}|null>(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState<{type:"ok"|"error";text:string}|null>(null);
   const eligible=useMemo(()=>eligibleTools(tools,scope),[tools,scope]);
-  useEffect(()=>{ if(tools?.length&&!allowed.length)setAllowed(eligible.map(tool=>tool.name)); },[tools,scope]);
+  // 最小权限原则：异步加载工具列表或清空选择后，都不能悄悄恢复成「全部允许」。
 
-  function changeScope(next:Scope){setScope(next);setAllowed(eligibleTools(tools,next).map(tool=>tool.name));}
+  function changeScope(next:Scope){setScope(next);setAllowed(current=>retainAllowedTools(current,eligibleTools(tools,next).map(tool=>tool.name)));}
   async function create(){
     setBusy(true);setNotice(null);
     try{
       const result=await api<{data:{client:Client;token:string}}>("/mcp/clients",{method:"POST",body:JSON.stringify({
         name,scope,enabled,allowedTools:allowed,expiresAt:toIsoOrNull(expiresAt),
       })});
-      setIssued({token:result.data.token,name:result.data.client.name});await reload();setNotice({type:"ok",text:"MCP 客户端已创建。Token 只会显示这一次。"});
+      setIssued({token:result.data.token,name:result.data.client.name});setNotice({type:"ok",text:"MCP 客户端已创建。Token 只会显示这一次。"});void reload().catch(()=>setNotice({type:"error",text:"MCP 客户端已创建，但列表刷新失败；请先保存新 Token，不要重复创建。"}));
     }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"创建失败"});}finally{setBusy(false);}
   }
   async function rotate(client:Client){
     setBusy(true);setNotice(null);
     try{
       const result=await api<{data:{client:Client;token:string}}>(`/mcp/clients/${client.id}/rotate`,{method:"POST",body:"{}"});
-      setRotating(null);setIssued({token:result.data.token,name:client.name});await reload();
+      setRotating(null);setIssued({token:result.data.token,name:client.name});setNotice({type:"ok",text:"Token 已轮换，旧 Token 立即失效。请立即保存新 Token。"});void reload().catch(()=>setNotice({type:"error",text:"Token 已轮换，但客户端列表刷新失败。请保存显示的新 Token，不要再次轮换。"}));
     }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"轮换失败"});}finally{setBusy(false);}
   }
   async function decide(id:string,decision:"approve"|"reject"){
     setBusy(true);setNotice(null);
-    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});setDeciding(null);await reloadApprovals();setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});}
+    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});setDeciding(null);setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});void reloadApprovals().catch(()=>setNotice({type:"error",text:"审批动作已经提交，但列表刷新失败，请手动刷新，不要重复审批。"}));}
     catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"处理失败"});}finally{setBusy(false);}
   }
 
@@ -187,8 +200,8 @@ export function McpAccessPanel(){
     {title:"有效期",dataIndex:"expiresAt",width:180,render:(_:unknown,client:Client)=>client.expiresAt?time(client.expiresAt):"不过期"},
     {title:"上次使用",dataIndex:"lastUsedAt",width:180,render:(_:unknown,client:Client)=>time(client.lastUsedAt)},
     {title:"操作",dataIndex:"actions",width:180,render:(_:unknown,client:Client)=><>
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setEditing(client)}>编辑</button>{" "}
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</button>
+      <RowAction disabled={busy} onClick={()=>{setEditingDirty(false);setEditing(client);}}>编辑</RowAction>{" "}
+      <RowAction disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</RowAction>
     </>},
   ];
 
@@ -200,8 +213,8 @@ export function McpAccessPanel(){
     {title:sortHeader(APPROVAL_COLUMNS[4],approvalSort,onApprovalSort),dataIndex:"status",width:130,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[4])}><Status value={row.status}/></span>},
     {title:sortHeader(APPROVAL_COLUMNS[5],approvalSort,onApprovalSort),dataIndex:"expiresAt",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</span>},
     {title:"操作",dataIndex:"actions",width:140,render:(_:unknown,row:Approval)=>row.status==="PENDING"?<>
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</button>{" "}
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</button>
+      <RowAction disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</RowAction>{" "}
+      <RowAction disabled={busy} danger onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</RowAction>
     </>:null},
   ];
 
@@ -224,8 +237,9 @@ export function McpAccessPanel(){
       <div className="dialog-actions"><Button type="primary" onClick={()=>setIssued(null)}>我已保存</Button></div>
     </Modal>}
 
-    {editing&&<Modal title={`编辑客户端 · ${editing.name}`} onClose={()=>{ if(!busy)setEditing(null); }} dismissible={!busy}>
-      <ClientEditor client={editing} tools={tools} busy={busy} onBusy={setBusy} onNotice={setNotice} reload={reload} onSaved={()=>setEditing(null)}/>
+    {confirmDiscardEditing&&<ConfirmModal title="放弃 MCP 权限修改？" copy="所选工具、Scope、访问开关和有效期尚未保存，离开后本次修改将丢失。" danger confirmLabel="放弃修改" onClose={()=>setConfirmDiscardEditing(false)} onConfirm={()=>{setConfirmDiscardEditing(false);setEditingDirty(false);setEditing(null);}}/>}
+    {editing&&<Modal title={`编辑客户端 · ${editing.name}`} onClose={requestCloseEditing} dismissible={!busy}>
+      <ClientEditor client={editing} tools={tools} busy={busy} onBusy={setBusy} onDirtyChange={setEditingDirty} onNotice={setNotice} reload={reload} onSaved={()=>{setEditing(null);setEditingDirty(false);}} onCancel={requestCloseEditing}/>
     </Modal>}
 
     {rotating&&<ConfirmModal
@@ -274,8 +288,10 @@ export function McpAccessPanel(){
               <label>有效期（空=不过期）<DatePicker value={toPickerDate(expiresAt)} showTime format="YYYY-MM-DD HH:mm" style={{width:"100%"}} onChange={value=>setExpiresAt(value??"")}/></label>
             </div>
             <label style={{display:"inline-flex",alignItems:"center",gap:8}}><Switch checked={enabled} onChange={setEnabled} aria-label="创建后立即启用"/><span>创建后立即启用</span></label>
-            <div className="settings-group-head"><div><h3>允许的工具</h3><p>默认选择当前 Scope 下所有工具；可以收窄成某个 Agent 的最小权限集合。</p></div></div>
-            <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
+            <div className="settings-group-head"><div><h3>允许的工具</h3><p>默认不授权任何工具。请明确勾选这个 Agent 需要调用的工具。</p></div></div>
+            <p className="muted">默认不授权任何工具。请只勾选这个客户端确实需要的 Tool；切换 Scope 不会自动增加权限。</p>
+       <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
+            <p className="muted" role="status">将授权 {allowed.length} / {eligible.length} 个工具。{allowed.length===0?"当前客户端将无法调用任何工具。":""}</p>
             <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy}>生成独立 MCP Token</Button></div>
           </fieldset></Form>
         </LoadingState>
