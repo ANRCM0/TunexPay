@@ -109,6 +109,28 @@ export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; t
   </div>;
 }
 
+/**
+ * Consistent row action: visual label, loading state and touch target in one place.
+ * All mutations stay in the parent's handler; this control never fires while busy.
+ */
+export function RowAction({ children, onClick, disabled = false, busy = false, danger = false, title }: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  danger?: boolean;
+  title?: string;
+}) {
+  return <button
+    type="button"
+    className={danger ? "link-button danger-link row-action" : "link-button row-action"}
+    onClick={onClick}
+    disabled={disabled || busy}
+    aria-busy={busy || undefined}
+    title={title}
+  >{busy && <span className="action-spinner" aria-hidden="true" />}{children}</button>;
+}
+
 export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = false, warning, working = false, onConfirm, onClose }: {
   title: string;
   copy: string;
@@ -123,7 +145,7 @@ export function ConfirmModal({ title, copy, confirmLabel = "确认", danger = fa
     <p className="dialog-copy">{copy}</p>
     {danger && <div className="dialog-warning">{warning || "这是影响当前交易状态的操作，请确认你已经核对支付单信息。"}</div>}
     <div className="dialog-actions">
-      <button type="button" className={danger ? "button danger" : "button"} disabled={working} onClick={onConfirm}>{working ? "处理中…" : confirmLabel}</button>
+      <button type="button" className={danger ? "button danger" : "button"} disabled={working} aria-busy={working || undefined} onClick={onConfirm}>{working && <span className="action-spinner" aria-hidden="true" />}{working ? "处理中…" : confirmLabel}</button>
       <button type="button" className="button secondary" disabled={working} onClick={onClose}>取消</button>
     </div>
   </Modal>;
