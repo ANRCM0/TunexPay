@@ -667,3 +667,58 @@ tbody tr:last-child td { border-bottom: 0; }
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+
+/* Stage 3: unified action hierarchy and keyboard/touch behavior. */
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border-radius: var(--radius-xs);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease;
+}
+.row-action:hover:not(:disabled) {
+  background: var(--primary-soft);
+  text-decoration: none;
+}
+.row-action.danger-link:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.row-action.danger-link:focus-visible {
+  outline-color: var(--danger);
+}
+.row-action:disabled { opacity: .55; cursor: not-allowed; }
+.action-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: action-spin .7s linear infinite;
+}
+@keyframes action-spin { to { transform: rotate(360deg); } }
+.dialog-actions > .button,
+.settings-actions > .button,
+.bill-settings-actions > .button { min-height: 38px; }
+.dialog-actions > .button[aria-busy="true"] { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 700px) {
+  .row-actions, .channel-actions { gap: 6px; }
+  .list-table .row-action, .channel-actions .row-action { min-height: 44px; padding: 9px 10px; }
+  .dialog-actions, .settings-actions, .bill-settings-actions { gap: 8px; }
+  .dialog-actions > button, .settings-actions > button, .bill-settings-actions > button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-spinner { animation: none; border-style: dotted; }
+  .row-action { transition: none; }
+}
