@@ -171,7 +171,6 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
   plugins: Plugin[];
   busy: boolean;
   onBusy: (busy: boolean) => void;
-  onDirtyChange: (dirty: boolean) => void;
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
   onCreated: () => Promise<void>;
 }) {
@@ -277,6 +276,7 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
 function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotice, onSaved, onTest, onRemove, onClose }: {
   instance: Instance; plugin: Plugin; busy: boolean;
   onBusy: (busy: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
   onSaved: () => Promise<void>;
   onTest: () => Promise<void>;
