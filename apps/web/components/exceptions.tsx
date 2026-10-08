@@ -77,7 +77,7 @@ export function Exceptions() {
         : { status: next, resolution: body?.resolution, resolutionRef: body?.resolutionRef || undefined };
       await api(`/exceptions/${item.id}/status`, { method: "POST", body: JSON.stringify(payload) });
       setNotice({ type: "ok", text: `异常单 ${item.exceptionNo} 已更新。` });
-      await reload();
+      void reload().catch(() => setNotice({ type: "error", text: "异常单状态已更新，但列表刷新失败，请手动刷新。" }));
       return true;
     } catch (cause) {
       setNotice({ type: "error", text: cause instanceof Error ? cause.message : "异常单更新失败" });
