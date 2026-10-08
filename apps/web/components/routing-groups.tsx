@@ -8,7 +8,7 @@ import { channelLabel } from "../lib/labels";
 import { routingStrategyLabels, type RoutingGroup, type RoutingStrategy } from "../lib/routing-groups";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { checkLabels, type Channel } from "./channels";
-import { ConfirmModal, LoadingState, Modal, PageHead, Status, Toast, sortValueProps } from "./common";
+import { ConfirmModal, LoadingState, Modal, PageHead, RowAction, Status, Toast, sortValueProps } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type MemberInput = { channelId: string; weight: number; enabled: boolean };
@@ -116,8 +116,8 @@ export function RoutingGroups() {
       dataIndex: "actions",
       width: 140,
       render: (_: unknown, group: RoutingGroup) => <div className="row-actions">
-        <button type="button" className="link-button" onClick={() => startEditing(group)}>配置</button>
-        <button type="button" className="link-button danger-link" disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</button>
+        <RowAction disabled={busy} onClick={() => startEditing(group)}>配置</RowAction>
+        <RowAction danger disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</RowAction>
       </div>,
     },
   ];
