@@ -101,7 +101,7 @@ export function Refunds() {
       }) });
       setNotice({ type: "ok", text: `退款已发起（${money(cents)}）。退款不会自动查单，请稍后用「主动查单」确认通道结果。` });
       setRefundForm(null);
-      if (pager.page === 1) await reload();
+      if (pager.page === 1) void reload().catch(() => setNotice({ type: "error", text: "退款已发起，但列表刷新失败。请勿再次发起，用「主动查单」核对状态。" }));
       else pager.setPage(1);
     } catch (cause) {
       // 失败时保留弹窗与同一个幂等键：原样重试不会退成两笔。
