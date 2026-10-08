@@ -7,7 +7,7 @@ import { api, useApi } from "../lib/api";
 import { transactionListPath } from "../lib/transaction-list";
 import { newRefundIdempotencyKey, parseYuanToCents } from "../lib/admin-refund";
 import { type SortColumn } from "../lib/sort";
-import { CopyValue, HoverDetail, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time, RowAction } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useServerPager, useTableSort } from "./list";
 
 type Refund = {
@@ -163,7 +163,7 @@ export function Refunds() {
       width: 110,
       // 已成功的退款无需查单，这一格保持为空而不是塞占位符，避免把「没事可做」渲染成待办
       render: (_: unknown, item: Refund) => item.status !== "SUCCESS" &&
-        <button type="button" className="link-button" disabled={querying !== ""} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</button>,
+        <RowAction disabled={querying !== ""} busy={querying === item.refundNo} onClick={() => void query(item.refundNo)}>{querying === item.refundNo ? "查询中…" : "主动查单"}</RowAction>,
     },
   ];
 
@@ -255,7 +255,7 @@ export function Refunds() {
 
         <div className="dialog-actions">
           {/* 退款是不可逆的资金动作：主按钮用 danger 主题，颜色本身就在提示后果 */}
-          <Button type="primary" status="danger" disabled={!canSubmit || working} onClick={() => void submitRefund()}>
+          <Button type="primary" status="danger" loading={working} disabled={!canSubmit || working} onClick={() => void submitRefund()}>
             {working ? "提交中…" : cents === null ? "确认退款" : `确认退款 ${money(cents)}`}
           </Button>
           <Button disabled={working} onClick={() => setRefundForm(null)}>取消</Button>
