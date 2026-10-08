@@ -32,7 +32,7 @@ export function Plugins() {
     if (formDirty) setConfirmDiscard(true);
     else setEditor(null);
   };
-  const openEditor = (plugin: string) => { setFormDirty(false); setEditor(plugin); };
+  const openEditor = (plugin: string) => { setFormBusy(false); setFormDirty(false); setEditor(plugin); };
   const [notice, setNotice] = useState("");
   const { sort, onSort } = useTableSort<Plugin>();
   // 查询条件在点「查询」时才生效，避免输入过程中反复重算整张表
@@ -128,7 +128,7 @@ export function Plugins() {
         </ListCard>
       </LoadingState>
     </ListPage>
-    {editor !== null && <Modal title="创建通道" onClose={requestClose} dismissible={!formBusy}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={requestClose} onSaved={async () => { setEditor(null); setFormDirty(false); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
+    {editor !== null && <Modal title="创建通道" onClose={requestClose} dismissible={!formBusy}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={requestClose} onSaved={async () => { setEditor(null); setFormBusy(false); setFormDirty(false); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
     {confirmDiscard && <ConfirmModal title="放弃通道配置？" copy="尚未保存的通道信息、密钥与高级配置将丢失。" confirmLabel="放弃修改" danger onConfirm={() => { setConfirmDiscard(false); setFormDirty(false); setEditor(null); }} onClose={() => setConfirmDiscard(false)} />}
   </>;
 }
