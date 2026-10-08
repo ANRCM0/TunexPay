@@ -96,9 +96,11 @@ export function Toast({ type = "ok", text, onClose }: { type?: "ok" | "error"; t
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
-    const timer = window.setTimeout(() => closeRef.current(), 3200);
+    // 错误通常包含排障信息，不能和简短成功提示一样很快消失。
+    const lifetime = type === "error" ? Math.min(16_000, Math.max(8_000, 2_500 + text.length * 80)) : Math.min(8_000, Math.max(3_500, 1_500 + text.length * 55));
+    const timer = window.setTimeout(() => closeRef.current(), lifetime);
     return () => window.clearTimeout(timer);
-  }, [text]);
+  }, [text, type]);
 
   return <div className={`toast toast-${type}`} role={type === "error" ? "alert" : "status"} aria-live="polite">
     <span className="toast-icon" aria-hidden="true">{type === "error" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}</span>
