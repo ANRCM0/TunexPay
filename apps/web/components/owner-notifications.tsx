@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { eventLabel, notificationChannelLabel } from "../lib/labels";
-import { CopyValue, HoverDetail, LoadingState, Status, Toast, sortValueProps, time } from "./common";
+import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Status, Toast, sortValueProps, time } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Field = {
@@ -183,6 +183,18 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [events, setEvents] = useState<string[]>(ALL_EVENTS);
   const [error, setError] = useState("");
+  const [pendingPlugin, setPendingPlugin] = useState<string | null>(null);
+  const dirty = Boolean(selectedPlugin && (
+    name !== selectedPlugin.name || id !== "" || enabled ||
+    JSON.stringify(config) !== JSON.stringify(defaultsFor(selectedPlugin)) ||
+    Object.values(secrets).some(Boolean) ||
+    JSON.stringify(events) !== JSON.stringify(ALL_EVENTS)
+  ));
+  const selectPlugin = (next: string) => {
+    if (next === selectedPlugin?.code) return;
+    if (dirty) setPendingPlugin(next);
+    else setPluginCode(next);
+  };
 
   // 换插件等于换一整套配置字段：重置成新插件的默认值，免得上一个插件的键被带过去。
   useEffect(() => {
@@ -196,7 +208,8 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
   }, [selectedPlugin?.code]);
 
   async function create() {
-    if (!selectedPlugin) return;
+    if (busy || !selectedPlugin) return;
+    if (!name.trim()) { setError("请填写通知实例名称"); return; }
     const missing = missingRequired(selectedPlugin.fields, config, secrets);
     if (missing) { setError(`请填写「${missing}」`); return; }
     onBusy(true); onNotice(null); setError("");
@@ -216,14 +229,15 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
 
   if (!selectedPlugin) return null;
 
-  return <Form layout="vertical" onSubmit={() => void create()}>
+  return <>
+    <Form layout="vertical" onSubmit={() => void create()}>
     <div className="settings-grid">
       <Form.Item label="插件" required>
         <Select
           value={selectedPlugin.code}
           disabled={busy}
           options={plugins.map(plugin => ({ label: plugin.name, value: plugin.code }))}
-          onChange={value => setPluginCode(String(value))}
+          onChange={value => selectPlugin(String(value))}
         />
       </Form.Item>
       <Form.Item label="实例名称" required>
@@ -253,7 +267,9 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
     <div className="settings-actions">
       <Button type="primary" htmlType="submit" loading={busy}>{busy ? "创建中…" : "创建通知实例"}</Button>
     </div>
-  </Form>;
+  </Form>
+    {pendingPlugin !== null && <ConfirmModal title="切换通知插件？" copy="切换后会重置当前填写的插件配置、密钥和事件订阅，尚未保存的内容会丢失。" confirmLabel="放弃并切换" danger onClose={() => setPendingPlugin(null)} onConfirm={() => { setPluginCode(pendingPlugin); setPendingPlugin(null); }} />}
+  </>;
 }
 
 /** 实例编辑：弹窗内的表单，保存/测试/删除都与列表共用父级的同一套动作。 */
@@ -263,7 +279,7 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onNotice, onSaved, onT
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
   onSaved: () => Promise<void>;
   onTest: () => Promise<void>;
-  onRemove: () => Promise<boolean>;
+  onRemove: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(instance.name);
@@ -331,8 +347,8 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onNotice, onSaved, onT
     <div className="settings-actions">
       <Button type="primary" htmlType="submit" loading={busy}>保存</Button>
       {/* 停用的实例发不出测试消息，这个禁用条件沿用原来的判断 */}
-      <Button disabled={!instance.enabled || busy} onClick={() => void onTest()}>发送测试</Button>
-      <button type="button" className="link-button danger-link" disabled={busy} onClick={() => void onRemove().then(removed => { if (removed) onClose(); })}>删除</button>
+      <Button disabled={!instance.enabled || busy} onClick={() => void onTest()}>用已保存配置发送测试</Button>
+      <button type="button" className="link-button danger-link" disabled={busy} onClick={onRemove}>删除</button>
     </div>
   </Form>;
 }
@@ -344,6 +360,7 @@ export function OwnerNotificationsPanel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [editor, setEditor] = useState<Instance | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<Instance | null>(null);
 
   // 实例筛选：草稿 + 已应用两份状态，点「查询」才生效（输入即过滤在长列表上会明显卡顿）
   const [draftInstance, setDraftInstance] = useState({ plugin: "ALL", keyword: "", status: "ALL" });
@@ -398,7 +415,7 @@ export function OwnerNotificationsPanel() {
 
   /** 删除实例。返回是否真的删了，调用方据此决定要不要关闭弹窗。 */
   async function removeInstance(instance: Instance): Promise<boolean> {
-    if (!window.confirm(`删除通知实例「${instance.name}」？有历史投递时会归档并停止未发送任务。`)) return false;
+    if (busy) return false;
     setBusy(true); setNotice(null);
     try {
       await api(`/notification-instances/${instance.id}/delete`, { method: "POST", body: "{}" });
@@ -469,7 +486,7 @@ export function OwnerNotificationsPanel() {
         return <div className="row-actions">
           <button type="button" className="link-button" disabled={busy || !editable} onClick={() => setEditor(item)}>编辑</button>
           <button type="button" className="link-button" disabled={busy || !editable || !item.enabled} onClick={() => void testInstance(item)}>发送测试</button>
-          <button type="button" className="link-button danger-link" disabled={busy} onClick={() => void removeInstance(item)}>删除</button>
+          <button type="button" className="link-button danger-link" disabled={busy} onClick={() => setPendingRemove(item)}>删除</button>
         </div>;
       },
     },
@@ -530,6 +547,7 @@ export function OwnerNotificationsPanel() {
 
   return <>
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
+    {pendingRemove && <ConfirmModal title={`删除通知实例 · ${pendingRemove.name}`} copy="有历史通知投递时将归档该实例并停止尚未发送的任务；新通知将不再投递到它。" warning="如果只是临时停止通知，建议在编辑表单中选择停用，而不是删除。" danger confirmLabel="确认删除实例" working={busy} onClose={() => { if (!busy) setPendingRemove(null); }} onConfirm={() => void removeInstance(pendingRemove).then(ok => { if (ok) { if (editor?.id === pendingRemove.id) setEditor(null); setPendingRemove(null); } })} />}
 
     {/* 一、插件选择与创建：仍然是 ListCard，但控件全部换成 Arco（Select / Input / Switch / Checkbox.Group） */}
     <ListPage>
@@ -643,7 +661,7 @@ export function OwnerNotificationsPanel() {
         onNotice={setNotice}
         onSaved={async () => { await reload(); }}
         onTest={() => testInstance(editor)}
-        onRemove={() => removeInstance(editor)}
+        onRemove={() => setPendingRemove(editor)}
         onClose={() => setEditor(null)}
       />
     </Modal>}
