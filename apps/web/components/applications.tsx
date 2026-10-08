@@ -309,7 +309,7 @@ export function Applications() {
     {
       title: "操作",
       dataIndex: "actions",
-      width: 250,
+      width: 330,
       render: (_: unknown, item: Application) => item.archivedAt
         ? <span className="muted">已归档，仅作追溯</span>
         : <>

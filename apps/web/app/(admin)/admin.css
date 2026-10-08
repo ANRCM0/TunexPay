@@ -722,3 +722,58 @@ tbody tr:last-child td { border-bottom: 0; }
   .action-spinner { animation: none; border-style: dotted; }
   .row-action { transition: none; }
 }
+
+
+/* ---- 列表操作列 / 行高（集中修复，不影响弹窗和表单按钮） ----
+   Table 的宽度由各页面操作列预留；当视口过窄时由表格容器横向滚动，
+   绝不把同一行的“配置/检测/删除”压成两排。 */
+.list-table {
+  --list-row-height: 88px;
+}
+.list-table .arco-table-container,
+.list-table .arco-table-container-inner {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.list-table .arco-table-tr {
+  height: var(--list-row-height);
+}
+.list-table .arco-table-td {
+  height: var(--list-row-height);
+  box-sizing: border-box;
+  vertical-align: middle;
+  padding: 10px 12px;
+}
+.list-table .row-actions,
+.list-table .channel-actions {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+}
+.list-table .row-actions > *,
+.list-table .channel-actions > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.list-table .row-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+/* 未迁移至 Arco 的旧表格也禁止操作按钮换行；手机上只滚动动作区。 */
+.table-wrap .row-actions {
+  flex-wrap: nowrap;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+@media (max-width: 700px) {
+  .list-table .row-action { min-height: 40px; padding: 8px 9px; }
+}
