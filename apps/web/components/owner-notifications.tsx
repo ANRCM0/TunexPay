@@ -230,7 +230,7 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
         />
       </Form.Item>
       <Form.Item label="实例名称" required>
-        <Input value={name} maxLength={120} disabled={busy} onChange={setName} />
+        <Input value={name} maxLength={120} disabled={busy} onChange={value => { setName(value); setError(""); }} />
       </Form.Item>
       <Form.Item label="实例 ID（可留空自动生成）">
         <Input value={id} maxLength={60} placeholder="notify-ops-tg" disabled={busy} onChange={value => setId(value.toLowerCase())} />
@@ -320,7 +320,7 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotic
   return <Form layout="vertical" onSubmit={() => void save()}>
     <div className="settings-grid">
       <Form.Item label="实例名称" required>
-        <Input value={name} maxLength={120} disabled={busy} onChange={setName} />
+        <Input value={name} maxLength={120} disabled={busy} onChange={value => { setName(value); setError(""); }} />
       </Form.Item>
       <Form.Item label="启用状态">
         <span className="field-clear">
