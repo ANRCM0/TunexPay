@@ -4,6 +4,7 @@ import { Button, DatePicker, Descriptions, Form, Input, Select, Switch, Table } 
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { retainAllowedTools } from "../lib/form-safety";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
 import { ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
@@ -156,7 +157,7 @@ export function McpAccessPanel(){
   const eligible=useMemo(()=>eligibleTools(tools,scope),[tools,scope]);
   // 最小权限原则：异步加载工具列表或清空选择后，都不能悄悄恢复成「全部允许」。
 
-  function changeScope(next:Scope){setScope(next);const supported=new Set(eligibleTools(tools,next).map(tool=>tool.name));setAllowed(current=>current.filter(key=>supported.has(key)));}
+  function changeScope(next:Scope){setScope(next);setAllowed(current=>retainAllowedTools(current,eligibleTools(tools,next).map(tool=>tool.name)));}
   async function create(){
     setBusy(true);setNotice(null);
     try{
