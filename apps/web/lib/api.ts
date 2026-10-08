@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { REFRESH_DATA_EVENT } from "./refresh";
 
 export type ApiOptions = RequestInit & { redirectOnUnauthorized?: boolean };
+export type PageMeta = { page: number; pageSize: number; total: number };
 
 export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
   const { redirectOnUnauthorized = true, ...requestInit } = init ?? {};
@@ -29,6 +30,7 @@ export async function api<T>(path: string, init?: ApiOptions): Promise<T> {
 // 手动刷新会取消旧请求；已成功读取的数据在后台刷新失败时保留，同时显示可重试错误。
 export function useApi<T>(path: string, intervalMs?: number) {
   const [data, setData] = useState<T | null>(null);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
@@ -44,9 +46,10 @@ export function useApi<T>(path: string, intervalMs?: number) {
     inFlight.current = true;
     lastAttemptAt.current = Date.now();
     try {
-      const payload = await api<{ data: T }>(path, { signal: current.signal });
+      const payload = await api<{ data: T; meta?: PageMeta }>(path, { signal: current.signal });
       if (current.signal.aborted) return;
       setData(payload.data);
+      setMeta(payload.meta ?? null);
       setResolvedPath(path);
       setUpdatedAt(Date.now());
       setError("");
@@ -68,6 +71,7 @@ export function useApi<T>(path: string, intervalMs?: number) {
   useEffect(() => {
     setLoading(true);
     setData(null);
+    setMeta(null);
     setError("");
     setUpdatedAt(null);
     void run();
@@ -106,6 +110,7 @@ export function useApi<T>(path: string, intervalMs?: number) {
   const pathPending = resolvedPath !== path;
   return {
     data: pathPending ? null : data,
+    meta: pathPending ? null : meta,
     error: pathPending ? "" : error,
     loading: loading || pathPending,
     updatedAt: pathPending ? null : updatedAt,
