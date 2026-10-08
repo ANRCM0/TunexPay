@@ -43,13 +43,14 @@ export function FilterItem({ label, children }: { label: string; children: React
 }
 
 /** 带标签的输入框，宽度撑满筛选格 */
-export function FilterInput({ value, onChange, placeholder, allowClear = true }: {
+export function FilterInput({ value, onChange, placeholder, allowClear = true, maxLength }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   allowClear?: boolean;
+  maxLength?: number;
 }) {
-  return <Input value={value} onChange={onChange} placeholder={placeholder} allowClear={allowClear} />;
+  return <Input value={value} onChange={onChange} placeholder={placeholder} allowClear={allowClear} maxLength={maxLength} />;
 }
 
 export function FilterSelect({ value, onChange, options, placeholder }: {
