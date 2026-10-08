@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { ChannelEditor } from "./channel-editor";
-import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Toast, sortValueProps } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Toast, sortValueProps, RowAction } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Plugin = { code: string; name: string; description: string; capabilities: string[] };
@@ -85,7 +85,7 @@ export function Plugins() {
       title: "操作",
       dataIndex: "actions",
       width: 130,
-      render: (_: unknown, plugin: Plugin) => <button type="button" className="link-button" onClick={() => openEditor(plugin.code)}><Plus size={13} aria-hidden="true" />创建通道</button>,
+      render: (_: unknown, plugin: Plugin) => <RowAction onClick={() => openEditor(plugin.code)}><Plus size={13} aria-hidden="true" />创建通道</RowAction>,
     },
   ];
 
