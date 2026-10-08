@@ -196,7 +196,7 @@ export function Channels() {
     {
       title: "操作",
       dataIndex: "actions",
-      width: 280,
+      width: 330,
       render: (_: unknown, channel: Channel) => <div className="channel-actions">
         <RowAction disabled={!!busy} onClick={() => { setFormBusy(false); setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</RowAction>
         <RowAction busy={busy === channel.id} disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "检测中…" : "检测"}</RowAction>
