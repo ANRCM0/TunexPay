@@ -4,6 +4,7 @@ import { Button, Checkbox, Form, Input, InputNumber, Modal, Select, Switch, Tabl
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { notificationFieldErrors } from "../lib/settings-validation";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { eventLabel, notificationChannelLabel } from "../lib/labels";
 import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Status, Toast, sortValueProps, time } from "./common";
@@ -84,30 +85,14 @@ function formValue(field: Field, raw: string): unknown {
 
 function reason(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
 
-/**
- * 必填校验。
- *
- * 原来是原生 `<form required>` 拦空值；控件换成 Arco 受控组件后浏览器不再代劳，
- * 所以在提交前显式检查一遍，保持「必填项留空就不发请求」的行为。
- * 密钥字段只看"本次是否填了新值或此前已配置"，避免把已保存的密钥当成缺失。
- */
-function missingRequired(fields: Field[], config: Record<string, unknown>, secrets: Record<string, string>): string | null {
-  for (const field of fields) {
-    if (!field.required) continue;
-    if (field.secret) {
-      const configured = Boolean(config[`${field.key}Configured`]);
-      if (!configured && !(secrets[field.key] ?? "").trim()) return field.label;
-    } else if (String(config[field.key] ?? "").trim() === "") return field.label;
-  }
-  return null;
-}
 
 /** 插件配置字段：按插件声明的类型渲染成 Arco 控件，密钥一律走 Input.Password 且不回显已保存的值。 */
-function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, clearSecrets, onClearSecret, disabled }: {
+function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, clearSecrets, onClearSecret, disabled, errors = {} }: {
   plugin: Plugin; config: Record<string, unknown>; onChange: (key: string, value: unknown) => void;
   secretValues: Record<string, string>; onSecretChange: (key: string, value: string) => void;
   clearSecrets?: Set<string>; onClearSecret?: (key: string, clear: boolean) => void;
   disabled?: boolean;
+  errors?: Record<string, string>;
 }) {
   return <div className="settings-grid">{plugin.fields.map(field => {
     const configured = Boolean(config[`${field.key}Configured`]);
@@ -148,6 +133,7 @@ function ConfigFields({ plugin, config, onChange, secretValues, onSecretChange, 
               autoComplete="off"
               onChange={raw => onChange(field.key, formValue(field, raw))}
             />}
+      {errors[field.key] && <p className="form-field-error" role="alert">{errors[field.key]}</p>}
       {field.secret && configured && !field.required && onClearSecret && <span className="field-clear">
         <Checkbox checked={clearSecrets?.has(field.key) ?? false} disabled={disabled} onChange={checked => onClearSecret(field.key, checked)}>清除已保存的值</Checkbox>
       </span>}
@@ -184,6 +170,7 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
   const [events, setEvents] = useState<string[]>(ALL_EVENTS);
   const [error, setError] = useState("");
   const [pendingPlugin, setPendingPlugin] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const dirty = Boolean(selectedPlugin && (
     name !== selectedPlugin.name || id !== "" || enabled ||
     JSON.stringify(config) !== JSON.stringify(defaultsFor(selectedPlugin)) ||
@@ -204,14 +191,15 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
     setConfig(defaultsFor(selectedPlugin));
     setSecrets({});
     setEvents(ALL_EVENTS);
-    setError("");
+    setError(""); setFieldErrors({});
   }, [selectedPlugin?.code]);
 
   async function create() {
     if (busy || !selectedPlugin) return;
     if (!name.trim()) { setError("请填写通知实例名称"); return; }
-    const missing = missingRequired(selectedPlugin.fields, config, secrets);
-    if (missing) { setError(`请填写「${missing}」`); return; }
+    const issues = notificationFieldErrors(selectedPlugin.fields, config, secrets);
+    setFieldErrors(issues);
+    if (Object.keys(issues).length) { setError("请检查标红的必填项或无效配置"); return; }
     onBusy(true); onNotice(null); setError("");
     try {
       const payload: Record<string, unknown> = {};
@@ -220,9 +208,10 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
         if (value !== undefined && value !== "") payload[field.key] = value;
       }
       await api("/notification-instances", { method: "POST", body: JSON.stringify({ ...(id ? { id } : {}), name, plugin: selectedPlugin.code, enabled, config: payload, events }) });
-      setId(""); setEnabled(false); setConfig(defaultsFor(selectedPlugin)); setSecrets({});
-      await onCreated();
+      setId(""); setEnabled(false); setConfig(defaultsFor(selectedPlugin)); setSecrets({}); setFieldErrors({});
       onNotice({ type: "ok", text: "通知实例已创建。" });
+      try { await onCreated(); }
+      catch { onNotice({ type: "error", text: "通知实例已经创建成功，但列表刷新失败。请手动刷新，不要重复创建。" }); }
     } catch (cause) { onNotice({ type: "error", text: reason(cause, "创建失败") }); }
     finally { onBusy(false); }
   }
@@ -252,8 +241,9 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
       config={config}
       disabled={busy}
       secretValues={secrets}
-      onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))}
-      onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))}
+      onChange={(key, value) => { setConfig(current => ({ ...current, [key]: value })); setFieldErrors(current => { const next = { ...current }; delete next[key]; return next; }); }}
+      onSecretChange={(key, value) => { setSecrets(current => ({ ...current, [key]: value })); setFieldErrors(current => { const next = { ...current }; delete next[key]; return next; }); }}
+      errors={fieldErrors}
     />
     <div className="settings-group-head">
       <div><h3>默认订阅</h3><p>创建后仍可逐实例调整。</p></div>
@@ -289,6 +279,7 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotic
   const [events, setEvents] = useState<string[]>(instance.events);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [clearSecrets, setClearSecrets] = useState<Set<string>>(new Set());
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const dirty = name !== instance.name || enabled !== instance.enabled ||
     JSON.stringify(config) !== JSON.stringify(instance.config) ||
@@ -310,16 +301,19 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotic
   }
 
   async function save() {
-    const missing = missingRequired(plugin.fields, config, secrets);
-    if (missing) { setError(`请填写「${missing}」`); return; }
+    if (busy) return;
+    if (!name.trim()) { setError("请填写通知实例名称"); return; }
+    const issues = notificationFieldErrors(plugin.fields, config, secrets);
+    setFieldErrors(issues);
+    if (Object.keys(issues).length) { setError("请检查标红的必填项或无效配置"); return; }
     onBusy(true); onNotice(null); setError("");
     try {
       await api(`/notification-instances/${instance.id}`, { method: "POST", body: JSON.stringify({ name, plugin: instance.plugin, enabled, revision: instance.revision, config: payloadConfig(), events }) });
-      await onSaved();
-      onNotice({ type: "ok", text: `${name} 已保存。` });
-      // 保存成功后 revision 已经 +1，弹窗里握的还是旧版本号：直接关闭，避免下一次保存撞 409。
+      onNotice({ type: "ok", text: `${name} 的配置已保存。` });
+      // 保存成功后 revision 已经更新；先关弹窗，再刷新列表，避免刷新失败导致用户重复保存。
       onClose();
-    } catch (cause) { onNotice({ type: "error", text: reason(cause, "保存失败") }); }
+      void onSaved().catch(() => onNotice({ type: "error", text: "配置已保存，但列表刷新失败，请手动刷新。" }));
+    } catch (cause) { setError(reason(cause, "保存失败")); onNotice({ type: "error", text: reason(cause, "保存失败") }); }
     finally { onBusy(false); }
   }
 
@@ -340,18 +334,21 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotic
       config={config}
       disabled={busy}
       secretValues={secrets}
-      onSecretChange={(key, value) => setSecrets(current => ({ ...current, [key]: value }))}
-      onChange={(key, value) => setConfig(current => ({ ...current, [key]: value }))}
+      onSecretChange={(key, value) => { setSecrets(current => ({ ...current, [key]: value })); setFieldErrors(current => { const next = { ...current }; delete next[key]; return next; }); }}
+      onChange={(key, value) => { setConfig(current => ({ ...current, [key]: value })); setFieldErrors(current => { const next = { ...current }; delete next[key]; return next; }); }}
+      errors={fieldErrors}
       clearSecrets={clearSecrets}
       onClearSecret={(key, clear) => setClearSecrets(current => { const next = new Set(current); if (clear) next.add(key); else next.delete(key); return next; })}
     />
+    {clearSecrets.size > 0 && <div className="dialog-warning" role="status">保存将清除 {clearSecrets.size} 项已存储的可选密钥；请检查对应通知插件是否仍能工作。</div>}
     <div className="settings-group-head">
       <div><h3>事件订阅</h3><p>同一个事件可以同时投递到多个通知实例。</p></div>
     </div>
     <EventPicker selected={events} onChange={setEvents} disabled={busy} />
-    {error && <div className="error">{error}</div>}
+    {error && <div className="error" role="alert">{error}</div>}
+    <p className="muted" role="status">{dirty ? "有未保存的修改。" : "当前配置没有修改。"}</p>
     <div className="settings-actions">
-      <Button type="primary" htmlType="submit" loading={busy}>保存</Button>
+      <Button type="primary" htmlType="submit" loading={busy} disabled={!dirty || busy}>{busy ? "保存中…" : dirty ? "保存修改" : "尚无修改"}</Button>
       {/* 停用的实例发不出测试消息，这个禁用条件沿用原来的判断 */}
       <Button disabled={!instance.enabled || busy} onClick={() => void onTest()}>用已保存配置发送测试</Button>
       <button type="button" className="link-button danger-link" disabled={busy} onClick={onRemove}>删除</button>
