@@ -211,7 +211,7 @@ export function Applications() {
     try {
       await api(`/applications/${application.id}/status`, { method: "POST", body: JSON.stringify({ status: next }) });
       setNotice({ type: "ok", text: next === "DISABLED" ? `「${application.name}」已停用。` : `「${application.name}」已启用。` });
-      await reload();
+      void reload().catch(() => setNotice({ type: "error", text: "应用状态已更新，但列表刷新失败，请手动刷新。" }));
       return true;
     } catch (cause) {
       setNotice({ type: "error", text: reason(cause, next === "DISABLED" ? "停用失败" : "启用失败") });
@@ -234,7 +234,7 @@ export function Applications() {
       setRemoved(response.data);
       setNotice({ type: "ok", text: response.data.archived ? `「${application.name}」已删除，业务数据已归档。` : `「${application.name}」已删除。` });
       setConfirmName("");
-      await reload();
+      void reload().catch(() => setRemoveError("应用已删除或归档，但列表刷新失败。请手动刷新，不要重复删除。"));
     } catch (cause) { setRemoveError(reason(cause, "删除失败")); }
     finally { setBusy(""); }
   }
