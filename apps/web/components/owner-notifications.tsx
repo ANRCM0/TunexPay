@@ -534,7 +534,7 @@ export function OwnerNotificationsPanel() {
     {/* 一、插件选择与创建：仍然是 ListCard，但控件全部换成 Arco（Select / Input / Switch / Checkbox.Group） */}
     <ListPage>
       <ListCard toolbar={<><strong>通知插件</strong><ToolbarNote>业务 Webhook 不在这里配置</ToolbarNote></>}>
-        <LoadingState loading={pluginsLoading} error={pluginsError} empty={!plugins?.length} emptyText="没有可用的通知插件">
+        <LoadingState loading={pluginsLoading} error={pluginsError} stale={Boolean(plugins)} empty={!plugins?.length} emptyText="没有可用的通知插件">
           <CreateInstancePanel
             plugins={plugins ?? []}
             busy={busy}
@@ -558,7 +558,7 @@ export function OwnerNotificationsPanel() {
           <FilterItem label="关键字"><FilterInput value={draftInstance.keyword} onChange={keyword => setDraftInstance(current => ({ ...current, keyword }))} placeholder="实例名称 / 实例 ID" /></FilterItem>
           <FilterItem label="状态"><FilterSelect value={draftInstance.status} onChange={status => setDraftInstance(current => ({ ...current, status }))} options={INSTANCE_STATUS_OPTIONS} /></FilterItem>
         </FilterCard>
-        <LoadingState loading={loading} error={error} empty={!instances?.length} emptyText="还没有通知实例；先从上方选择一个插件创建">
+        <LoadingState loading={loading} error={error} stale={Boolean(instances)} empty={!instances?.length} emptyText="还没有通知实例；先从上方选择一个插件创建">
           <ListCard
             toolbar={<>
               <strong>通知实例</strong>
@@ -594,7 +594,7 @@ export function OwnerNotificationsPanel() {
           <FilterItem label="状态"><FilterSelect value={draftDelivery.status} onChange={status => setDraftDelivery(current => ({ ...current, status }))} options={DELIVERY_STATUS_OPTIONS} /></FilterItem>
           <FilterItem label="关键字"><FilterInput value={draftDelivery.keyword} onChange={keyword => setDraftDelivery(current => ({ ...current, keyword }))} placeholder="标题 / 事件 / 实例" /></FilterItem>
         </FilterCard>
-        <LoadingState loading={deliveriesLoading} error={deliveriesError} empty={!deliveries?.length} emptyText="还没有通知投递记录">
+        <LoadingState loading={deliveriesLoading} error={deliveriesError} stale={Boolean(deliveries)} empty={!deliveries?.length} emptyText="还没有通知投递记录">
           <ListCard
             toolbar={<>
               <strong>通知投递</strong>

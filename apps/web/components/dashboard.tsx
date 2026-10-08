@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { LoadingState, Section, Stat, money, time, type StatTone } from "./common";
 import { useApi } from "../lib/api";
 import { eventLabel, eventSourceLabel, eventTone } from "../lib/labels";
@@ -11,28 +12,26 @@ type Dashboard = {
   openPaymentExceptions: number; expirationFailures: number; failedAdminActionsToday: number; recentEvents: Event[];
 };
 
-type AlertItem = { label: string; value: number; note: string; tone: StatTone };
+type AlertItem = { label: string; value: number; note: string; tone: StatTone; href: string };
 
 function alertItems(data: Dashboard): AlertItem[] {
   const all: AlertItem[] = [
-    { label: "需要人工处理", value: data.exhaustedRecoveries, note: "自动查单已达到上限", tone: "red" },
-    { label: "支付异常", value: data.openPaymentExceptions, note: "待核实、退款或人工关闭", tone: "red" },
-    { label: "对账差错", value: data.mismatchedReceipts, note: "金额或流水号冲突", tone: "red" },
-    { label: "今日管理失败", value: data.failedAdminActionsToday, note: "可在操作审计中查看", tone: "red" },
-    { label: "结果未知", value: data.unknownPayments, note: "需要主动查单", tone: "orange" },
-    { label: "待人工查单退款", value: data.pendingRefunds, note: "退款不再自动查单", tone: "orange" },
-    { label: "未匹配账单", value: data.unmatchedReceipts, note: "等待订单或退款单出现", tone: "orange" },
-    { label: "过期关闭异常", value: data.expirationFailures, note: "Worker 将自动退避重试", tone: "orange" },
+    { label: "需要人工处理", value: data.exhaustedRecoveries, note: "自动查单已达到上限", tone: "red", href: "/system" },
+    { label: "支付异常", value: data.openPaymentExceptions, note: "待核实、退款或人工关闭", tone: "red", href: "/exceptions" },
+    { label: "对账差错", value: data.mismatchedReceipts, note: "金额或流水号冲突", tone: "red", href: "/reconciliation" },
+    { label: "今日管理失败", value: data.failedAdminActionsToday, note: "可在操作审计中查看", tone: "red", href: "/audits" },
+    { label: "结果未知", value: data.unknownPayments, note: "需要主动查单", tone: "orange", href: "/orders" },
+    { label: "待人工查单退款", value: data.pendingRefunds, note: "退款不再自动查单", tone: "orange", href: "/refunds" },
+    { label: "未匹配账单", value: data.unmatchedReceipts, note: "等待订单或退款单出现", tone: "orange", href: "/reconciliation" },
+    { label: "过期关闭异常", value: data.expirationFailures, note: "Worker 将自动退避重试", tone: "orange", href: "/orders" },
   ];
   return all.filter(item => item.value > 0);
 }
 
 export function Dashboard() {
-  const { data, loading, error } = useApi<Dashboard>("/dashboard", 10_000);
+  const { data, loading, error, updatedAt } = useApi<Dashboard>("/dashboard", 10_000);
   const alerts = data ? alertItems(data) : [];
-  // 数据更新时刻放在 hero 里：轮询页面（10 秒一次）最容易被误解成"看到的就是此刻"，
-  // 明确标出取样时间，用户才知道这屏数据有多新。
-  const updatedAt = time(new Date().toISOString());
+  const riskTone = alerts.some(item => item.tone === "red") ? "tone-bad" : alerts.length ? "tone-warn" : "tone-ok";
   return <>
     <section className="card hero-card">
       <div className="hero-main">
@@ -42,18 +41,22 @@ export function Dashboard() {
       </div>
       <div className="hero-status">
         <div className="hero-status-item">
-          <span>平台状态</span>
-          <strong className={data && alerts.length ? "tone-bad" : "tone-ok"}>{data ? (alerts.length ? "异常" : "正常") : "—"}</strong>
+          <span>风险提醒</span>
+          <strong className={error ? "tone-bad" : data ? riskTone : undefined}>
+            {error ? "刷新失败" : data ? (alerts.length ? `${alerts.length} 类待关注` : "暂无待办") : "—"}
+          </strong>
         </div>
         <div className="hero-status-item">
           <span>活跃应用</span>
           <strong>{data ? `${data.applications} 个` : "—"}</strong>
         </div>
-        <div className="hero-status-foot muted">{data ? <>数据更新于 {updatedAt}</> : "正在读取运行状态"}</div>
-        {data && alerts.length > 0 && <span className="hero-badge">{alerts.length} 项待处理</span>}
+        <div className="hero-status-foot muted">
+          {updatedAt ? `${error ? "上次成功更新" : "数据更新于"} ${time(new Date(updatedAt).toISOString())}` : error ? "暂时无法读取数据" : "正在读取运行状态"}
+        </div>
+        {data && !error && alerts.length > 0 && <span className="hero-badge">可进入对应页面查看详情</span>}
       </div>
     </section>
-    <LoadingState loading={loading} error={error}>
+    <LoadingState loading={loading} error={error} stale={Boolean(data)}>
       {data && <>
         <div className="grid stats">
           <Stat label="今日订单" value={String(data.ordersToday)} note={`${data.successfulToday} 笔支付成功`} />
@@ -63,8 +66,11 @@ export function Dashboard() {
         </div>
         {alerts.length
           ? <div className="alert-strip">
-            <div className="alert-strip-head">需要关注<span className="alert-count">{alerts.length} 项</span></div>
-            <div className="grid alert-grid">{alerts.map(item => <Stat key={item.label} tone={item.tone} label={item.label} value={String(item.value)} note={item.note} />)}</div>
+            <div className="alert-strip-head">需要关注<span className="alert-count">{alerts.length} 类提醒</span></div>
+            <div className="grid alert-grid">{alerts.map(item => <Link key={item.label} href={item.href} className="alert-action-card">
+              <Stat tone={item.tone} label={item.label} value={String(item.value)} note={item.note} />
+              <span className="alert-action-link" aria-hidden="true">查看相关页面 ↗</span>
+            </Link>)}</div>
           </div>
           : <div className="card stat-clear">当前没有需要人工处理的异常</div>}
         <Section title="最近业务事件" action={<span className="muted">{data.recentEvents.length} 条 · 自动刷新</span>}>

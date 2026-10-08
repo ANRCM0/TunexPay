@@ -195,7 +195,7 @@ export function Reconciliation() {
     </section>
 
     <ListPage>
-      <LoadingState loading={runsLoading} error={runsError} empty={!runs?.length} emptyText="还没有导入过支付宝账单">
+      <LoadingState loading={runsLoading} error={runsError} stale={Boolean(runs)} empty={!runs?.length} emptyText="还没有导入过支付宝账单">
         <ListCard
           toolbar={<><strong>导入批次</strong><ToolbarNote>共 {runRows.length} 个 · 按账单日期幂等覆盖统计</ToolbarNote></>}
           pagination={<Pager total={runPager.total} page={runPager.page} pageSize={runPager.pageSize} onChange={runPager.setPage} onPageSizeChange={runPager.setPageSize} />}
@@ -220,7 +220,7 @@ export function Reconciliation() {
         <FilterCard onSearch={() => setStatus(draftStatus)} onReset={() => { setDraftStatus(""); setStatus(""); }}>
           <FilterItem label="匹配状态"><FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} /></FilterItem>
         </FilterCard>
-        <LoadingState loading={receiptsLoading} error={receiptsError} empty={!receipts?.length} emptyText={status ? "当前筛选条件下没有对账流水" : "还没有标准化对账流水"}>
+        <LoadingState loading={receiptsLoading} error={receiptsError} stale={Boolean(receipts)} empty={!receipts?.length} emptyText={status ? "当前筛选条件下没有对账流水" : "还没有标准化对账流水"}>
           <ListCard
             toolbar={<><strong>标准化流水</strong><ToolbarNote>共 {receiptRows.length} 条 · 状态筛选在服务端执行</ToolbarNote></>}
             pagination={<Pager total={receiptPager.total} page={receiptPager.page} pageSize={receiptPager.pageSize} onChange={receiptPager.setPage} onPageSizeChange={receiptPager.setPageSize} />}

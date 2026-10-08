@@ -3,6 +3,7 @@ import { Drawer as ArcoDrawer, Modal as ArcoModal } from "@arco-design/web-react
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SortColumn } from "../lib/sort";
 import { channelLabel } from "../lib/labels";
+import { refreshClientData } from "../lib/refresh";
 
 export function PageHead({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <header className="page-head"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-copy">{copy}</p></div>{action}</header>;
@@ -318,9 +319,16 @@ export function HoverDetail({ text, tone = "muted", children }: { text?: string 
   </span>;
 }
 
-export function LoadingState({ loading, error, empty, emptyText = "暂无数据", children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; children: React.ReactNode }) {
+export function LoadingState({ loading, error, empty, emptyText = "暂无数据", stale = false, children }: { loading: boolean; error: string; empty?: boolean; emptyText?: string; stale?: boolean; children: React.ReactNode }) {
   if (loading) return <div className="card skeleton-card" role="status" aria-label="正在加载"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>;
-  if (error) return <div className="card error" role="alert">{error}</div>;
+  // 只有明确确认有旧数据的页面才在错误时保留内容；避免初始化失败时显示可操作的空表单。
+  if (error) return <>
+    <div className="operation-notice error load-error-notice" role="alert">
+      <div className="load-error-copy"><strong>数据更新失败</strong><span>{error}{stale ? "；以下为上次成功读取的数据。" : "。请检查网络后重试。"}</span></div>
+      <button type="button" className="button secondary load-retry" onClick={refreshClientData}>重新尝试</button>
+    </div>
+    {stale && !empty && children}
+  </>;
   if (empty) return <div className="card empty">{emptyText}</div>;
   return <>{children}</>;
 }
