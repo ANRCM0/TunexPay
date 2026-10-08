@@ -171,7 +171,8 @@ export function Applications() {
       });
       setCredentials(response.data.credentials);
       setDraft({ name: "", webhookUrl: "", routingTarget: "" });
-      await reload();
+      try { await reload(); }
+      catch { setFormError("应用创建成功，但列表刷新失败。请先保存已显示的凭证，不要重复创建。"); }
     } catch (cause) { setFormError(reason(cause, "创建失败")); }
     finally { setSaving(false); }
   }
