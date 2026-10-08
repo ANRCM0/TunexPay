@@ -2,13 +2,18 @@
 
 import { Button, Table, Tag } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api";
 import { transactionListPath } from "../lib/transaction-list";
 import { type SortColumn } from "../lib/sort";
 import { ChannelTag, CopyValue, Drawer, HoverDetail, LoadingState, PageHead, Status, sortValueProps, money, time } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, useServerPager, useTableSort, sortHeader } from "./list";
-import { OrderDetailBody } from "./order-detail";
+// 大型详情面板不参与订单列表的初始 JS；用户打开抽屉时再加载。
+const OrderDetailBody = dynamic(
+  () => import("./order-detail").then(mod => mod.OrderDetailBody),
+  { ssr: false, loading: () => <div className="skeleton-card" role="status" aria-label="正在加载订单详情"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div> },
+);
 
 type Payment = { paymentNo: string; status: string; channel: string };
 type Order = { id: string; orderNo: string; externalOrderNo: string; subject: string; amount: number; status: string; createdAt: string; paidAt: string | null; expiresAt: string | null; expirationAttempts: number; expirationError: string | null; application: { name: string }; payments: Payment[] };
