@@ -198,7 +198,7 @@ export function Channels() {
       dataIndex: "actions",
       width: 280,
       render: (_: unknown, channel: Channel) => <div className="channel-actions">
-        <button type="button" className="link-button" disabled={!!busy} onClick={() => { setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</button>
+        <button type="button" className="link-button" disabled={!!busy} onClick={() => { setFormBusy(false); setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</button>
         <button type="button" className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
         <button type="button" className="link-button" disabled={!!busy || !channel.enabled} onClick={() => { setTestAmount("0.01"); setTestChannel(channel); }}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
         <button type="button" className="link-button danger-link" disabled={!!busy} onClick={() => setRemoving(channel)}><Trash2 size={13} aria-hidden="true" />删除</button>
@@ -210,7 +210,7 @@ export function Channels() {
     <PageHead eyebrow="Channels" title="支付通道" copy="独立收款账号的通道实例；修改配置后需重新检测，验证通过才能分配给应用。" action={
       <div className="page-head-actions">
         <Button type="secondary" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={() => void channels.reload()}>刷新状态</Button>
-        <Button type="primary" onClick={() => { setFormDirty(false); setCreateOpen(true); }}>创建通道</Button>
+        <Button type="primary" onClick={() => { setFormBusy(false); setFormDirty(false); setCreateOpen(true); }}>创建通道</Button>
       </div>
     } />
     {notice && <Toast type={notice.ok ? "ok" : "error"} text={notice.text} onClose={() => setNotice(null)} />}
@@ -273,8 +273,8 @@ export function Channels() {
       </div>
     </Modal>}
 
-    {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setEditor(null); setFormDirty(false); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); await channels.reload(); }} /></Modal>}
-    {createOpen && <Modal title="创建通道" onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setCreateOpen(false); setFormDirty(false); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); await channels.reload(); }} /></Modal>}
+    {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setEditor(null); setFormBusy(false); setFormDirty(false); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); await channels.reload(); }} /></Modal>}
+    {createOpen && <Modal title="创建通道" onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setCreateOpen(false); setFormBusy(false); setFormDirty(false); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); await channels.reload(); }} /></Modal>}
     {confirmDiscard && <ConfirmModal title="放弃未保存的通道配置？" copy="你修改的通道设置、密钥输入及清除选项都尚未保存。关闭后这些输入将丢失。" confirmLabel="放弃修改" danger onClose={() => setConfirmDiscard(false)} onConfirm={discardChannelForm} />}
     {pendingAssignment && <ConfirmModal title="确认修改收款路由" copy={`${pendingAssignment.app.name}：${targetLabel(applicationRoutingTarget(pendingAssignment.app))} → ${targetLabel(pendingAssignment.target)}。修改仅影响新支付。`} warning={!pendingAssignment.target ? "解除绑定后，这个应用无法创建新的支付订单。" : undefined} danger={!pendingAssignment.target} working={!!busy} confirmLabel={!pendingAssignment.target ? "确认解除绑定" : "确认改派"} onClose={() => setPendingAssignment(null)} onConfirm={() => void assign(pendingAssignment.app, pendingAssignment.target)} />}
     {assignOpen && <Modal title="应用收款路由分配" onClose={() => setAssignOpen(false)}>
