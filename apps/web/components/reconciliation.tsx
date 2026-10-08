@@ -7,7 +7,7 @@ import { FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { CopyValue, HoverDetail, LoadingState, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
+import { CopyValue, HoverDetail, LoadingState, PageHead, Status, Toast, sortValueProps, money, time, RowAction } from "./common";
 import { FilterCard, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Run = {
@@ -170,7 +170,7 @@ export function Reconciliation() {
       dataIndex: "actions",
       width: 110,
       render: (_: unknown, item: Receipt) => item.matchStatus !== "MATCHED"
-        ? <button type="button" className="link-button" disabled={matching !== ""} onClick={() => void rematch(item.id)}>{matching === item.id ? "匹配中…" : "重新匹配"}</button>
+        ? <RowAction disabled={matching !== ""} busy={matching === item.id} onClick={() => void rematch(item.id)}>{matching === item.id ? "匹配中…" : "重新匹配"}</RowAction>
         : null,
     },
   ];
