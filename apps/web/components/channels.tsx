@@ -9,7 +9,7 @@ import { channelLabel } from "../lib/labels";
 import type { RoutingGroup } from "../lib/routing-groups";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { ChannelEditor, type PluginOption } from "./channel-editor";
-import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, statusText, time } from "./common";
+import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Modal, PageHead, RowAction, Status, Toast, sortValueProps, statusText, time } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 import { RoutingTargetSelect, applicationRoutingTarget, assignPaymentRouting } from "./routing-target";
 
@@ -103,7 +103,7 @@ export function Channels() {
   };
   async function operate(channel: Channel, action: "check" | "test-payment", amount?: string) {
     // 必须在点击事件里同步预留窗口，否则 await 后 window.open 常被浏览器阻止。
-    const cashierWindow = action === "test-payment" ? window.open("about:blank", "_blank") : null;
+    const cashierWindow = action === "test-payment" && channel.plugin !== "MOCK" ? window.open("about:blank", "_blank") : null;
     if (cashierWindow) cashierWindow.opener = null;
     setBusy(channel.id); setNotice(null); setCashierUrl("");
     try {
@@ -198,10 +198,10 @@ export function Channels() {
       dataIndex: "actions",
       width: 280,
       render: (_: unknown, channel: Channel) => <div className="channel-actions">
-        <button type="button" className="link-button" disabled={!!busy} onClick={() => { setFormBusy(false); setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</button>
-        <button type="button" className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
-        <button type="button" className="link-button" disabled={!!busy || !channel.enabled} onClick={() => { setTestAmount("0.01"); setTestChannel(channel); }}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
-        <button type="button" className="link-button danger-link" disabled={!!busy} onClick={() => setRemoving(channel)}><Trash2 size={13} aria-hidden="true" />删除</button>
+        <RowAction disabled={!!busy} onClick={() => { setFormBusy(false); setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</RowAction>
+        <RowAction busy={busy === channel.id} disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "检测中…" : "检测"}</RowAction>
+        <RowAction disabled={!!busy || !channel.enabled} title={!channel.enabled ? "请先启用通道，再进行验收" : undefined} onClick={() => { setTestAmount("0.01"); setTestChannel(channel); }}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</RowAction>
+        <RowAction danger disabled={!!busy} onClick={() => setRemoving(channel)}><Trash2 size={13} aria-hidden="true" />删除</RowAction>
       </div>,
     },
   ];
@@ -235,7 +235,7 @@ export function Channels() {
       </FilterCard>
       <LoadingState loading={channels.loading} error={channels.error} stale={Boolean(channels.data)} empty={!channels.data?.length} emptyText="还没有支付通道：请先创建通道并选择对接的支付插件，检测通过后再分配给应用">
         <ListCard
-          toolbar={<><ToolbarNote>共 {rows.length} 个通道</ToolbarNote><ToolbarSpacer /><button type="button" className="link-button" onClick={() => setAssignOpen(true)}>通道分配</button><Button size="small" onClick={() => void channels.reload()}>刷新状态</Button></>}
+          toolbar={<><ToolbarNote>共 {rows.length} 个通道</ToolbarNote><ToolbarSpacer /><RowAction onClick={() => setAssignOpen(true)}>通道分配</RowAction><Button size="small" onClick={() => void channels.reload()}>刷新状态</Button></>}
           pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
         >
           <Table<Channel>
@@ -267,7 +267,7 @@ export function Channels() {
         </Form>
         {testChannel.plugin !== "MOCK" && <div className="dialog-warning">测试款不会自动退款，请使用你可以确认到账并接受实际扣款的金额。</div>}
         <div className="dialog-actions">
-          <Button type="primary" disabled={!!busy || !Number.isFinite(Number(testAmount)) || Number(testAmount) <= 0} onClick={() => void operate(testChannel, "test-payment", testAmount.trim() || "0.01")}>{busy === testChannel.id ? "创建中…" : "创建验收订单"}</Button>
+          <Button type="primary" loading={busy === testChannel.id} disabled={!!busy || !Number.isFinite(Number(testAmount)) || Number(testAmount) <= 0} onClick={() => void operate(testChannel, "test-payment", testAmount.trim() || "0.01")}>{busy === testChannel.id ? "创建中…" : "创建验收订单"}</Button>
           <Button type="secondary" disabled={!!busy} onClick={() => setTestChannel(null)}>取消</Button>
         </div>
       </div>
