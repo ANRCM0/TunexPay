@@ -4,6 +4,7 @@ import { Button, Table, Tag } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api";
+import { transactionListPath } from "../lib/transaction-list";
 import { type SortColumn } from "../lib/sort";
 import { ChannelTag, CopyValue, Drawer, HoverDetail, LoadingState, PageHead, Status, sortValueProps, money, time } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, useServerPager, useTableSort, sortHeader } from "./list";
@@ -47,11 +48,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
   const { sort, onSort } = useTableSort<Order>();
   const pager = useServerPager(20);
   const path = useMemo(() => {
-    const params = new URLSearchParams({ page: String(pager.page), pageSize: String(pager.pageSize) });
-    if (applied.query.trim()) params.set("q", applied.query.trim());
-    if (applied.status !== "ALL") params.set("status", applied.status);
-    if (sort) { params.set("sortBy", sort.key); params.set("sortDir", sort.direction); }
-    return `/orders?${params.toString()}`;
+    return transactionListPath("orders", { page: pager.page, pageSize: pager.pageSize, query: applied.query, status: applied.status, sort });
   }, [pager.page, pager.pageSize, applied, sort]);
   const { data, meta, loading, error, reload } = useApi<Order[]>(path, 8_000);
   useEffect(() => { if (meta) pager.clamp(meta.total); }, [meta?.total, pager.clamp]);
@@ -132,7 +129,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
         onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); applyFilters("", "ALL"); }}
       >
         <FilterItem label="关键字">
-          <FilterInput value={draftQuery} onChange={setDraftQuery} placeholder="订单号 / 业务单号 / 应用 / 商品" />
+          <FilterInput value={draftQuery} onChange={setDraftQuery} maxLength={160} placeholder="订单号 / 业务单号 / 应用 / 商品" />
         </FilterItem>
         <FilterItem label="订单状态">
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} />
