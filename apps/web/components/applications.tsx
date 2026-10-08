@@ -129,6 +129,7 @@ export function Applications() {
   const [confirmName, setConfirmName] = useState("");
   const [removeError, setRemoveError] = useState("");
   const [removed, setRemoved] = useState<DeleteResult | null>(null);
+  const [confirmDiscardCreate, setConfirmDiscardCreate] = useState(false);
   const [pendingDisable, setPendingDisable] = useState<Application | null>(null);
 
   const routingDisabled = groups.loading || channels.loading || !!groups.error || !!channels.error;
@@ -140,7 +141,15 @@ export function Applications() {
     setCreating(true);
   }
 
+  const draftCreateDirty = Boolean(draft.name.trim() || draft.webhookUrl.trim() || draft.routingTarget);
   function closeCreate() {
+    if (saving) return;
+    if (!credentials && draftCreateDirty) { setConfirmDiscardCreate(true); return; }
+    setCreating(false); setCredentials(null); setFormError("");
+  }
+  function discardCreate() {
+    setConfirmDiscardCreate(false);
+    setDraft({ name: "", webhookUrl: "", routingTarget: "" });
     setCreating(false); setCredentials(null); setFormError("");
   }
 
@@ -362,6 +371,7 @@ export function Applications() {
 
     {/* 新建/编辑表单放在弹窗里，列表页因此只保留「查询 + 表格 + 分页」一张卡。
         凭证只显示一次：展示期间不允许点遮罩或按 Esc 顺手关掉，必须走「我已保存，关闭」。 */}
+    {confirmDiscardCreate && <ConfirmModal title="放弃新建应用？" copy="应用名称、Webhook 地址和所选收款路由尚未保存。关闭后这些输入将丢失。" danger confirmLabel="放弃填写" onClose={() => setConfirmDiscardCreate(false)} onConfirm={discardCreate} />}
     {creating && <Modal
       className="app-modal"
       title={credentials ? "创建成功：请立即保存凭证" : "新建应用"}
@@ -487,7 +497,7 @@ export function Applications() {
     </Modal>}
 
     {/* 删除弹窗保持原来「随时可关闭」的手感（遮罩 / Esc / 关闭按钮都保留默认值） */}
-    {removing && <Modal title="删除应用" visible onCancel={closeRemove} footer={null} autoFocus focusLock alignCenter unmountOnExit>
+    {removing && <Modal title="删除应用" visible onCancel={() => { if (busy !== removing.id) closeRemove(); }} closable={busy !== removing.id} maskClosable={busy !== removing.id} escToExit={busy !== removing.id} footer={null} autoFocus focusLock alignCenter unmountOnExit>
       {removed ? <>
         <p>应用「<strong>{removed.name}</strong>」已删除。</p>
         <div className={`dialog-warning ${removed.archived ? "is-info" : ""}`}>
