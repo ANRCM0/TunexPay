@@ -2,6 +2,7 @@
 import { Button, Checkbox, Form, Input, Select, Switch } from "@arco-design/web-react";
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { channelDraftErrors } from "../lib/settings-validation";
 import { statusText } from "./common";
 import type { Channel } from "./channels";
 
@@ -53,7 +54,11 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
   const [clear, setClear] = useState({ privateKey: false, publicKey: false, watcherToken: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const update = (key: string, value: string | number | boolean) => setSettings(previous => ({ ...previous, [key]: value }));
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const update = (key: string, value: string | number | boolean) => {
+    setSettings(previous => ({ ...previous, [key]: value }));
+    setFieldErrors(previous => { const next = { ...previous }; delete next[key]; return next; });
+  };
   const activePlugin = channel?.plugin || selectedPlugin;
   // 未保存输入交给外层弹窗管理；取消、遮罩和 Esc 都应遵循同一规则。
   const dirty = selectedPlugin !== (channel?.plugin || plugin || "") ||
@@ -69,8 +74,9 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
   // 因此这里用 Form 承担「提交语义 + 版式」，字段约束仍走控件声明（required/min/max）与提交时的显式校验。
   async function submit() {
     if (saving) return;
-    if (!activePlugin) { setError("请先选择要对接的支付插件"); return; }
-    if (!name.trim()) { setError("请填写通道名称"); return; }
+    const issues = channelDraftErrors({ plugin: activePlugin, name, channelId: creating ? channelId : "", settings });
+    setFieldErrors(issues);
+    if (Object.keys(issues).length) { setError("请修正标红字段后再保存。"); return; }
     setSaving(true);
     setError("");
     try {
@@ -103,6 +109,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
 
     <Form layout="vertical" onSubmit={() => void submit()}>
       <fieldset className="bill-settings-fields" disabled={saving}>
+        {dirty && <p className="muted" role="status">有未保存的配置修改。保存前请确认下面的字段和密钥维护选项。</p>}
         {error && <div role="alert" className="operation-notice error">{error}</div>}
 
         <section className="bill-settings-section">
@@ -118,19 +125,22 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
                 value={activePlugin || undefined}
                 placeholder="请选择支付插件"
                 disabled={!creating || saving}
-                onChange={(value) => setSelectedPlugin(String(value))}
+                onChange={(value) => { setSelectedPlugin(String(value)); setFieldErrors(previous => { const next = { ...previous }; delete next.plugin; return next; }); }}
                 options={plugins.map(item => ({ label: `${item.name}（${item.code}）`, value: item.code }))}
               />
+              {fieldErrors.plugin && <p className="form-field-error" role="alert">{fieldErrors.plugin}</p>}
             </Form.Item>
             {creating
               ? <Form.Item label="通道 ID（可选）" extra={<span className="muted">只能用小写字母、数字与中划线；创建后不可修改，接口与对账会引用它。</span>}>
-                <Input aria-label="通道 ID（可选）" value={channelId} disabled={saving} maxLength={60} placeholder="留空自动生成，例如 alipay-shop1" autoComplete="off" spellCheck={false} onChange={(value) => setChannelId(value)} />
+                <Input aria-label="通道 ID（可选）" value={channelId} disabled={saving} maxLength={60} placeholder="留空自动生成，例如 alipay-shop1" autoComplete="off" spellCheck={false} onChange={(value) => { setChannelId(value); setFieldErrors(previous => { const next = { ...previous }; delete next.channelId; return next; }); }} aria-invalid={Boolean(fieldErrors.channelId)} />
+                {fieldErrors.channelId && <p className="form-field-error" role="alert">{fieldErrors.channelId}</p>}
               </Form.Item>
               : <Form.Item label="通道 ID" extra={<span className="muted">通道 ID 创建后不可修改。</span>}>
                 <Input aria-label="通道 ID" value={channel.id} readOnly disabled />
               </Form.Item>}
             <Form.Item label="通道名称" required>
-              <Input aria-label="通道名称" value={name} disabled={saving} required maxLength={120} placeholder="例如：支付宝 · 工作室" onChange={(value) => setName(value)} />
+              <Input aria-label="通道名称" value={name} disabled={saving} required maxLength={120} placeholder="例如：支付宝 · 工作室" onChange={(value) => { setName(value); setFieldErrors(previous => { const next = { ...previous }; delete next.name; return next; }); }} aria-invalid={Boolean(fieldErrors.name)} />
+              {fieldErrors.name && <p className="form-field-error" role="alert">{fieldErrors.name}</p>}
             </Form.Item>
             <Form.Item label="启用新订单">
               <Switch aria-label="启用新订单" checked={enabled} disabled={saving} onChange={(value) => setEnabled(value)} />
@@ -178,6 +188,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
                 onChange={(checked) => setClear(previous => ({ ...previous, [key]: checked }))}
               >清除{SECRET_LABELS[key]}</Checkbox>)}
             </div>
+            {clearKeys.some(key => clear[key]) && <div className="dialog-warning" role="status">保存将清除：{clearKeys.filter(key => clear[key]).map(key => SECRET_LABELS[key]).join("、")}。请确认此通道不会因此丧失验签或采集能力。</div>}
           </details>
         </section>}
 
@@ -226,10 +237,12 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
                   min={min}
                   max={max}
                   step={1}
-                  value={String(Number(settings[key]))}
+                  value={String(settings[key] ?? "")}
+                  aria-invalid={Boolean(fieldErrors[key])}
                   disabled={saving}
-                  onChange={(value) => update(key, Number(value))}
+                  onChange={(value) => update(key, value.trim() === "" ? "" : Number(value))}
                 />
+                {fieldErrors[key] && <p className="form-field-error" role="alert">{fieldErrors[key]}</p>}
               </Form.Item>)}
             </div>
           </details>
@@ -240,7 +253,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
         {channel && activePlugin === "ALIPAY_BILL" && <p className="channel-check-detail">此通道的 Watcher 地址：<code>{channel.watcherUrl}</code></p>}
         <p className="muted">保存后请重新检测。已有交易的通道不能更换账号或网关；如需切换收款账号，请创建新通道后重新分配。</p>
         <div className="bill-settings-actions">
-          <Button type="primary" htmlType="submit" loading={saving} disabled={!activePlugin || !name.trim() || saving}>{saving ? "保存中…" : "保存通道"}</Button>
+          <Button type="primary" htmlType="submit" loading={saving} disabled={!activePlugin || !name.trim() || saving || (!!channel && !dirty)}>{saving ? "保存中…" : channel && !dirty ? "尚无修改" : "保存通道"}</Button>
           <Button type="secondary" disabled={saving} onClick={onClose}>取消</Button>
         </div>
       </fieldset>
