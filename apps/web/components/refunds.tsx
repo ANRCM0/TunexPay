@@ -2,12 +2,12 @@
 
 import { Button, Input, Table, Tag } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { newRefundIdempotencyKey, parseYuanToCents } from "../lib/admin-refund";
-import { sortRows, type SortColumn } from "../lib/sort";
+import { type SortColumn } from "../lib/sort";
 import { CopyValue, HoverDetail, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
-import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useClientPager, useTableSort } from "./list";
+import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, sortHeader, useServerPager, useTableSort } from "./list";
 
 type Refund = {
   id: string; refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string;
@@ -46,29 +46,32 @@ function refundRecovery(item: Refund): string {
 }
 
 export function Refunds() {
-  const { data, loading, error, reload } = useApi<Refund[]>("/refunds?pageSize=100", 8_000);
   const [draftQuery, setDraftQuery] = useState("");
   const [draftStatus, setDraftStatus] = useState("ALL");
-  // 查询条件在点「查询」时才生效：输入过程中每敲一个字都重算整张表，长列表会明显卡顿
   const [applied, setApplied] = useState({ query: "", status: "ALL" });
   const { sort, onSort } = useTableSort<Refund>();
+  const pager = useServerPager(20);
+  const path = useMemo(() => {
+    const params = new URLSearchParams({ page: String(pager.page), pageSize: String(pager.pageSize) });
+    if (applied.query.trim()) params.set("q", applied.query.trim());
+    if (applied.status !== "ALL") params.set("status", applied.status);
+    if (sort) { params.set("sortBy", sort.key); params.set("sortDir", sort.direction); }
+    return `/refunds?${params.toString()}`;
+  }, [pager.page, pager.pageSize, applied, sort]);
+  const { data, meta, loading, error, reload } = useApi<Refund[]>(path, 8_000);
+  useEffect(() => { if (meta) pager.clamp(meta.total); }, [meta?.total, pager.clamp]);
+  const applyFilters = (query: string, status: string) => {
+    pager.setPage(1);
+    setApplied({ query: query.trim(), status });
+  };
+  const sortAndResetPage = (key: string) => { pager.setPage(1); onSort(key); };
   const [querying, setQuerying] = useState("");
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   // 命名上刻意避开 draft：筛选的草稿态叫 draftQuery/draftStatus，这里是与后端交互的表单
   const [refundForm, setRefundForm] = useState<{ paymentNo: string; amount: string; reason: string; key: string } | null>(null);
   const [working, setWorking] = useState(false);
-  // 筛选放在客户端：列表一次取回（pageSize=100），关键字和状态都在本页过一遍，
-  // 既不给 /refunds 新增筛选参数破坏既有契约，也不会每换个条件就重新请求
-  const filtered = useMemo(() => (data ?? []).filter(item => {
-    const matchesStatus = applied.status === "ALL" || item.status === applied.status;
-    const needle = applied.query.trim().toLowerCase();
-    const matchesQuery = !needle || [item.refundNo, item.externalRefundNo, item.payment.paymentNo, item.payment.order.subject]
-      .some(value => value.toLowerCase().includes(needle));
-    return matchesStatus && matchesQuery;
-  }), [data, applied]);
-  // 先筛选再排序再分页：页码属于「当前筛选结果的第几页」，顺序反过来会让翻页内容错位
-  const rows = useMemo(() => sortRows(filtered, SORT_COLUMNS, sort), [filtered, sort]);
-  const pager = useClientPager(rows, 20);
+  // 后端在全量匹配结果中完成筛选和排序，这里仅渲染当前页。
+  const rows = data ?? [];
   const cents = refundForm ? parseYuanToCents(refundForm.amount) : null;
   const canSubmit = Boolean(refundForm && refundForm.paymentNo.trim() && refundForm.reason.trim().length >= 2 && cents !== null);
 
@@ -101,7 +104,8 @@ export function Refunds() {
       }) });
       setNotice({ type: "ok", text: `退款已发起（${money(cents)}）。退款不会自动查单，请稍后用「主动查单」确认通道结果。` });
       setRefundForm(null);
-      await reload();
+      if (pager.page === 1) await reload();
+      else pager.setPage(1);
     } catch (cause) {
       // 失败时保留弹窗与同一个幂等键：原样重试不会退成两笔。
       setNotice({ type: "error", text: cause instanceof Error ? cause.message : "退款发起失败" });
@@ -112,7 +116,7 @@ export function Refunds() {
 
   const columns: ColumnProps<Refund>[] = [
     {
-      title: sortHeader(SORT_COLUMNS[0], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[0], sort, sortAndResetPage),
       dataIndex: "refundNo",
       render: (_: unknown, item: Refund) => <span {...sortValueProps(item, SORT_COLUMNS[0])}>
         <strong>{item.payment.order.subject}</strong>
@@ -122,7 +126,7 @@ export function Refunds() {
       </span>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[1], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[1], sort, sortAndResetPage),
       dataIndex: "paymentNo",
       width: 240,
       render: (_: unknown, item: Refund) => <span {...sortValueProps(item, SORT_COLUMNS[1])}>
@@ -133,14 +137,14 @@ export function Refunds() {
       </span>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[2], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[2], sort, sortAndResetPage),
       dataIndex: "amount",
       align: "right",
       width: 120,
       render: (_: unknown, item: Refund) => <strong {...sortValueProps(item, SORT_COLUMNS[2])}>{money(item.amount)}</strong>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[3], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[3], sort, sortAndResetPage),
       dataIndex: "status",
       width: 150,
       render: (_: unknown, item: Refund) => <span {...sortValueProps(item, SORT_COLUMNS[3])}>
@@ -148,7 +152,7 @@ export function Refunds() {
       </span>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[4], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[4], sort, sortAndResetPage),
       dataIndex: "createdAt",
       width: 200,
       render: (_: unknown, item: Refund) => <span {...sortValueProps(item, SORT_COLUMNS[4])}>
@@ -177,8 +181,8 @@ export function Refunds() {
     <p className="muted">带「已归档」标记的退款来自已删除的应用：通道侧的钱已经动了，这些记录仍保留可查。系统不自动查单，未完成的退款请用「主动查单」人工确认。</p>
     <ListPage>
       <FilterCard
-        onSearch={() => setApplied({ query: draftQuery, status: draftStatus })}
-        onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); setApplied({ query: "", status: "ALL" }); }}
+        onSearch={() => applyFilters(draftQuery, draftStatus)}
+        onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); applyFilters("", "ALL"); }}
       >
         <FilterItem label="关键字">
           <FilterInput value={draftQuery} onChange={setDraftQuery} placeholder="退款单号 / 业务退款号 / 支付单号 / 订单" />
@@ -189,13 +193,13 @@ export function Refunds() {
       </FilterCard>
       <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length}>
         <ListCard
-          toolbar={<><ToolbarNote>共 {rows.length} 笔退款</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
-          pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
+          toolbar={<><ToolbarNote>共 {meta?.total ?? 0} 笔退款</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
+          pagination={<Pager total={meta?.total ?? 0} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
         >
           <Table<Refund>
             className="list-table"
             columns={columns}
-            data={pager.rows}
+            data={rows}
             rowKey="id"
             pagination={false}
             borderCell={false}
