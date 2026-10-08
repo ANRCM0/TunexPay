@@ -166,7 +166,7 @@ export function RoutingGroups() {
     {editing && <Modal title={editing === "new" ? "创建轮询组" : `配置轮询组 · ${editing.name}`} onClose={requestCloseEditor} dismissible={!busy}>
       <LoadingState loading={channels.loading} error={channels.error} empty={false}>
         <RoutingGroupEditor group={editing === "new" ? null : editing} channels={channels.data ?? []} onBusy={setBusy} onDirtyChange={setEditorDirty} onClose={requestCloseEditor} onSaved={async () => {
-          setEditing(null); setEditorDirty(false); setNotice({ type: "ok", text: "轮询组已保存，新的支付尝试将使用最新规则。" }); await groups.reload();
+          setEditing(null); setEditorDirty(false); setNotice({ type: "ok", text: "轮询组已保存，新的支付尝试将使用最新规则。" }); void groups.reload().catch(() => setNotice({ type: "error", text: "轮询组已保存，但列表刷新失败，请手动刷新。" }));
         }} />
       </LoadingState>
     </Modal>}
