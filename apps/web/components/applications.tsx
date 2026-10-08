@@ -389,6 +389,7 @@ export function Applications() {
     >
       {credentials ? <>
         <p className="muted">凭证只显示一次，关闭后无法再次查看；请把 API Key、Webhook Secret 与 ePay 凭证同步到业务侧配置。</p>
+        {formError && <div className="operation-notice error" role="alert">{formError}</div>}
         <CredentialBlock title="请立即保存以下凭证。" items={[
           ["API Key", credentials.apiKey], ["Webhook Secret", credentials.webhookSecret], ["ePay PID", credentials.epayPid], ["ePay Key", credentials.epayKey],
         ]} />
