@@ -101,6 +101,25 @@ export function useClientPager<T>(rows: readonly T[], initialSize = 20) {
   };
 }
 
+/**
+ * 服务端分页状态。仅当前页数据进浏览器，页码/条数变化由调用方构造 API URL。
+ * 后端过滤条件可能使页数减少；收到真实 total 后收敛页码，避免长期停在空页。
+ */
+export function useServerPager(total: number | undefined, initialSize = 20) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(initialSize);
+  useEffect(() => {
+    if (total === undefined) return;
+    const lastPage = Math.max(1, Math.ceil(total / pageSize));
+    setPage(current => Math.min(current, lastPage));
+  }, [total, pageSize]);
+
+  return {
+    page, pageSize, setPage,
+    setPageSize: useCallback((size: number) => { setPageSize(size); setPage(1); }, []),
+  };
+}
+
 /** 分页控件：总数 + 页码 + 每页条数，右对齐。 */
 export function Pager({ total, page, pageSize, onChange, onPageSizeChange }: {
   total: number;
