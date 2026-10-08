@@ -172,7 +172,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
                 disabled={clear[key] || saving}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="留空保留原密钥"
+                placeholder={settings[`${key}Configured`] ? "留空保留已配置的密钥；粘贴新值可替换" : "粘贴新密钥（支持 PEM 格式）"}
                 onChange={(value) => setSecrets(previous => ({ ...previous, [key]: value }))}
               />
             </Form.Item>)}
@@ -211,9 +211,8 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
               <Select aria-label="匹配方式" value={String(settings.matchMode)} disabled={saving} options={MATCH_MODE_OPTIONS} onChange={(value) => update("matchMode", String(value))} />
             </Form.Item>
             <Form.Item label={`外部 Watcher 令牌（${settings.watcherTokenConfigured ? "已配置" : "未配置"}）`}>
-              <Input
+              <Input.Password
                 aria-label="外部 Watcher 令牌"
-                type="password"
                 value={secrets.watcherToken}
                 disabled={clear.watcherToken || saving}
                 autoComplete="new-password"
