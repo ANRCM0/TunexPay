@@ -3,6 +3,7 @@
 import { Button, Checkbox, Form, Input, Select, Switch } from "@arco-design/web-react";
 import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { CHANNEL_NUMERIC_BOUNDS } from "../lib/settings-validation";
 import { ConfirmModal, LoadingState, Section } from "./common";
 
 type Draft = {
@@ -49,6 +50,12 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
   function update<K extends keyof Draft>(key: K, value: Draft[K]) { setDraft(current => current ? { ...current, [key]: value } : current); }
   async function save(confirmedClear = false) {
     if (!draft || saving) return;
+    if (!draft.gateway.trim()) { setNotice({ ok: false, text: "请填写支付宝官方网关。" }); return; }
+    const invalid = CHANNEL_NUMERIC_BOUNDS.find(([key, , min, max]) => {
+      const value = draft[key];
+      return typeof value !== "number" || !Number.isInteger(value) || value < min || value > max;
+    });
+    if (invalid) { setNotice({ ok: false, text: `${invalid[1]}必须为 ${invalid[2]} 到 ${invalid[3]} 之间的整数。` }); return; }
     if (hasSecretClear && !confirmedClear) { setConfirmSecretClear(true); return; }
     setSaving(true); setNotice(null);
     try {
@@ -59,7 +66,8 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
       }) });
       setSecrets(emptySecrets); setClear(emptyClear);
       setNotice({ ok: true, text: "已保存。新订单立即使用新配置，采集器会在当前页结束后切换，无需重启容器。" });
-      await reload(); await onSaved();
+      try { await reload(); await onSaved(); }
+      catch { setNotice({ ok: false, text: "账单配置已保存，但读取最新配置失败，请手动重新加载；不要重复保存。" }); }
     } catch (cause) { setNotice({ ok: false, text: cause instanceof Error ? cause.message : "保存失败" }); }
     finally { setSaving(false); }
   }
@@ -102,8 +110,9 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
           </details>
           <p className="muted">已有账单支付记录或采集断点后，禁止直接更换账号、网关和收款码。密钥可轮换；清除必需密钥前请关闭相应开关。首次回看参数不会重置已有断点。</p>
           {hasSecretClear && <div className="dialog-warning" role="status">保存将清除选中的已保存密钥或令牌；请确认相关收款与采集能力不会因此中断。</div>}
+          <p className="muted" role="status">{dirty ? "有未保存的账单配置修改。" : "当前配置与服务器一致。"}</p>
           <div className="bill-settings-actions">
-            <Button type="primary" htmlType="submit" loading={saving}>{saving ? "保存中…" : "保存账单配置"}</Button>
+            <Button type="primary" htmlType="submit" disabled={!dirty || saving} loading={saving}>{saving ? "保存中…" : dirty ? "保存账单配置" : "尚无修改"}</Button>
             <Button type="secondary" disabled={saving} onClick={requestReload}>重新加载{dirty ? "（有未保存修改）" : ""}</Button>
             <span className="muted">版本 {data.revision}</span>
           </div>
@@ -116,5 +125,5 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
 function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   // 保留 type=number + required/min/max 的原生约束：浏览器会在提交前拦住空值与越界值，
   // 与迁移前那批 <input type="number"> 的行为一致，不必再手写一套校验提示。
-  return <label>{label}<Input type="number" value={String(value)} min={min} max={max} step={1} required onChange={next => onChange(Number(next))} /></label>;
+  return <label>{label}<Input type="number" value={Number.isFinite(value) ? String(value) : ""} min={min} max={max} step={1} required onChange={next => onChange(next.trim() === "" ? NaN : Number(next))} /></label>;
 }
