@@ -29,6 +29,8 @@ jobs:
       - run: npm run db:generate
       - run: npm run typecheck
       - run: npm test
+      - name: Build production frontend
+        run: npm run build --workspace @tuoxin-pay/web
       - name: Validate appliance scripts
         run: |
           node --check docker/gateway.mjs
