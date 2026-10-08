@@ -1,6 +1,6 @@
 "use client";
 import { Button, Checkbox, Form, Input, Select, Switch } from "@arco-design/web-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { statusText } from "./common";
 import type { Channel } from "./channels";
@@ -41,7 +41,7 @@ type SecretKey = "privateKey" | "publicKey" | "watcherToken";
 
 const SECRET_LABELS: Record<SecretKey, string> = { privateKey: "应用私钥", publicKey: "支付宝公钥", watcherToken: "Watcher 令牌" };
 
-export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose }: { plugin?: string; channel?: Channel; plugins: PluginOption[]; onSaved: () => Promise<void>; onClose: () => void }) {
+export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBusyChange, onDirtyChange }: { plugin?: string; channel?: Channel; plugins: PluginOption[]; onSaved: () => Promise<void>; onClose: () => void; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const creating = !channel;
   // 创建时必须显式选择插件作为对接；修改时插件不可改（通道 ID 与插件是支付单的绑定身份）。
   const [selectedPlugin, setSelectedPlugin] = useState(channel?.plugin || plugin || "");
@@ -55,12 +55,22 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose }: { 
   const [error, setError] = useState("");
   const update = (key: string, value: string | number | boolean) => setSettings(previous => ({ ...previous, [key]: value }));
   const activePlugin = channel?.plugin || selectedPlugin;
+  // 未保存输入交给外层弹窗管理；取消、遮罩和 Esc 都应遵循同一规则。
+  const dirty = selectedPlugin !== (channel?.plugin || plugin || "") ||
+    channelId !== "" || name !== (channel?.name || "") ||
+    enabled !== (channel?.enabled || false) ||
+    JSON.stringify(settings) !== JSON.stringify({ ...defaults, ...channel?.settings }) ||
+    Object.values(secrets).some(Boolean) || Object.values(clear).some(Boolean);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => { onBusyChange?.(saving); }, [saving, onBusyChange]);
 
   // 表单值由本地状态持有（而不是交给 Form 的 store）：编辑态的默认值来自远端通道对象，
   // 密钥、清除标记、采集参数又互相关联，保持单一数据源比拼装 field 绑定更不容易出错。
   // 因此这里用 Form 承担「提交语义 + 版式」，字段约束仍走控件声明（required/min/max）与提交时的显式校验。
   async function submit() {
+    if (saving) return;
     if (!activePlugin) { setError("请先选择要对接的支付插件"); return; }
+    if (!name.trim()) { setError("请填写通道名称"); return; }
     setSaving(true);
     setError("");
     try {
@@ -230,7 +240,7 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose }: { 
         {channel && activePlugin === "ALIPAY_BILL" && <p className="channel-check-detail">此通道的 Watcher 地址：<code>{channel.watcherUrl}</code></p>}
         <p className="muted">保存后请重新检测。已有交易的通道不能更换账号或网关；如需切换收款账号，请创建新通道后重新分配。</p>
         <div className="bill-settings-actions">
-          <Button type="primary" htmlType="submit">{saving ? "保存中…" : "保存通道"}</Button>
+          <Button type="primary" htmlType="submit" loading={saving} disabled={!activePlugin || !name.trim() || saving}>{saving ? "保存中…" : "保存通道"}</Button>
           <Button type="secondary" disabled={saving} onClick={onClose}>取消</Button>
         </div>
       </fieldset>
