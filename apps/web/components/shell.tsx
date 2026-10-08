@@ -2,6 +2,7 @@
 
 import { Avatar, Breadcrumb, Drawer, Dropdown, Layout, Menu, Tooltip } from "@arco-design/web-react";
 import { IconDown, IconFullscreen, IconMenuFold, IconMenuUnfold, IconMoon, IconSearch, IconSun } from "@arco-design/web-react/icon";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -9,7 +10,11 @@ import { HOME, NAV_GROUPS, matchNavItem, navGroupOf, navTrail, type NavGroup, ty
 import { useNavPush } from "../lib/nav-progress";
 import { VersionBadge } from "./version-badge";
 import { PageTabs } from "./page-tabs";
-import { CommandPalette } from "./command-palette";
+// 快捷搜索只有用户主动打开时才加载，避免所有管理台页面首屏包含 Modal / 搜索面板代码。
+const CommandPalette = dynamic(
+  () => import("./command-palette").then(mod => mod.CommandPalette),
+  { ssr: false, loading: () => <span className="sr-only" role="status">正在打开快捷搜索</span> },
+);
 import { RouteProgress } from "./route-progress";
 // 只取类型：app-version 里含 node:child_process，客户端组件不能把它拉进浏览器包。
 import type { AppVersion } from "../lib/app-version";
@@ -229,7 +234,7 @@ export function Shell({ children, version }: { children: React.ReactNode; versio
       <NavMenu collapsed={false} onNavigate={() => setNavOpen(false)} />
     </Drawer>
 
-    <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} />}
   </Layout>;
 }
 
