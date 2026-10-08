@@ -154,9 +154,9 @@ export function McpAccessPanel(){
   const [deciding,setDeciding]=useState<{row:Approval;decision:"approve"|"reject"}|null>(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState<{type:"ok"|"error";text:string}|null>(null);
   const eligible=useMemo(()=>eligibleTools(tools,scope),[tools,scope]);
-  useEffect(()=>{ if(tools?.length&&!allowed.length)setAllowed(eligible.map(tool=>tool.name)); },[tools,scope]);
+  // 最小权限原则：异步加载工具列表或清空选择后，都不能悄悄恢复成「全部允许」。
 
-  function changeScope(next:Scope){setScope(next);setAllowed(eligibleTools(tools,next).map(tool=>tool.name));}
+  function changeScope(next:Scope){setScope(next);const supported=new Set(eligibleTools(tools,next).map(tool=>tool.name));setAllowed(current=>current.filter(key=>supported.has(key)));}
   async function create(){
     setBusy(true);setNotice(null);
     try{
@@ -275,7 +275,8 @@ export function McpAccessPanel(){
             </div>
             <label style={{display:"inline-flex",alignItems:"center",gap:8}}><Switch checked={enabled} onChange={setEnabled} aria-label="创建后立即启用"/><span>创建后立即启用</span></label>
             <div className="settings-group-head"><div><h3>允许的工具</h3><p>默认选择当前 Scope 下所有工具；可以收窄成某个 Agent 的最小权限集合。</p></div></div>
-            <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
+            <p className="muted">默认不授权任何工具。请只勾选这个客户端确实需要的 Tool；切换 Scope 不会自动增加权限。</p>
+       <ToolPicker tools={tools} scope={scope} selected={allowed} onChange={setAllowed}/>
             <div className="settings-actions"><Button type="primary" htmlType="submit" loading={busy}>生成独立 MCP Token</Button></div>
           </fieldset></Form>
         </LoadingState>
