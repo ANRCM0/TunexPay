@@ -4,6 +4,7 @@ import { Button, Input, Table, Tag } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { transactionListPath } from "../lib/transaction-list";
 import { newRefundIdempotencyKey, parseYuanToCents } from "../lib/admin-refund";
 import { type SortColumn } from "../lib/sort";
 import { CopyValue, HoverDetail, LoadingState, Modal, PageHead, Status, Toast, sortValueProps, money, time } from "./common";
@@ -52,11 +53,7 @@ export function Refunds() {
   const { sort, onSort } = useTableSort<Refund>();
   const pager = useServerPager(20);
   const path = useMemo(() => {
-    const params = new URLSearchParams({ page: String(pager.page), pageSize: String(pager.pageSize) });
-    if (applied.query.trim()) params.set("q", applied.query.trim());
-    if (applied.status !== "ALL") params.set("status", applied.status);
-    if (sort) { params.set("sortBy", sort.key); params.set("sortDir", sort.direction); }
-    return `/refunds?${params.toString()}`;
+    return transactionListPath("refunds", { page: pager.page, pageSize: pager.pageSize, query: applied.query, status: applied.status, sort });
   }, [pager.page, pager.pageSize, applied, sort]);
   const { data, meta, loading, error, reload } = useApi<Refund[]>(path, 8_000);
   useEffect(() => { if (meta) pager.clamp(meta.total); }, [meta?.total, pager.clamp]);
@@ -185,7 +182,7 @@ export function Refunds() {
         onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); applyFilters("", "ALL"); }}
       >
         <FilterItem label="关键字">
-          <FilterInput value={draftQuery} onChange={setDraftQuery} placeholder="退款单号 / 业务退款号 / 支付单号 / 订单" />
+          <FilterInput value={draftQuery} onChange={setDraftQuery} maxLength={160} placeholder="退款单号 / 业务退款号 / 支付单号 / 订单" />
         </FilterItem>
         <FilterItem label="退款状态">
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} />
