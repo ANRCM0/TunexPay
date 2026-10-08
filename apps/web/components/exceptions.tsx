@@ -165,7 +165,7 @@ export function Exceptions() {
     {
       title: "处置",
       dataIndex: "actions",
-      width: 170,
+      width: 260,
       // 行内动作用链接式按钮：一张表里会同时出现三个动作，实心按钮会把「可读的数据行」压成按钮墙
       render: (_: unknown, item: PaymentException) => <div className="row-actions">
         {item.status === "OPEN" && <RowAction disabled={working !== ""} busy={working === item.id} onClick={() => void update(item, "PROCESSING")}>{working === item.id ? "处理中…" : "开始处理"}</RowAction>}
