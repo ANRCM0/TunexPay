@@ -2,12 +2,18 @@
 
 import { Button, Table, Tag } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
-import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../lib/api";
-import { sortRows, type SortColumn } from "../lib/sort";
+import { transactionListPath } from "../lib/transaction-list";
+import { type SortColumn } from "../lib/sort";
 import { ChannelTag, CopyValue, Drawer, HoverDetail, LoadingState, PageHead, Status, sortValueProps, money, time } from "./common";
-import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, useClientPager, useTableSort, sortHeader } from "./list";
-import { OrderDetailBody } from "./order-detail";
+import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, useServerPager, useTableSort, sortHeader } from "./list";
+// 大型详情面板不参与订单列表的初始 JS；用户打开抽屉时再加载。
+const OrderDetailBody = dynamic(
+  () => import("./order-detail").then(mod => mod.OrderDetailBody),
+  { ssr: false, loading: () => <div className="skeleton-card" role="status" aria-label="正在加载订单详情"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div> },
+);
 
 type Payment = { paymentNo: string; status: string; channel: string };
 type Order = { id: string; orderNo: string; externalOrderNo: string; subject: string; amount: number; status: string; createdAt: string; paidAt: string | null; expiresAt: string | null; expirationAttempts: number; expirationError: string | null; application: { name: string }; payments: Payment[] };
@@ -18,8 +24,7 @@ const SORT_COLUMNS: SortColumn<Order>[] = [
   { key: "application", label: "应用 / 业务单号", accessor: (row) => row.application.name },
   { key: "amount", label: "金额", type: "number" },
   { key: "status", label: "订单状态" },
-  // 列表展示的是"支付时间优先、否则创建时间"，排序必须用同一个值，否则用户看到的顺序对不上
-  { key: "time", label: "时间", type: "date", accessor: (row) => row.paidAt || row.createdAt },
+  { key: "createdAt", label: "创建时间", type: "date" },
 ];
 
 const STATUS_OPTIONS = [
@@ -41,28 +46,29 @@ function expirationDetail(item: Order): string {
 }
 
 export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
-  const { data, loading, error, reload } = useApi<Order[]>("/orders?pageSize=100", 8_000);
   const [draftQuery, setDraftQuery] = useState("");
   const [draftStatus, setDraftStatus] = useState("ALL");
-  // 查询条件在点「查询」时才生效：输入过程中每敲一个字都重算整张表，长列表会明显卡顿
+  // 只有点查询才提交草稿，减少无意义的输入时请求。
   const [applied, setApplied] = useState({ query: "", status: "ALL" });
   const { sort, onSort } = useTableSort<Order>();
+  const pager = useServerPager(20);
+  const path = useMemo(() => {
+    return transactionListPath("orders", { page: pager.page, pageSize: pager.pageSize, query: applied.query, status: applied.status, sort });
+  }, [pager.page, pager.pageSize, applied, sort]);
+  const { data, meta, loading, error, reload } = useApi<Order[]>(path, 8_000);
+  useEffect(() => { if (meta) pager.clamp(meta.total); }, [meta?.total, pager.clamp]);
   const [openOrderNo, setOpenOrderNo] = useState<string | null>(initialOrderNo ?? null);
-  const filtered = useMemo(() => (data ?? []).filter(item => {
-    const matchesStatus = applied.status === "ALL" || item.status === applied.status;
-    const needle = applied.query.trim().toLowerCase();
-    const matchesQuery = !needle || [item.subject, item.orderNo, item.externalOrderNo, item.application.name]
-      .some(value => value.toLowerCase().includes(needle));
-    return matchesStatus && matchesQuery;
-  }), [data, applied]);
-  // 先筛选再排序：筛选是用户当前关心的子集，排序只作用于这个子集
-  const rows = useMemo(() => sortRows(filtered, SORT_COLUMNS, sort), [filtered, sort]);
-  const pager = useClientPager(rows, 20);
+  const rows = data ?? [];
   const openOrder = data?.find(item => item.orderNo === openOrderNo);
+  const applyFilters = (query: string, status: string) => {
+    pager.setPage(1);
+    setApplied({ query: query.trim(), status });
+  };
+  const sortAndResetPage = (key: string) => { pager.setPage(1); onSort(key); };
 
   const columns: ColumnProps<Order>[] = [
     {
-      title: sortHeader(SORT_COLUMNS[0], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[0], sort, sortAndResetPage),
       dataIndex: "subject",
       render: (_: unknown, item: Order) => <span {...sortValueProps(item, SORT_COLUMNS[0])}>
         <button className="data-link row-open" onClick={() => setOpenOrderNo(item.orderNo)}><strong>{item.subject}</strong></button>
@@ -70,7 +76,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       </span>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[1], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[1], sort, sortAndResetPage),
       dataIndex: "application",
       render: (_: unknown, item: Order) => <span {...sortValueProps(item, SORT_COLUMNS[1])}>
         <span>{item.application.name}</span>
@@ -78,7 +84,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       </span>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[2], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[2], sort, sortAndResetPage),
       dataIndex: "amount",
       align: "right",
       width: 120,
@@ -95,7 +101,7 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       },
     },
     {
-      title: sortHeader(SORT_COLUMNS[3], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[3], sort, sortAndResetPage),
       dataIndex: "status",
       width: 130,
       render: (_: unknown, item: Order) => <span {...sortValueProps(item, SORT_COLUMNS[3])}>
@@ -109,11 +115,12 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       render: (_: unknown, item: Order) => <button type="button" className="link-button" onClick={() => setOpenOrderNo(item.orderNo)}>查看</button>,
     },
     {
-      title: sortHeader(SORT_COLUMNS[4], sort, onSort),
+      title: sortHeader(SORT_COLUMNS[4], sort, sortAndResetPage),
       dataIndex: "createdAt",
       width: 200,
       render: (_: unknown, item: Order) => <span {...sortValueProps(item, SORT_COLUMNS[4])}>
-        {time(item.paidAt || item.createdAt)}
+        {time(item.createdAt)}
+        {item.paidAt && <div className="muted">支付 {time(item.paidAt)}</div>}
         <div className="muted">到期 {time(item.expiresAt)}</div>
       </span>,
     },
@@ -123,11 +130,11 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
     <PageHead eyebrow="Transactions" title="支付订单" copy="业务订单与支付尝试分开记录；一张订单可以安全地发起多次支付。" />
     <ListPage>
       <FilterCard
-        onSearch={() => setApplied({ query: draftQuery, status: draftStatus })}
-        onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); setApplied({ query: "", status: "ALL" }); }}
+        onSearch={() => applyFilters(draftQuery, draftStatus)}
+        onReset={() => { setDraftQuery(""); setDraftStatus("ALL"); applyFilters("", "ALL"); }}
       >
         <FilterItem label="关键字">
-          <FilterInput value={draftQuery} onChange={setDraftQuery} placeholder="订单号 / 业务单号 / 应用 / 商品" />
+          <FilterInput value={draftQuery} onChange={setDraftQuery} maxLength={160} placeholder="订单号 / 业务单号 / 应用 / 商品" />
         </FilterItem>
         <FilterItem label="订单状态">
           <FilterSelect value={draftStatus} onChange={setDraftStatus} options={STATUS_OPTIONS} />
@@ -135,13 +142,13 @@ export function Orders({ initialOrderNo }: { initialOrderNo?: string }) {
       </FilterCard>
       <LoadingState loading={loading} error={error} stale={Boolean(data)} empty={!data?.length} emptyText="还没有订单">
         <ListCard
-        toolbar={<><ToolbarNote>共 {rows.length} 笔订单</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
-        pagination={<Pager total={pager.total} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
+        toolbar={<><ToolbarNote>共 {meta?.total ?? 0} 笔订单</ToolbarNote><span className="toolbar-spacer" /><Button size="small" onClick={() => void reload()}>刷新</Button></>}
+        pagination={<Pager total={meta?.total ?? 0} page={pager.page} pageSize={pager.pageSize} onChange={pager.setPage} onPageSizeChange={pager.setPageSize} />}
       >
         <Table<Order>
           className="list-table"
           columns={columns}
-          data={pager.rows}
+          data={rows}
           rowKey="id"
           pagination={false}
           borderCell={false}

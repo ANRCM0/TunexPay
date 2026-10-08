@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { jsonSafe } from "../lib/json.js";
 import { AppError } from "../lib/errors.js";
 import { loadDashboardStats } from "../lib/dashboard-stats.js";
+import { buildOrderListQuery, buildRefundListQuery } from "../lib/admin-lists.js";
 import { adminAuth } from "../middleware/auth.js";
 import { adminAudit } from "../middleware/admin-audit.js";
 import { createApplication, deleteApplication, rotateApplicationApiKey, rotateApplicationCredentials, updateApplicationStatus } from "../services/application-service.js";
@@ -151,11 +152,11 @@ const liveOrder = { deletedAt: null };
 
 adminRoutes.get("/orders", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
-  const status = z.enum(["CREATED", "PENDING", "SUCCESS", "CLOSED", "PARTIALLY_REFUNDED", "REFUNDED"]).optional().parse(c.req.query("status"));
-  // 归档订单（随应用删除的历史数据）不出现在在用列表里，但仍可用订单号直接打开查看。
-  const where = { ...liveOrder, ...(status ? { status } : {}) };
+  // 搜索、状态过滤、排序在数据库中先于 skip/take 执行；总数包含全部匹配记录。
+  // 归档订单仍然不可出现在在用列表中，但可以通过订单号打开详情。
+  const { where, orderBy } = buildOrderListQuery(c.req.query());
   const [rows, total] = await Promise.all([
-    db.order.findMany({ where, include: { application: { select: { name: true, appId: true } }, payments: { orderBy: { attemptNo: "desc" }, take: 1 } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+    db.order.findMany({ where, include: { application: { select: { name: true, appId: true } }, payments: { orderBy: { attemptNo: "desc" }, take: 1 } }, orderBy, skip, take: pageSize }),
     db.order.count({ where }),
   ]);
   return c.json({ data: rows, meta: { page, pageSize, total } });
@@ -173,10 +174,11 @@ adminRoutes.get("/orders/:orderNo", async (c) => {
 
 adminRoutes.get("/refunds", async (c) => {
   const { page, pageSize, skip } = pageOf(c);
-  // 已归档应用的历史退款保留在库里（通道侧的钱已经动了），列表照常可查，前端会标出「已归档」。
+  // 已归档应用的历史退款保留可查；搜索和排序作用于全量记录，再执行分页。
+  const { where, orderBy } = buildRefundListQuery(c.req.query());
   const [rows, total] = await Promise.all([
-    db.refund.findMany({ include: { application: { select: { name: true, archivedAt: true } }, payment: { select: { paymentNo: true, order: { select: { orderNo: true, subject: true, deletedAt: true } } } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
-    db.refund.count(),
+    db.refund.findMany({ where, include: { application: { select: { name: true, archivedAt: true } }, payment: { select: { paymentNo: true, order: { select: { orderNo: true, subject: true, deletedAt: true } } } } }, orderBy, skip, take: pageSize }),
+    db.refund.count({ where }),
   ]);
   return c.json({ data: rows, meta: { page, pageSize, total } });
 });
