@@ -81,8 +81,30 @@ export function Channels() {
   const pager = useClientPager(rows, 20);
   const [testChannel, setTestChannel] = useState<Channel | null>(null);
   const [testAmount, setTestAmount] = useState("0.01");
+  const [cashierUrl, setCashierUrl] = useState("");
+  const [pendingAssignment, setPendingAssignment] = useState<{ app: Application; target: string } | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const targetLabel = (target: string): string => {
+    if (!target) return "未绑定收款路由";
+    if (target.startsWith("group:")) return groups.data?.find(group => group.id === target.slice(6))?.name ?? target;
+    if (target.startsWith("channel:")) return channels.data?.find(channel => channel.id === target.slice(8))?.name ?? target;
+    return target;
+  };
+  const closeChannelForm = () => {
+    if (formBusy) return;
+    if (formDirty) { setConfirmDiscard(true); return; }
+    setEditor(null); setCreateOpen(false);
+  };
+  const discardChannelForm = () => {
+    setConfirmDiscard(false); setFormDirty(false); setEditor(null); setCreateOpen(false);
+  };
   async function operate(channel: Channel, action: "check" | "test-payment", amount?: string) {
-    setBusy(channel.id); setNotice(null);
+    // 必须在点击事件里同步预留窗口，否则 await 后 window.open 常被浏览器阻止。
+    const cashierWindow = action === "test-payment" ? window.open("about:blank", "_blank") : null;
+    if (cashierWindow) cashierWindow.opener = null;
+    setBusy(channel.id); setNotice(null); setCashierUrl("");
     try {
       const result = await api<{ data: Channel | { cashierUrl: string } }>(`/channel-instances/${channel.id}/${action}`, { method: "POST", body: JSON.stringify({ revision: channel.revision, ...(amount ? { amount } : {}) }) });
       if (action === "check") {
@@ -90,12 +112,24 @@ export function Channels() {
         setNotice({ ok: checked.checkStatus !== "FAILED", text: checked.checkMessage || checkLabels[checked.checkStatus] || "检测完成" });
       } else {
         const cashierUrl = (result.data as { cashierUrl: string }).cashierUrl;
-        if (cashierUrl) window.open(cashierUrl, "_blank", "noopener");
-        setNotice({ ok: true, text: `测试订单已创建（¥${amount || "0.01"}），已在新窗口打开收银台；测试款不会自动退款。` });
+        const cashierLink = new URL(cashierUrl, window.location.origin);
+        if (!["http:", "https:"].includes(cashierLink.protocol)) throw new Error("收银台链接无效");
+        const url = cashierLink.toString();
+        setCashierUrl(url);
+        let opened = false;
+        if (cashierWindow && !cashierWindow.closed) {
+          try { cashierWindow.location.replace(url); opened = true; } catch { /* 改为手动打开 */ }
+        }
+        setNotice({ ok: true, text: opened
+          ? `验收订单已创建（¥${amount || "0.01"}），收银台已在新窗口打开；测试款不会自动退款。`
+          : `验收订单已创建（¥${amount || "0.01"}），浏览器未能自动打开收银台，请点击下方链接；测试款不会自动退款。` });
         setTestChannel(null);
       }
       await channels.reload();
-    } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "操作失败" }); }
+    } catch (error) {
+      if (cashierWindow && !cashierWindow.closed) cashierWindow.close();
+      setNotice({ ok: false, text: error instanceof Error ? error.message : "操作失败" });
+    }
     finally { setBusy(""); }
   }
   // 删除分两种结果：从未产生资金数据的通道被真删；承载过支付/退款的通道转为归档
@@ -113,10 +147,13 @@ export function Channels() {
     finally { setBusy(""); }
   }
   async function assign(app: Application, target: string) {
+    if (busy) return;
     setBusy(app.id); setNotice(null);
     try {
       await assignPaymentRouting(app.id, target);
-      await applications.reload(); await groups.reload(); setNotice({ ok: true, text: target ? `${app.name} 收款路由已更新，仅影响新支付。` : `${app.name} 已解除收款绑定，新支付将被拒绝。` });
+      setPendingAssignment(null);
+      setNotice({ ok: true, text: target ? `${app.name} 收款路由已更新，仅影响新支付。` : `${app.name} 已解除收款绑定，新支付将被拒绝。` });
+      await applications.reload(); await groups.reload();
     } catch (error) { setNotice({ ok: false, text: error instanceof Error ? error.message : "分配失败" }); }
     finally { setBusy(""); }
   }
@@ -162,7 +199,7 @@ export function Channels() {
       dataIndex: "actions",
       width: 280,
       render: (_: unknown, channel: Channel) => <div className="channel-actions">
-        <button type="button" className="link-button" disabled={!!busy} onClick={() => setEditor(channel)}><Settings2 size={13} aria-hidden="true" />配置</button>
+        <button type="button" className="link-button" disabled={!!busy} onClick={() => { setFormDirty(false); setEditor(channel); }}><Settings2 size={13} aria-hidden="true" />配置</button>
         <button type="button" className="link-button" disabled={!!busy} onClick={() => void operate(channel, "check")}>{busy === channel.id ? "处理中…" : "检测"}</button>
         <button type="button" className="link-button" disabled={!!busy || !channel.enabled} onClick={() => { setTestAmount("0.01"); setTestChannel(channel); }}>{channel.plugin === "MOCK" ? "模拟验收" : "实付验收"}</button>
         <button type="button" className="link-button danger-link" disabled={!!busy} onClick={() => setRemoving(channel)}><Trash2 size={13} aria-hidden="true" />删除</button>
@@ -174,10 +211,11 @@ export function Channels() {
     <PageHead eyebrow="Channels" title="支付通道" copy="独立收款账号的通道实例；修改配置后需重新检测，验证通过才能分配给应用。" action={
       <div className="page-head-actions">
         <Button type="secondary" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={() => void channels.reload()}>刷新状态</Button>
-        <Button type="primary" onClick={() => setCreateOpen(true)}>创建通道</Button>
+        <Button type="primary" onClick={() => { setFormDirty(false); setCreateOpen(true); }}>创建通道</Button>
       </div>
     } />
     {notice && <Toast type={notice.ok ? "ok" : "error"} text={notice.text} onClose={() => setNotice(null)} />}
+    {cashierUrl && <div className="operation-notice ok" role="status">验收收银台链接：<a href={cashierUrl} target="_blank" rel="noopener noreferrer" onClick={() => setCashierUrl("")}>点击打开收银台 ↗</a><button type="button" className="link-button" onClick={() => setCashierUrl("")}>关闭</button></div>}
     <ListPage>
       <FilterCard
         onSearch={() => setApplied(draft)}
@@ -236,8 +274,10 @@ export function Channels() {
       </div>
     </Modal>}
 
-    {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={() => setEditor(null)}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await channels.reload(); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); }} /></Modal>}
-    {createOpen && <Modal title="创建通道" onClose={() => setCreateOpen(false)}><ChannelEditor plugins={plugins.data ?? []} onClose={() => setCreateOpen(false)} onSaved={async () => { setCreateOpen(false); await channels.reload(); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); }} /></Modal>}
+    {editor && <Modal title={`配置通道 · ${editor.name}`} onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor key={editor.id} channel={editor} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setEditor(null); setFormDirty(false); setNotice({ ok: true, text: "通道配置已保存，请重新检测后再分配给应用。" }); await channels.reload(); }} /></Modal>}
+    {createOpen && <Modal title="创建通道" onClose={closeChannelForm} dismissible={!formBusy}><ChannelEditor plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={closeChannelForm} onSaved={async () => { setCreateOpen(false); setFormDirty(false); setNotice({ ok: true, text: "支付通道已创建，请完成检测与验收后再分配给应用。" }); await channels.reload(); }} /></Modal>}
+    {confirmDiscard && <ConfirmModal title="放弃未保存的通道配置？" copy="你修改的通道设置、密钥输入及清除选项都尚未保存。关闭后这些输入将丢失。" confirmLabel="放弃修改" danger onClose={() => setConfirmDiscard(false)} onConfirm={discardChannelForm} />}
+    {pendingAssignment && <ConfirmModal title="确认修改收款路由" copy={`${pendingAssignment.app.name}：${targetLabel(applicationRoutingTarget(pendingAssignment.app))} → ${targetLabel(pendingAssignment.target)}。修改仅影响新支付。`} warning={!pendingAssignment.target ? "解除绑定后，这个应用无法创建新的支付订单。" : undefined} danger={!pendingAssignment.target} working={!!busy} confirmLabel={!pendingAssignment.target ? "确认解除绑定" : "确认改派"} onClose={() => setPendingAssignment(null)} onConfirm={() => void assign(pendingAssignment.app, pendingAssignment.target)} />}
     {assignOpen && <Modal title="应用收款路由分配" onClose={() => setAssignOpen(false)}>
       <LoadingState loading={applications.loading} error={applications.error} stale={Boolean(applications.data)} empty={!applications.data?.length} emptyText="还没有业务应用，创建应用后即可在这里分配收款通道">
         {groups.error && <div className="error" role="alert">{groups.error}</div>}
@@ -252,7 +292,7 @@ export function Channels() {
                 const current = applicationRoutingTarget(app);
                 // 这里的控件就是路由选择本身（原生 select），它是绑定关系的唯一入口，
                 // 保持原样的 props 与调用方式，避免改坏 group:/channel: 的取值语义。
-                return <RoutingTargetSelect aria-label={`${app.name} 收款路由`} value={current} currentTarget={current} groups={groups.data ?? []} channels={channels.data ?? []} disabled={!!busy || groups.loading || !!groups.error} onChange={event => void assign(app, event.target.value)} />;
+                return <RoutingTargetSelect aria-label={`${app.name} 收款路由`} value={current} currentTarget={current} groups={groups.data ?? []} channels={channels.data ?? []} disabled={!!busy || groups.loading || !!groups.error} onChange={event => { if (event.target.value !== current) setPendingAssignment({ app, target: event.target.value }); }} />;
               },
             },
           ]}
