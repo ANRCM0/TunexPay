@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { retainAllowedTools } from "../lib/form-safety";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, RowAction, Section, Status, Toast, sortValueProps, time, toLocalDateTimeInput } from "./common";
 import { ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Scope = "READ" | "OPERATE" | "FINANCIAL";
@@ -200,8 +200,8 @@ export function McpAccessPanel(){
     {title:"有效期",dataIndex:"expiresAt",width:180,render:(_:unknown,client:Client)=>client.expiresAt?time(client.expiresAt):"不过期"},
     {title:"上次使用",dataIndex:"lastUsedAt",width:180,render:(_:unknown,client:Client)=>time(client.lastUsedAt)},
     {title:"操作",dataIndex:"actions",width:180,render:(_:unknown,client:Client)=><>
-      <button type="button" className="link-button" disabled={busy} onClick={()=>{setEditingDirty(false);setEditing(client);}}>编辑</button>{" "}
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</button>
+      <RowAction disabled={busy} onClick={()=>{setEditingDirty(false);setEditing(client);}}>编辑</RowAction>{" "}
+      <RowAction disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</RowAction>
     </>},
   ];
 
@@ -213,8 +213,8 @@ export function McpAccessPanel(){
     {title:sortHeader(APPROVAL_COLUMNS[4],approvalSort,onApprovalSort),dataIndex:"status",width:130,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[4])}><Status value={row.status}/></span>},
     {title:sortHeader(APPROVAL_COLUMNS[5],approvalSort,onApprovalSort),dataIndex:"expiresAt",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</span>},
     {title:"操作",dataIndex:"actions",width:140,render:(_:unknown,row:Approval)=>row.status==="PENDING"?<>
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</button>{" "}
-      <button type="button" className="link-button" disabled={busy} onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</button>
+      <RowAction disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</RowAction>{" "}
+      <RowAction disabled={busy} danger onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</RowAction>
     </>:null},
   ];
 
