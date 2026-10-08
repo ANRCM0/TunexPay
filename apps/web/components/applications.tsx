@@ -502,6 +502,7 @@ export function Applications() {
     {removing && <Modal title="删除应用" visible onCancel={() => { if (busy !== removing.id) closeRemove(); }} closable={busy !== removing.id} maskClosable={busy !== removing.id} escToExit={busy !== removing.id} footer={null} autoFocus focusLock alignCenter unmountOnExit>
       {removed ? <>
         <p>应用「<strong>{removed.name}</strong>」已删除。</p>
+        {removeError && <div className="operation-notice error" role="alert">{removeError}</div>}
         <div className={`dialog-warning ${removed.archived ? "is-info" : ""}`}>
           {removed.archived
             ? `该应用承载过业务数据，已归档清理：${clearedSummary(removed.cleared)}。`
