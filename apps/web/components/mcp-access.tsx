@@ -183,12 +183,12 @@ export function McpAccessPanel(){
     setBusy(true);setNotice(null);
     try{
       const result=await api<{data:{client:Client;token:string}}>(`/mcp/clients/${client.id}/rotate`,{method:"POST",body:"{}"});
-      setRotating(null);setIssued({token:result.data.token,name:client.name});await reload();
+      setRotating(null);setIssued({token:result.data.token,name:client.name});setNotice({type:"ok",text:"Token 已轮换，旧 Token 立即失效。请立即保存新 Token。"});void reload().catch(()=>setNotice({type:"error",text:"Token 已轮换，但客户端列表刷新失败。请保存显示的新 Token，不要再次轮换。"}));
     }catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"轮换失败"});}finally{setBusy(false);}
   }
   async function decide(id:string,decision:"approve"|"reject"){
     setBusy(true);setNotice(null);
-    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});setDeciding(null);await reloadApprovals();setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});}
+    try{await api(`/mcp/approvals/${id}/${decision}`,{method:"POST",body:"{}"});setDeciding(null);setNotice({type:"ok",text:decision==="approve"?"已批准并执行。":"已拒绝。"});void reloadApprovals().catch(()=>setNotice({type:"error",text:"审批动作已经提交，但列表刷新失败，请手动刷新，不要重复审批。"}));}
     catch(cause){setNotice({type:"error",text:cause instanceof Error?cause.message:"处理失败"});}finally{setBusy(false);}
   }
 
