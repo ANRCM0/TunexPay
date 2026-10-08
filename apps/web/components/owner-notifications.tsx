@@ -417,8 +417,8 @@ export function OwnerNotificationsPanel() {
     setBusy(true); setNotice(null);
     try {
       await api(`/notification-instances/${instance.id}/test`, { method: "POST", body: "{}" });
-      await reloadDeliveries();
       setNotice({ type: "ok", text: "测试任务已排队；SUCCESS 才表示上游已接受。" });
+      void reloadDeliveries().catch(() => setNotice({ type: "error", text: "测试任务已排队，但投递列表刷新失败，请手动刷新。" }));
     } catch (cause) { setNotice({ type: "error", text: reason(cause, "测试失败") }); }
     finally { setBusy(false); }
   }
@@ -429,8 +429,8 @@ export function OwnerNotificationsPanel() {
     setBusy(true); setNotice(null);
     try {
       await api(`/notification-instances/${instance.id}/delete`, { method: "POST", body: "{}" });
-      await reload();
       setNotice({ type: "ok", text: "通知实例已删除或归档。" });
+      void reload().catch(() => setNotice({ type: "error", text: "通知实例已删除或归档，但列表刷新失败，请手动刷新。" }));
       return true;
     } catch (cause) { setNotice({ type: "error", text: reason(cause, "删除失败") }); return false; }
     finally { setBusy(false); }
@@ -440,8 +440,8 @@ export function OwnerNotificationsPanel() {
     setBusy(true); setNotice(null);
     try {
       await api(`/notification-deliveries/${id}/retry`, { method: "POST", body: "{}" });
-      await reloadDeliveries();
       setNotice({ type: "ok", text: "通知已重新进入待发送队列。" });
+      void reloadDeliveries().catch(() => setNotice({ type: "error", text: "通知重试已提交，但投递列表刷新失败，请勿重复重试。" }));
     } catch (cause) { setNotice({ type: "error", text: reason(cause, "重试失败") }); }
     finally { setBusy(false); }
   }
