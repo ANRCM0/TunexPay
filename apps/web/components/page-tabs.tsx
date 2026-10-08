@@ -21,6 +21,7 @@ export function PageTabs({ path }: { path: string }) {
   const router = useRouter();
   const [tabs, setTabs] = useState<Tab[]>([HOME_TAB]);
   const hydrated = useRef(false);
+  const [restored, setRestored] = useState(false);
 
   const current = useMemo(() => matchNavItem(path), [path]);
   const activeHref = current?.href ?? HOME_TAB.href;
@@ -31,6 +32,7 @@ export function PageTabs({ path }: { path: string }) {
     if (hydrated.current) return;
     hydrated.current = true;
     setTabs(loadTabs());
+    setRestored(true);
   }, [activeHref]);
 
   // 路由变化：把当前菜单页开成页签并激活它
@@ -39,9 +41,10 @@ export function PageTabs({ path }: { path: string }) {
     setTabs(previous => openTab(previous, { href: current.href, title: current.title }));
   }, [current]);
 
+  // 仅在恢复完成后的下一次渲染写入，避免初始 [HOME_TAB] 覆盖旧的本地页签。
   useEffect(() => {
-    if (hydrated.current) saveTabs(tabs);
-  }, [tabs]);
+    if (restored) saveTabs(tabs);
+  }, [restored, tabs]);
 
   const gotoTab = useCallback((href: string) => {
     if (href !== path) push(href);
