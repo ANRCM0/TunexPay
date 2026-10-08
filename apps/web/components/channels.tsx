@@ -4,6 +4,7 @@ import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
+import { cashierLink } from "../lib/form-safety";
 import { channelLabel } from "../lib/labels";
 import type { RoutingGroup } from "../lib/routing-groups";
 import { sortRows, type SortColumn } from "../lib/sort";
@@ -112,10 +113,7 @@ export function Channels() {
         setNotice({ ok: checked.checkStatus !== "FAILED", text: checked.checkMessage || checkLabels[checked.checkStatus] || "检测完成" });
       } else {
         const cashierUrl = (result.data as { cashierUrl: string }).cashierUrl;
-        if (!cashierUrl) throw new Error("验收订单创建成功，但服务器没有返回收银台链接");
-        const cashierLink = new URL(cashierUrl, window.location.origin);
-        if (!["http:", "https:"].includes(cashierLink.protocol)) throw new Error("收银台链接无效");
-        const url = cashierLink.toString();
+        const url = cashierLink(cashierUrl, window.location.origin);
         setCashierUrl(url);
         let opened = false;
         if (cashierWindow && !cashierWindow.closed) {
