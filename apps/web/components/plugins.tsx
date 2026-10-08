@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { ChannelEditor } from "./channel-editor";
-import { CopyValue, LoadingState, Modal, PageHead, Toast, sortValueProps } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, Modal, PageHead, Toast, sortValueProps } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Plugin = { code: string; name: string; description: string; capabilities: string[] };
@@ -24,6 +24,15 @@ export function Plugins() {
   const plugins = useApi<Plugin[]>("/plugins");
   // 从插件行点进来时带上该插件作为默认选择；也可以从页面顶部直接创建后再选插件。
   const [editor, setEditor] = useState<string | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const requestClose = () => {
+    if (formBusy) return;
+    if (formDirty) setConfirmDiscard(true);
+    else setEditor(null);
+  };
+  const openEditor = (plugin: string) => { setFormDirty(false); setEditor(plugin); };
   const [notice, setNotice] = useState("");
   const { sort, onSort } = useTableSort<Plugin>();
   // 查询条件在点「查询」时才生效，避免输入过程中反复重算整张表
@@ -76,7 +85,7 @@ export function Plugins() {
       title: "操作",
       dataIndex: "actions",
       width: 130,
-      render: (_: unknown, plugin: Plugin) => <button type="button" className="link-button" onClick={() => setEditor(plugin.code)}><Plus size={13} aria-hidden="true" />创建通道</button>,
+      render: (_: unknown, plugin: Plugin) => <button type="button" className="link-button" onClick={() => openEditor(plugin.code)}><Plus size={13} aria-hidden="true" />创建通道</button>,
     },
   ];
 
@@ -85,7 +94,7 @@ export function Plugins() {
     <PageHead eyebrow="Payment Plugins" title="支付插件" copy="每个插件是一种收款能力；创建通道时必须选择一个插件作为对接，配置验证后分配给业务应用。" action={
       <div className="page-head-actions">
         <Button type="secondary" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={() => void plugins.reload()}>刷新</Button>
-        <Button type="primary" icon={<Plus size={14} aria-hidden="true" />} onClick={() => setEditor("")}>创建通道</Button>
+        <Button type="primary" icon={<Plus size={14} aria-hidden="true" />} onClick={() => openEditor("")}>创建通道</Button>
       </div>
     } />
     <ListPage>
@@ -119,6 +128,7 @@ export function Plugins() {
         </ListCard>
       </LoadingState>
     </ListPage>
-    {editor !== null && <Modal title="创建通道" onClose={() => setEditor(null)}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
+    {editor !== null && <Modal title="创建通道" onClose={requestClose} dismissible={!formBusy}><ChannelEditor key={editor} plugin={editor || undefined} plugins={plugins.data ?? []} onBusyChange={setFormBusy} onDirtyChange={setFormDirty} onClose={requestClose} onSaved={async () => { setEditor(null); setFormDirty(false); setNotice("支付通道已创建，请前往支付通道页面完成检测与验收。"); }} /></Modal>}
+    {confirmDiscard && <ConfirmModal title="放弃通道配置？" copy="尚未保存的通道信息、密钥与高级配置将丢失。" confirmLabel="放弃修改" danger onConfirm={() => { setConfirmDiscard(false); setFormDirty(false); setEditor(null); }} onClose={() => setConfirmDiscard(false)} />}
   </>;
 }
