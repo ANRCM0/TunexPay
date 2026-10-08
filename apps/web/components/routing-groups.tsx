@@ -114,7 +114,7 @@ export function RoutingGroups() {
     {
       title: "操作",
       dataIndex: "actions",
-      width: 140,
+      width: 160,
       render: (_: unknown, group: RoutingGroup) => <div className="row-actions">
         <RowAction disabled={busy} onClick={() => startEditing(group)}>配置</RowAction>
         <RowAction danger disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</RowAction>
