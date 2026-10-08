@@ -171,6 +171,7 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
   plugins: Plugin[];
   busy: boolean;
   onBusy: (busy: boolean) => void;
+  onDirtyChange: (dirty: boolean) => void;
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
   onCreated: () => Promise<void>;
 }) {
@@ -273,7 +274,7 @@ function CreateInstancePanel({ plugins, busy, onBusy, onNotice, onCreated }: {
 }
 
 /** 实例编辑：弹窗内的表单，保存/测试/删除都与列表共用父级的同一套动作。 */
-function InstanceEditor({ instance, plugin, busy, onBusy, onNotice, onSaved, onTest, onRemove, onClose }: {
+function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotice, onSaved, onTest, onRemove, onClose }: {
   instance: Instance; plugin: Plugin; busy: boolean;
   onBusy: (busy: boolean) => void;
   onNotice: (notice: { type: "ok" | "error"; text: string } | null) => void;
@@ -289,6 +290,11 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onNotice, onSaved, onT
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [clearSecrets, setClearSecrets] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const dirty = name !== instance.name || enabled !== instance.enabled ||
+    JSON.stringify(config) !== JSON.stringify(instance.config) ||
+    JSON.stringify(events) !== JSON.stringify(instance.events) ||
+    Object.values(secrets).some(Boolean) || clearSecrets.size > 0;
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
   // 只回传"本次要改动的配置"：密钥留空表示保留原值，勾选清除才显式送 null。
   // 把已保存的密钥原样回传既做不到（后端不解密回显），也没必要。
@@ -360,7 +366,14 @@ export function OwnerNotificationsPanel() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [editor, setEditor] = useState<Instance | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [confirmDiscardEditor, setConfirmDiscardEditor] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Instance | null>(null);
+  const requestEditorClose = () => {
+    if (busy) return;
+    if (editorDirty) setConfirmDiscardEditor(true);
+    else setEditor(null);
+  };
 
   // 实例筛选：草稿 + 已应用两份状态，点「查询」才生效（输入即过滤在长列表上会明显卡顿）
   const [draftInstance, setDraftInstance] = useState({ plugin: "ALL", keyword: "", status: "ALL" });
@@ -484,7 +497,7 @@ export function OwnerNotificationsPanel() {
         // 插件缺失（例如插件被下线）时连配置字段都渲染不出来，编辑入口直接禁用更诚实
         const editable = Boolean(plugins?.some(plugin => plugin.code === item.plugin));
         return <div className="row-actions">
-          <button type="button" className="link-button" disabled={busy || !editable} onClick={() => setEditor(item)}>编辑</button>
+          <button type="button" className="link-button" disabled={busy || !editable} onClick={() => { setEditorDirty(false); setEditor(item); }}>编辑</button>
           <button type="button" className="link-button" disabled={busy || !editable || !item.enabled} onClick={() => void testInstance(item)}>发送测试</button>
           <button type="button" className="link-button danger-link" disabled={busy} onClick={() => setPendingRemove(item)}>删除</button>
         </div>;
@@ -547,7 +560,8 @@ export function OwnerNotificationsPanel() {
 
   return <>
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
-    {pendingRemove && <ConfirmModal title={`删除通知实例 · ${pendingRemove.name}`} copy="有历史通知投递时将归档该实例并停止尚未发送的任务；新通知将不再投递到它。" warning="如果只是临时停止通知，建议在编辑表单中选择停用，而不是删除。" danger confirmLabel="确认删除实例" working={busy} onClose={() => { if (!busy) setPendingRemove(null); }} onConfirm={() => void removeInstance(pendingRemove).then(ok => { if (ok) { if (editor?.id === pendingRemove.id) setEditor(null); setPendingRemove(null); } })} />}
+    {confirmDiscardEditor && <ConfirmModal title="放弃通知实例的配置修改？" copy="未保存的插件字段、密钥输入和事件订阅将丢失。" danger confirmLabel="放弃修改" onClose={() => setConfirmDiscardEditor(false)} onConfirm={() => { setConfirmDiscardEditor(false); setEditorDirty(false); setEditor(null); }} />}
+    {pendingRemove && <ConfirmModal title={`删除通知实例 · ${pendingRemove.name}`} copy="有历史通知投递时将归档该实例并停止尚未发送的任务；新通知将不再投递到它。" warning="如果只是临时停止通知，建议在编辑表单中选择停用，而不是删除。" danger confirmLabel="确认删除实例" working={busy} onClose={() => { if (!busy) setPendingRemove(null); }} onConfirm={() => void removeInstance(pendingRemove).then(ok => { if (ok) { if (editor?.id === pendingRemove.id) { setEditor(null); setEditorDirty(false); } setPendingRemove(null); } })} />}
 
     {/* 一、插件选择与创建：仍然是 ListCard，但控件全部换成 Arco（Select / Input / Switch / Checkbox.Group） */}
     <ListPage>
@@ -642,7 +656,7 @@ export function OwnerNotificationsPanel() {
       className="app-modal"
       title={`编辑通知实例 · ${editor.name}`}
       visible
-      onCancel={() => { if (!busy) setEditor(null); }}
+      onCancel={requestEditorClose}
       footer={null}
       closable={!busy}
       maskClosable={!busy}
@@ -658,11 +672,12 @@ export function OwnerNotificationsPanel() {
         plugin={editorPlugin}
         busy={busy}
         onBusy={setBusy}
+        onDirtyChange={setEditorDirty}
         onNotice={setNotice}
         onSaved={async () => { await reload(); }}
         onTest={() => testInstance(editor)}
         onRemove={() => setPendingRemove(editor)}
-        onClose={() => setEditor(null)}
+        onClose={() => { setEditor(null); setEditorDirty(false); }}
       />
     </Modal>}
   </>;
