@@ -2,7 +2,7 @@
 import { Button, Checkbox, Form, Input, InputNumber, Select, Switch, Table } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { channelLabel } from "../lib/labels";
 import { routingStrategyLabels, type RoutingGroup, type RoutingStrategy } from "../lib/routing-groups";
@@ -43,6 +43,14 @@ export function RoutingGroups() {
   const [editing, setEditing] = useState<RoutingGroup | "new" | null>(null);
   const [removing, setRemoving] = useState<RoutingGroup | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const requestCloseEditor = () => {
+    if (busy) return;
+    if (editorDirty) setConfirmDiscard(true);
+    else setEditing(null);
+  };
+  const startEditing = (item: RoutingGroup | "new") => { setEditorDirty(false); setEditing(item); };
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const filtered = useMemo(() => (groups.data ?? []).filter(group => {
     const needle = applied.query.trim().toLowerCase();
@@ -108,7 +116,7 @@ export function RoutingGroups() {
       dataIndex: "actions",
       width: 140,
       render: (_: unknown, group: RoutingGroup) => <div className="row-actions">
-        <button type="button" className="link-button" onClick={() => setEditing(group)}>配置</button>
+        <button type="button" className="link-button" onClick={() => startEditing(group)}>配置</button>
         <button type="button" className="link-button danger-link" disabled={busy || group.applicationCount > 0} title={group.applicationCount ? "请先解除应用绑定" : "删除轮询组"} onClick={() => setRemoving(group)}>删除</button>
       </div>,
     },
@@ -117,7 +125,7 @@ export function RoutingGroups() {
   return <>
     <PageHead eyebrow="Routing groups" title="轮询组" copy="将多个通道组成收款路由，应用绑定组后，每次新支付按规则随机选择一个可用通道。" action={<div className="page-head-actions">
       <Link className="button secondary" href="/applications">绑定业务应用</Link>
-      <Button type="primary" onClick={() => setEditing("new")}>创建轮询组</Button>
+      <Button type="primary" onClick={() => startEditing("new")}>创建轮询组</Button>
     </div>} />
     {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
     <ListPage>
@@ -154,10 +162,11 @@ export function RoutingGroups() {
       </LoadingState>
     </ListPage>
     <p className="muted routing-help">停用、归档、暂停参与或当前配置未通过检测的通道会被跳过。没有可用通道时拒绝新支付，不回退到组外账号。请求结果不确定时不会自动换通道。</p>
-    {editing && <Modal title={editing === "new" ? "创建轮询组" : `配置轮询组 · ${editing.name}`} onClose={() => { if (!busy) setEditing(null); }}>
+    {confirmDiscard && <ConfirmModal title="放弃轮询组修改？" copy="轮询规则、权重和成员状态尚未保存，关闭后会丢失本次修改。" danger confirmLabel="放弃修改" onConfirm={() => { setConfirmDiscard(false); setEditorDirty(false); setEditing(null); }} onClose={() => setConfirmDiscard(false)} />}
+    {editing && <Modal title={editing === "new" ? "创建轮询组" : `配置轮询组 · ${editing.name}`} onClose={requestCloseEditor} dismissible={!busy}>
       <LoadingState loading={channels.loading} error={channels.error} empty={false}>
-        <RoutingGroupEditor group={editing === "new" ? null : editing} channels={channels.data ?? []} onBusy={setBusy} onClose={() => setEditing(null)} onSaved={async () => {
-          setEditing(null); setNotice({ type: "ok", text: "轮询组已保存，新的支付尝试将使用最新规则。" }); await groups.reload();
+        <RoutingGroupEditor group={editing === "new" ? null : editing} channels={channels.data ?? []} onBusy={setBusy} onDirtyChange={setEditorDirty} onClose={requestCloseEditor} onSaved={async () => {
+          setEditing(null); setEditorDirty(false); setNotice({ type: "ok", text: "轮询组已保存，新的支付尝试将使用最新规则。" }); await groups.reload();
         }} />
       </LoadingState>
     </Modal>}
@@ -165,8 +174,8 @@ export function RoutingGroups() {
   </>;
 }
 
-function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
-  group: RoutingGroup | null; channels: Channel[]; onBusy: (busy: boolean) => void; onClose: () => void; onSaved: () => Promise<void>;
+function RoutingGroupEditor({ group, channels, onBusy, onDirtyChange, onClose, onSaved }: {
+  group: RoutingGroup | null; channels: Channel[]; onBusy: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void; onClose: () => void; onSaved: () => Promise<void>;
 }) {
   const [name, setName] = useState(group?.name ?? "");
   const [strategy, setStrategy] = useState<RoutingStrategy>(group?.strategy ?? "RANDOM");
@@ -174,6 +183,10 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
   const [members, setMembers] = useState<MemberInput[]>(group?.members.map(({ channelId, weight, enabled }) => ({ channelId, weight, enabled })) ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const baseMembers = group?.members.map(({ channelId, weight, enabled }) => ({ channelId, weight, enabled })) ?? [];
+  const dirty = name !== (group?.name ?? "") || strategy !== (group?.strategy ?? "RANDOM") ||
+    enabled !== (group?.enabled ?? true) || JSON.stringify(members) !== JSON.stringify(baseMembers);
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   const options = [...channels, ...(group?.members.filter(member => !channels.some(channel => channel.id === member.channelId)).map(member => member.channel) ?? [])];
   const activeMembers = members.filter(member => member.enabled);
   const availableMembers = activeMembers.filter(member => options.some(channel => channel.id === member.channelId && channel.enabled && !channel.archivedAt && ["API_VERIFIED", "PAYMENT_VERIFIED", "SIMULATED"].includes(channel.checkStatus)));
@@ -185,7 +198,9 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
   // 表单值仍由本地状态持有：成员列表是"通道 × 成员"的合并视图，做成 Form 的字段集合会更难读懂，
   // 因此 Form 只承担提交语义与版式，校验在提交时显式完成。
   async function submit() {
+    if (saving) return;
     setError("");
+    if (!name.trim()) { setError("请填写轮询组名称。"); return; }
     if (!members.length) { setError("请至少添加一个通道。"); return; }
     if (members.length > 100) { setError("一个轮询组最多添加 100 个通道。"); return; }
     if (strategy === "WEIGHTED_RANDOM" && members.some(member => !Number.isInteger(member.weight) || member.weight < WEIGHT_MIN || member.weight > WEIGHT_MAX)) {
@@ -244,9 +259,11 @@ function RoutingGroupEditor({ group, channels, onBusy, onClose, onSaved }: {
           </div>}
         </div>;
       })}</div>
+      {enabled && members.length > 0 && availableMembers.length === 0 && <div className="dialog-warning" role="status">当前没有可用的参与通道。即使保存并启用此组，也无法承接新的支付，请先检测并启用成员通道。</div>}
+      {group && <p className="muted">修改预览：{group.strategy !== strategy ? `选路规则由「${routingStrategyLabels[group.strategy]}」改为「${routingStrategyLabels[strategy]}」；` : ""}成员 ${group.members.length} → ${members.length}，可用参与 ${availableMembers.length} 个。保存后仅影响新的支付尝试。</p>}
       {error && <div className="error" role="alert">{error}</div>}
       <div className="dialog-actions">
-        <Button type="primary" htmlType="submit" disabled={!name.trim() || !members.length}>{saving ? "保存中…" : "保存轮询组"}</Button>
+        <Button type="primary" htmlType="submit" loading={saving} disabled={!name.trim() || !members.length || saving || (!!group && !dirty)}>{saving ? "保存中…" : group && !dirty ? "尚无修改" : "保存轮询组"}</Button>
         <Button type="secondary" disabled={saving} onClick={onClose}>取消</Button>
       </div>
     </fieldset>
