@@ -23,6 +23,18 @@ describe("admin list queries", () => {
     expect(result.orderBy).toEqual([{ payment: { paymentNo: "desc" } }, { id: "desc" }]);
   });
 
+  it("keeps archived refund records searchable and uses stable ordering", () => {
+    const query = buildRefundListQuery({});
+    // Refund history must remain visible even when an application has been archived.
+    expect(query.where).toEqual({});
+    expect(query.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+  });
+
+  it("rejects invalid sort direction rather than forwarding unchecked input to Prisma", () => {
+    expect(() => buildOrderListQuery({ sortDir: "drop-table" })).toThrow();
+    expect(() => buildRefundListQuery({ sortDir: "sideways" })).toThrow();
+  });
+
   it("rejects unknown columns, invalid statuses, and oversized search input", () => {
     expect(() => buildOrderListQuery({ sortBy: "password" })).toThrow();
     expect(() => buildRefundListQuery({ status: "DELETED" })).toThrow();
