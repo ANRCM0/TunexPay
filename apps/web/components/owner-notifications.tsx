@@ -7,7 +7,7 @@ import { api, useApi } from "../lib/api";
 import { notificationFieldErrors } from "../lib/settings-validation";
 import { sortRows, type SortColumn } from "../lib/sort";
 import { eventLabel, notificationChannelLabel } from "../lib/labels";
-import { ConfirmModal, CopyValue, HoverDetail, LoadingState, Status, Toast, sortValueProps, time } from "./common";
+import { ConfirmModal, CopyValue, HoverDetail, LoadingState, RowAction, Status, Toast, sortValueProps, time } from "./common";
 import { FilterCard, FilterInput, FilterItem, FilterSelect, ListCard, ListPage, Pager, ToolbarNote, ToolbarSpacer, sortHeader, useClientPager, useTableSort } from "./list";
 
 type Field = {
@@ -351,7 +351,7 @@ function InstanceEditor({ instance, plugin, busy, onBusy, onDirtyChange, onNotic
       <Button type="primary" htmlType="submit" loading={busy} disabled={!dirty || busy}>{busy ? "保存中…" : dirty ? "保存修改" : "尚无修改"}</Button>
       {/* 停用的实例发不出测试消息，这个禁用条件沿用原来的判断 */}
       <Button disabled={!instance.enabled || busy} onClick={() => void onTest()}>用已保存配置发送测试</Button>
-      <button type="button" className="link-button danger-link" disabled={busy} onClick={onRemove}>删除</button>
+      <RowAction danger disabled={busy} onClick={onRemove}>删除</RowAction>
     </div>
   </Form>;
 }
@@ -494,9 +494,9 @@ export function OwnerNotificationsPanel() {
         // 插件缺失（例如插件被下线）时连配置字段都渲染不出来，编辑入口直接禁用更诚实
         const editable = Boolean(plugins?.some(plugin => plugin.code === item.plugin));
         return <div className="row-actions">
-          <button type="button" className="link-button" disabled={busy || !editable} onClick={() => { setEditorDirty(false); setEditor(item); }}>编辑</button>
-          <button type="button" className="link-button" disabled={busy || !editable || !item.enabled} onClick={() => void testInstance(item)}>发送测试</button>
-          <button type="button" className="link-button danger-link" disabled={busy} onClick={() => setPendingRemove(item)}>删除</button>
+          <RowAction disabled={busy || !editable} title={!editable ? "原通知插件已下线，无法编辑配置" : undefined} onClick={() => { setEditorDirty(false); setEditor(item); }}>编辑</RowAction>
+          <RowAction disabled={busy || !editable || !item.enabled} title={!editable ? "原通知插件不可用" : !item.enabled ? "请先启用该通知实例" : undefined} onClick={() => void testInstance(item)}>发送测试</RowAction>
+          <RowAction danger disabled={busy} onClick={() => setPendingRemove(item)}>删除</RowAction>
         </div>;
       },
     },
@@ -550,7 +550,7 @@ export function OwnerNotificationsPanel() {
       dataIndex: "actions",
       width: 90,
       render: (_: unknown, row: Delivery) => row.status === "DEAD" && row.instance
-        ? <button type="button" className="link-button" disabled={busy} onClick={() => void retry(row.id)}>重试</button>
+        ? <RowAction disabled={busy} onClick={() => void retry(row.id)}>重试</RowAction>
         : null,
     },
   ];
