@@ -199,10 +199,10 @@ export function McpAccessPanel(){
     {title:"状态",dataIndex:"enabled",width:110,render:(_:unknown,client:Client)=><Status value={client.enabled?"ACTIVE":"DISABLED"}/>},
     {title:"有效期",dataIndex:"expiresAt",width:180,render:(_:unknown,client:Client)=>client.expiresAt?time(client.expiresAt):"不过期"},
     {title:"上次使用",dataIndex:"lastUsedAt",width:180,render:(_:unknown,client:Client)=>time(client.lastUsedAt)},
-    {title:"操作",dataIndex:"actions",width:180,render:(_:unknown,client:Client)=><>
-      <RowAction disabled={busy} onClick={()=>{setEditingDirty(false);setEditing(client);}}>编辑</RowAction>{" "}
+    {title:"操作",dataIndex:"actions",width:210,render:(_:unknown,client:Client)=><div className="row-actions">
+      <RowAction disabled={busy} onClick={()=>{setEditingDirty(false);setEditing(client);}}>编辑</RowAction>
       <RowAction disabled={busy} onClick={()=>setRotating(client)}>轮换 Token</RowAction>
-    </>},
+    </div>},
   ];
 
   const approvalColumns:ColumnProps<Approval>[]=[
@@ -212,10 +212,10 @@ export function McpAccessPanel(){
     {title:sortHeader(APPROVAL_COLUMNS[3],approvalSort,onApprovalSort),dataIndex:"summary",render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[3])}>{row.summary}{row.lastError&&<div className="row-error">{row.lastError}</div>}</span>},
     {title:sortHeader(APPROVAL_COLUMNS[4],approvalSort,onApprovalSort),dataIndex:"status",width:130,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[4])}><Status value={row.status}/></span>},
     {title:sortHeader(APPROVAL_COLUMNS[5],approvalSort,onApprovalSort),dataIndex:"expiresAt",width:180,render:(_:unknown,row:Approval)=><span {...sortValueProps(row,APPROVAL_COLUMNS[5])}>{time(row.expiresAt)}</span>},
-    {title:"操作",dataIndex:"actions",width:140,render:(_:unknown,row:Approval)=>row.status==="PENDING"?<>
-      <RowAction disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</RowAction>{" "}
+    {title:"操作",dataIndex:"actions",width:170,render:(_:unknown,row:Approval)=>row.status==="PENDING"?<div className="row-actions">
+      <RowAction disabled={busy} onClick={()=>setDeciding({row,decision:"approve"})}>批准</RowAction>
       <RowAction disabled={busy} danger onClick={()=>setDeciding({row,decision:"reject"})}>拒绝</RowAction>
-    </>:null},
+    </div>:null},
   ];
 
   const auditColumns:ColumnProps<Audit>[]=[
