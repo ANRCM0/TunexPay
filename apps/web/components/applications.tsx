@@ -5,7 +5,7 @@ import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import { useMemo, useState } from "react";
 import { api, useApi } from "../lib/api";
 import { sortRows, type SortColumn } from "../lib/sort";
-import { ConfirmModal, CopyValue, LoadingState, PageHead, Status, Toast, sortValueProps, time } from "./common";
+import { ConfirmModal, CopyValue, LoadingState, PageHead, Status, Toast, sortValueProps, time , RowAction } from "./common";
 import { assignable, type Channel } from "./channels";
 import { applicationRoutingTarget, assignPaymentRouting, routingCreateInput } from "./routing-target";
 import { canAssignGroup, routingStrategyLabels, type RoutingGroup } from "../lib/routing-groups";
@@ -314,10 +314,10 @@ export function Applications() {
         ? <span className="muted">已归档，仅作追溯</span>
         : <>
           <div className="row-actions">
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => openEdit(item)}>编辑</button>
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => { setRotated(null); setRotating(item); }}>重置凭证</button>
-            <button type="button" className="link-button" disabled={busy !== ""} onClick={() => void toggleStatus(item)}>{busy === item.id ? "处理中…" : item.status === "ACTIVE" ? "停用" : "启用"}</button>
-            <button type="button" className="link-button danger-link" disabled={busy !== ""} title="删除该应用" onClick={() => { setConfirmName(""); setRemoveError(""); setRemoved(null); setRemoving(item); }}>删除</button>
+            <RowAction disabled={busy !== ""} onClick={() => openEdit(item)}>编辑</RowAction>
+            <RowAction disabled={busy !== ""} onClick={() => { setRotated(null); setRotating(item); }}>重置凭证</RowAction>
+            <RowAction disabled={busy !== ""} busy={busy === item.id} onClick={() => void toggleStatus(item)}>{busy === item.id ? "处理中…" : item.status === "ACTIVE" ? "停用" : "启用"}</RowAction>
+            <RowAction danger disabled={busy !== ""} title="删除该应用" onClick={() => { setConfirmName(""); setRemoveError(""); setRemoved(null); setRemoving(item); }}>删除</RowAction>
           </div>
         </>,
     },
