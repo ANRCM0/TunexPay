@@ -10,14 +10,15 @@ import { HOME, NAV_GROUPS, matchNavItem, navGroupOf, navTrail, type NavGroup, ty
 import { useNavPush } from "../lib/nav-progress";
 import { VersionBadge } from "./version-badge";
 import { PageTabs } from "./page-tabs";
+import { RouteProgress } from "./route-progress";
+// 只取类型：app-version 里含 node:child_process，客户端组件不能把它拉进浏览器包。
+import type { AppVersion } from "../lib/app-version";
+
 // 快捷搜索只有用户主动打开时才加载，避免所有管理台页面首屏包含 Modal / 搜索面板代码。
 const CommandPalette = dynamic(
   () => import("./command-palette").then(mod => mod.CommandPalette),
   { ssr: false, loading: () => <span className="sr-only" role="status">正在打开快捷搜索</span> },
 );
-import { RouteProgress } from "./route-progress";
-// 只取类型：app-version 里含 node:child_process，客户端组件不能把它拉进浏览器包。
-import type { AppVersion } from "../lib/app-version";
 
 const THEME_KEY = "tuoxin.theme";
 const COLLAPSE_KEY = "tuoxin.sider-collapsed";
