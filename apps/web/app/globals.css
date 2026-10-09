@@ -1,41 +1,45 @@
 /*
- * 设计令牌对齐 Arco Design（与 MPAY V2 管理台同一套色板）。
- * 变量名沿用重构前的命名，页面样式不必跟着改名；值全部换成为 Arco 的 10 级色阶。
+ * 设计令牌 — Sentry 深色仪表盘风格。
+ * 深紫黑背景 + 紫色 accent + 等宽数字字体，适合数据密集的支付后台。
+ * 变量名沿用原命名，页面样式不必跟着改名。
  */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* 主色：arcoblue-6 / 5 / 7 / 1 */
-  --primary: #165DFF;
-  --primary-hover: #4080FF;
-  --primary-active: #0E42D2;
-  --primary-soft: #E8F3FF;
+  /* 主色：Sentry Purple 系 */
+  --primary: #6A5FC1;
+  --primary-hover: #8B7FD4;
+  --primary-active: #4E44A0;
+  --primary-soft: #2A2150;
 
-  /* 文字：neutral-10 / 8 / 6 */
-  --ink: #1D2129;
-  --ink-2: #4E5969;
+  /* 文字：深紫黑上的白/灰 */
+  --ink: #F7F8FA;
+  --ink-2: #C9CDD4;
   --muted: #86909C;
 
-  /* 填充与边框：fill-1 / 2 / 3，border-3 */
-  --paper: #F7F8FA;
-  --fill-2: #F2F3F5;
-  --line: #E5E6EB;
-  --line-strong: #C9CDD4;
-  --panel: #ffffff;
+  /* 填充与边框：深紫黑层次 */
+  --paper: #150F23;
+  --fill-2: #1F1633;
+  --line: #362D59;
+  --line-strong: #584674;
+  --panel: #1F1633;
 
-  --success: #00B42A;
-  --success-soft: #E8FFEA;
-  --warning: #FF7D00;
-  --warning-soft: #FFF7E8;
-  --danger: #F53F3F;
-  --danger-soft: #FFECE8;
+  /* 语义色：Sentry 风格 */
+  --success: #00A87E;
+  --success-soft: #0D2E26;
+  --warning: #EC7E00;
+  --warning-soft: #2E2418;
+  --danger: #E23B4A;
+  --danger-soft: #2E1C1C;
 
-  --shadow: 0 1px 3px rgba(0, 0, 0, .04);
-  --shadow-pop: 0 4px 10px rgba(0, 0, 0, .1);
+  /* 阴影：深紫调环境光 */
+  --shadow: 0 1px 3px rgba(22, 15, 36, .3);
+  --shadow-pop: 0 4px 12px rgba(22, 15, 36, .45);
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
+  /* 圆角：Sentry 风格 — 卡片 12px，按钮 13px，输入 6px */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
 
   --header-h: 60px;
   --tabs-h: 40px;
@@ -43,33 +47,33 @@
   --sider-collapsed-w: 48px;
 }
 
-/* 暗色：与 Arco 的 arco-theme="dark" 同步切换，自定义区块也跟随 */
+/* 暗色主题（默认） */
 [arco-theme="dark"] {
   color-scheme: dark;
-  --primary: #3C7EFF;
-  --primary-hover: #5A90FF;
-  --primary-active: #2E6BE5;
-  --primary-soft: #1B2A4A;
+  --primary: #6A5FC1;
+  --primary-hover: #8B7FD4;
+  --primary-active: #4E44A0;
+  --primary-soft: #2A2150;
 
   --ink: #F7F8FA;
   --ink-2: #C9CDD4;
   --muted: #86909C;
 
-  --paper: #17171A;
-  --fill-2: #2A2A2B;
-  --line: #333335;
-  --line-strong: #48484A;
-  --panel: #232324;
+  --paper: #150F23;
+  --fill-2: #1F1633;
+  --line: #362D59;
+  --line-strong: #584674;
+  --panel: #1F1633;
 
-  --success: #23C343;
-  --success-soft: #1A2E1F;
-  --warning: #FF9A2E;
+  --success: #00A87E;
+  --success-soft: #0D2E26;
+  --warning: #EC7E00;
   --warning-soft: #2E2418;
-  --danger: #F76965;
+  --danger: #E23B4A;
   --danger-soft: #2E1C1C;
 
-  --shadow: 0 1px 3px rgba(0, 0, 0, .3);
-  --shadow-pop: 0 4px 12px rgba(0, 0, 0, .45);
+  --shadow: 0 1px 3px rgba(22, 15, 36, .3);
+  --shadow-pop: 0 4px 12px rgba(22, 15, 36, .45);
 }
 
 * { box-sizing: border-box; }
@@ -82,7 +86,7 @@ body {
 }
 button, input, select { font: inherit; }
 a { color: inherit; text-decoration: none; }
-::selection { background: rgba(22, 93, 255, .16); }
+::selection { background: rgba(106, 95, 193, .3); }
 
 /* ---- 跨界面共享原语（admin / cashier / login 都可用） ---- */
 
@@ -93,13 +97,14 @@ a { color: inherit; text-decoration: none; }
 }
 
 .eyebrow { text-transform: uppercase; letter-spacing: .12em; color: var(--primary); font-size: 11px; font-weight: 700; }
-h1 { font-size: 22px; font-weight: 700; margin: 5px 0 0; letter-spacing: -.015em; }
+h1 { font-size: 22px; font-weight: 600; margin: 5px 0 0; letter-spacing: -.015em; }
 .page-copy { color: var(--muted); margin: 7px 0 0; font-size: 13.5px; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow); transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
 
-.button { border: 0; border-radius: var(--radius-sm); background: var(--primary); color: #fff; padding: 8px 15px; font-weight: 500; cursor: pointer; font-size: 14px; transition: background .15s ease; }
-.button:hover { background: var(--primary-hover); }
+/* Sentry 风格按钮：13px 圆角，inset 阴影，uppercase 标签 */
+.button { border: 0; border-radius: var(--radius-sm); background: var(--primary); color: #fff; padding: 8px 15px; font-weight: 500; cursor: pointer; font-size: 14px; transition: background .15s ease, box-shadow .15s ease; }
+.button:hover { background: var(--primary-hover); box-shadow: rgba(0, 0, 0, .18) 0 4px 12px; }
 .button:active { background: var(--primary-active); }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .button.secondary { background: var(--fill-2); color: var(--ink-2); }
@@ -122,7 +127,7 @@ label { display: grid; gap: 6px; color: var(--ink-2); font-size: 13px; font-weig
 input, select { min-width: 0; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: var(--radius-xs); padding: 6px 11px; font-size: 14px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
 input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--primary); }
 input:hover, select:hover { border-color: var(--primary-hover); }
-input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(22, 93, 255, .12); }
+input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(106, 95, 193, .2); }
 
 .operation-notice { margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--primary-soft); background: var(--primary-soft); color: var(--primary); font-size: 13px; animation: notice-in .18s ease; }
 .operation-notice.error { border-color: var(--danger-soft); background: var(--danger-soft); color: var(--danger); }
@@ -151,7 +156,7 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px 
 
 .skeleton-card { padding: 24px; display: grid; gap: 11px; overflow: hidden; }
 .skeleton { position: relative; overflow: hidden; border-radius: var(--radius-sm); background: var(--fill-2); }
-.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); animation: skeleton-shimmer 1.25s ease-in-out infinite; }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); animation: skeleton-shimmer 1.25s ease-in-out infinite; }
 .skeleton-title { width: 34%; height: 18px; }
 .skeleton-line { width: 82%; height: 11px; }
 .skeleton-line.short { width: 58%; }
@@ -172,7 +177,7 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px 
 /* ---- 路由进度条 ---- */
 
 .route-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 200; background: transparent; }
-.route-progress-bar { display: block; height: 100%; background: var(--primary); box-shadow: 0 0 6px rgba(22, 93, 255, .5); }
+.route-progress-bar { display: block; height: 100%; background: var(--primary); box-shadow: 0 0 6px rgba(106, 95, 193, .5); }
 .route-progress-bar.running { width: 80%; transition: width 1.6s cubic-bezier(.1, .8, .2, 1); }
 .route-progress-bar.done { width: 100%; opacity: 0; transition: width .18s ease, opacity .22s ease; }
 
