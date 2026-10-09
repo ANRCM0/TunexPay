@@ -1,40 +1,40 @@
 /*
- * 设计令牌 — Sentry 深色仪表盘风格。
- * 深紫黑背景 + 紫色 accent + 等宽数字字体，适合数据密集的支付后台。
+ * 设计令牌 — Sentry 紫色系，浅色/深色双模式。
+ * 默认跟随系统（prefers-color-scheme），用户可手动切换。
  * 变量名沿用原命名，页面样式不必跟着改名。
  */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
   /* 主色：Sentry Purple 系 */
   --primary: #6A5FC1;
   --primary-hover: #8B7FD4;
   --primary-active: #4E44A0;
-  --primary-soft: #2A2150;
+  --primary-soft: #F0EEFA;
 
-  /* 文字：深紫黑上的白/灰 */
-  --ink: #F7F8FA;
-  --ink-2: #C9CDD4;
+  /* 文字：浅灰白上的深灰 */
+  --ink: #1D2129;
+  --ink-2: #4E5969;
   --muted: #86909C;
 
-  /* 填充与边框：深紫黑层次 */
-  --paper: #150F23;
-  --fill-2: #1F1633;
-  --line: #362D59;
-  --line-strong: #584674;
-  --panel: #1F1633;
+  /* 填充与边框：浅灰层次 */
+  --paper: #F7F8FA;
+  --fill-2: #F2F3F5;
+  --line: #E5E6EB;
+  --line-strong: #C9CDD4;
+  --panel: #FFFFFF;
 
   /* 语义色：Sentry 风格 */
   --success: #00A87E;
-  --success-soft: #0D2E26;
+  --success-soft: #E6F7F2;
   --warning: #EC7E00;
-  --warning-soft: #2E2418;
+  --warning-soft: #FFF4E6;
   --danger: #E23B4A;
-  --danger-soft: #2E1C1C;
+  --danger-soft: #FDECEA;
 
-  /* 阴影：深紫调环境光 */
-  --shadow: 0 1px 3px rgba(22, 15, 36, .3);
-  --shadow-pop: 0 4px 12px rgba(22, 15, 36, .45);
+  /* 阴影：浅灰调 */
+  --shadow: 0 1px 3px rgba(0, 0, 0, .04);
+  --shadow-pop: 0 4px 10px rgba(0, 0, 0, .1);
 
   /* 圆角：Sentry 风格 — 卡片 12px，按钮 13px，输入 6px */
   --radius-xs: 6px;
@@ -47,7 +47,7 @@
   --sider-collapsed-w: 48px;
 }
 
-/* 暗色主题（默认） */
+/* 暗色主题：深紫黑 + 紫色 accent */
 [arco-theme="dark"] {
   color-scheme: dark;
   --primary: #6A5FC1;
