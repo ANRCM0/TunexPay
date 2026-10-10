@@ -1006,3 +1006,164 @@ input:focus, select:focus { box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .15);
 @media (prefers-reduced-motion: reduce) {
   .theme-color-input, .theme-preset { transition: none; }
 }
+
+/* ============================================================
+   移动端适配层
+   ------------------------------------------------------------
+   依据 Vercel Web Interface Guidelines + WCAG 2.2（目标尺寸、文字缩放）
+   与 iOS/Android 实机行为补齐。只做移动端需要的覆盖，不改桌面布局。
+
+   断点沿用项目既有的 980 / 700 / 560，另加 380 处理超窄机型。
+   ============================================================ */
+
+/* ---- 1. 触摸目标：主要交互元素不小于 44px -------------------
+   Apple HIG / Material 的推荐下限是 44×44。原实现里页签栏的关闭按钮
+   只有 25×25、页签操作按钮 28×28、顶栏图标 32×32，在手机上极易误触
+   （关闭按钮紧挨着页签本身，点偏一点就关错了页）。
+   注意：Arco 的样式表在 admin.css 之后加载，覆盖 Arco 组件自身的
+   尺寸需要提高选择器权重，单类名会被反超。 */
+@media (max-width: 980px) {
+  .header-icon { width: 44px; height: 44px; }
+  .header-user { min-height: 44px; }
+  .page-tabs-action { width: 44px; height: 44px; }
+  /* 关闭按钮不做满 44：它和页签是并列元素，占满会让页签文字没地方放。
+     40px 已高于 WCAG 2.2 AA 的 24px 下限，也明显大于原来的 25px。 */
+  .page-tab-close { width: 40px; height: 40px; }
+  .link-button { min-height: 44px; }
+  .copy-value { min-height: 44px; display: inline-flex; align-items: center; }
+  .toast button { min-width: 36px; min-height: 36px; }
+
+  /* Arco 按钮/下拉触发器不受 .button 规则影响（类名不同），单独覆盖。
+     管理台里有 17 个组件直接用 Arco Button，默认高度 32px，手机上偏小。 */
+  .arco-btn { min-height: 44px; }
+  .arco-btn-size-small { min-height: 40px; }
+  .arco-select-view, .arco-picker { min-height: 44px; }
+  /* 分页器按钮同样需要可点面积 */
+  .arco-pagination-item { min-width: 36px; min-height: 36px; line-height: 34px; }
+
+  /* 抽屉里的菜单项：整行可点，行高提到 44 */
+  .app-menu .arco-menu-item,
+  .app-menu .arco-menu-inline-header,
+  .app-menu .arco-menu-sub-menu-title { height: 44px; }
+  /* 色块随行高一起放大，否则视觉重心偏上 */
+  .menu-tile { width: 30px; height: 30px; }
+  .brand-mark { width: 32px; height: 32px; }
+}
+
+/* ---- 2. 输入框字号：≥16px 阻止 iOS 自动放大 ------------------
+   Safari on iOS 在聚焦 font-size < 16px 的输入框时会自动缩放整个页面，
+   缩放后用户还得手动捏回来。项目基础字号是 14px，移动端统一提到 16px。
+   Arco 的 .arco-input / .arco-select-view 自带字号，一并覆盖。 */
+@media (max-width: 980px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .arco-input,
+  .arco-input-inner-wrapper,
+  .arco-select-view,
+  .arco-textarea,
+  .arco-input-number { font-size: 16px; }
+  /* 日期/时间类控件同样受缩放影响 */
+  input[type="date"], input[type="time"], input[type="datetime-local"] { font-size: 16px; }
+}
+
+/* ---- 3. 移动端视口高度：用 dvh 而不是 vh ---------------------
+   移动浏览器地址栏收放会改变可视高度，vh 取的是「最大高度」，
+   导致底部内容被地址栏盖住或出现多余空白。dvh 跟随实际可视区。 */
+@media (max-width: 700px) {
+  .app-shell { min-height: 100dvh; }
+  .error-shell { min-height: 100dvh; }
+}
+
+/* ---- 4. 安全区：刘海屏 / 手势条 ---------------------------------
+   env() 在非刘海设备上取值为 0，不影响普通机型。 */
+.app-header.arco-layout-header {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+.page-tabs {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+@media (max-width: 980px) {
+  .page-tabs { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  /* 底部留出手势条的高度，否则最后一行操作按钮压在 Home 指示条上 */
+  .app-content.arco-layout-content { padding-bottom: calc(44px + env(safe-area-inset-bottom)); }
+  .nav-drawer .arco-drawer-body { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+}
+
+/* ---- 5. 页签栏：横向滑动 + 加大触控高度 -------------------------
+   页签栏是横向滚动列表，移动端要能惯性滑动，且高度要够。
+   同时给滚动容器加 overscroll-behavior，避免滑动到边缘时带动整页刷新。 */
+@media (max-width: 980px) {
+  .page-tabs { height: 48px; }
+  .page-tab-entry { height: 48px; }
+  .page-tab { height: 46px; padding: 0 12px; }
+  .page-tabs-list { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .tabs { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  /* 滚动容器不要触发页面级横向回弹 */
+  .table-wrap, .list-table .arco-table-container { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+}
+
+/* ---- 6. 表格：卡片化布局在窄屏的收尾 ---------------------------
+   700px 以下自定义表格已折叠成卡片（td 用 data-label 显示字段名）。
+   这里收窄字段名列宽，让值列在 320~390px 上有足够宽度。 */
+@media (max-width: 380px) {
+  .table-wrap td[data-label] { grid-template-columns: 68px minmax(0, 1fr); gap: 8px; }
+  .table-wrap tbody tr { padding: 11px 12px; }
+}
+
+/* Arco Table 不走卡片折叠（列多且是虚拟滚动结构），窄屏靠容器横向滚动。
+   缩小单元格内边距，让更多列在首屏可见，减少横向拖动的距离。 */
+@media (max-width: 700px) {
+  .list-table .arco-table-td { padding: 12px 12px; }
+  .list-table .arco-table-th .arco-table-th-item { padding: 12px 12px; }
+  /* 横向滚动时给右侧留一点「还有内容」的暗示，避免用户以为表格被截断 */
+  .list-table .arco-table-container { padding-right: 2px; }
+  .list-pager { flex-wrap: wrap; gap: 10px; }
+}
+
+/* ---- 7. 弹窗：移动端接近全屏 ----------------------------------
+   640px 宽的弹窗在 390px 屏上只剩边距，操作按钮容易挤成两行。
+   改为占满可用宽度并抬高高度上限，操作按钮在窄屏改为等宽铺满。 */
+@media (max-width: 700px) {
+  .modal-mask { padding: 12px; align-items: flex-end; }
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: var(--radius-md);
+  }
+  .dialog-actions { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+  .dialog-actions .button { width: 100%; justify-content: center; }
+  .dialog-actions .muted { text-align: center; }
+}
+
+/* ---- 8. 主题设置面板：色板在窄屏两列 --------------------------- */
+@media (max-width: 560px) {
+  .theme-presets-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-preset { width: 100%; justify-content: center; }
+  .theme-hex-input { min-width: 0; }
+}
+
+/* ---- 9. 指标卡与内容卡片：窄屏单列 -----------------------------
+   .stats 用的是 auto-fit minmax(200px,1fr)：在 390px 上自动变成单列，
+   但在 320px 上 200px 的下限会撑出横向滚动，这里显式改成单列。 */
+@media (max-width: 560px) {
+  .grid.stats, .stats { grid-template-columns: minmax(0, 1fr); }
+  .card, .section { border-radius: var(--radius-sm); }
+  .page-head-actions { width: 100%; justify-content: flex-start; }
+  .page-head-actions .button { flex: 1 1 auto; justify-content: center; }
+}
+
+/* ---- 10. 长标识符：窄屏允许从中间断开 --------------------------
+   订单号、回调地址这类长串在 320px 上会把卡片撑破。
+   桌面端保持不换行（可读性更好），只在窄屏放开断词。 */
+@media (max-width: 560px) {
+  .mono, .break-all, .credential-secret code, .event-payload pre { overflow-wrap: anywhere; word-break: break-word; }
+}
+
+/* ---- 11. 横向手势：避免误触系统返回 ---------------------------- */
+@media (max-width: 980px) {
+  /* 可横向滑动的容器吃掉手势，不要让浏览器当成「返回上一页」 */
+  .page-tabs-list, .tabs, .table-wrap, .list-table .arco-table-container { touch-action: pan-x pan-y; }
+}

@@ -75,3 +75,65 @@
   .cashier-duo { grid-template-columns: 1fr; }
   .cashier-foot { flex-direction: column; }
 }
+
+/* ============================================================
+   移动端适配层（公共页：收银台 / 登录）
+   ------------------------------------------------------------
+   收银台是用户真正用手机打开的页面，移动端优先级最高：
+   二维码要够大够清晰，金额要一眼可见，底部不能被手势条遮住。
+   ============================================================ */
+
+/* ---- 视口高度：dvh 跟随移动浏览器地址栏收放 ---- */
+.cashier-shell, .login-shell { min-height: 100dvh; }
+
+/* ---- 安全区：刘海屏左右 / 手势条底部 ---- */
+.cashier-brand {
+  padding-left: max(22px, env(safe-area-inset-left));
+  padding-right: max(22px, env(safe-area-inset-right));
+}
+.cashier-shell { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+.login-shell { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+
+/* ---- 触摸目标：按钮与输入框不小于 44px ---- */
+@media (max-width: 720px) {
+  .cashier-shell .button, .login-shell .button { min-height: 44px; }
+  /* Arco 按钮不受上面的 .button 规则影响（不同类名），单独覆盖。
+     large 尺寸实测 36px，在手机上偏小。 */
+  .login-shell .arco-btn,
+  .cashier-shell .arco-btn { min-height: 44px; }
+  .login-shell .arco-btn-large { height: 46px; }
+  /* Arco 输入框 large 尺寸实测 40px，提到 44 */
+  .login-shell .arco-input-size-large,
+  .cashier-shell .arco-input-size-large { height: 44px; }
+  /* 输入框字号提到 16px：iOS 在 <16px 时会自动放大整个页面 */
+  .login-shell input:not([type="checkbox"]):not([type="radio"]),
+  .login-shell select,
+  .login-shell .arco-input,
+  .login-shell .arco-input-inner-wrapper { font-size: 16px; }
+  .cashier-shell .arco-input { font-size: 16px; }
+  .cashier-foot { gap: 8px; }
+}
+
+/* ---- 二维码：窄屏保持可扫描的最小尺寸 ----
+   低于 160px 时部分机型扫码吃力，这里设下限并在超窄屏回退为自适应。 */
+@media (max-width: 380px) {
+  .qr, .qr-placeholder { width: min(180px, 70vw); height: min(180px, 70vw); }
+  .cashier-amount-block > strong { font-size: 28px; }
+  .cashier-layout { padding: 0 12px; }
+}
+
+/* ---- 登录页：窄屏卡片铺满、去掉阴影压迫感 ---- */
+@media (max-width: 560px) {
+  .login-shell { padding: 16px 14px; align-items: flex-start; }
+  .login-card { border-radius: var(--radius-sm); box-shadow: none; }
+  .login-form-panel { padding: 26px 18px; }
+  .login-form-head h1 { font-size: 20px; }
+  .login-form { margin-top: 18px; gap: 14px; }
+}
+
+/* ---- 收银台状态条与操作按钮：窄屏铺满更好点 ---- */
+@media (max-width: 560px) {
+  .cashier-state .button { width: 100%; justify-content: center; }
+  .cashier-paybox { gap: 12px; }
+  .cashier-scan-label { font-size: 14px; }
+}
