@@ -1,0 +1,1169 @@
+/* 管理台专属样式，仅由 app/(admin)/layout.tsx 引入。
+   骨架尺寸对齐 MPAY V2 管理台实测值：侧栏 220px、品牌区 60px、顶栏 60px、页签栏 40px。 */
+
+/* ---- 外壳 ---- */
+
+.app-shell { min-height: 100vh; background: var(--paper); }
+.app-shell > .arco-layout-sider,
+.app-sider { background: var(--panel); border-right: 1px solid var(--line); }
+.app-sider { position: sticky; top: 0; height: 100vh; overflow: hidden; z-index: 40; }
+.app-sider .arco-layout-sider-children { display: flex; flex-direction: column; height: 100%; }
+
+/* 品牌区 60px，与顶栏等高 */
+.brand { flex: 0 0 auto; height: var(--header-h); display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow: hidden; }
+.brand.collapsed { justify-content: center; padding: 0; }
+.brand-mark { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--primary); color: var(--on-primary); font-weight: 800; font-size: 15px; }
+.brand-text { display: grid; min-width: 0; }
+.brand-title { font-size: 15px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
+.brand-subtitle { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.brand.collapsed .brand-text { display: none; }
+
+.sider-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 0; }
+
+/* 页脚（版本徽标）常驻左下角，不随导航滚动 */
+.sidebar-foot { flex: 0 0 auto; padding: 10px 16px 12px; border-top: 1px solid var(--line); }
+
+/* ---- 侧栏菜单：40px 行高 + 4px 间距 + 选中灰底蓝字 ---- */
+
+.app-menu.arco-menu { width: 100%; background: transparent; font-size: 14px; }
+
+/* 一级与二级共用一套「固定图标列 + 文字列」的版式：
+   一级=色块 26px，二级=图标盒 18px，两级的文字起点因此各自成一条竖线。
+   注意 Arco 的分组标题类名是 arco-menu-inline-header（不是 sub-menu-title，
+   后者只在折叠态的弹出层里出现），两者一起写。 */
+.app-menu .arco-menu-item,
+.app-menu .arco-menu-inline-header,
+.app-menu .arco-menu-sub-menu-title {
+  height: 40px; margin: 0 8px 4px; padding: 0 12px;
+  border-radius: var(--radius-xs); color: var(--ink-2);
+}
+/* 一级更重（字重 + 更深颜色），二级更轻：层级差异靠这三处一起拉开 */
+.app-menu .arco-menu-inline-header,
+.app-menu .arco-menu-sub-menu-title { display: flex; align-items: center; color: var(--ink); font-weight: 500; }
+/* 菜单项内部统一 10px 间距：一级是「色块 + 文字」，二级是「缩进占位 + 内容行」 */
+.app-menu .arco-menu-item { display: flex; align-items: center; gap: 10px; }
+
+/* 内容行。Arco 给这个元素写的是**内联样式** display:block（不是样式表规则），
+   于是图标（inline-flex）与文字（inline）按基线对齐，图标恒高 3px——这就是
+   「图标和字不在一条水平线上」的来源。内联样式只能靠 !important 覆盖，
+   选择器再具体也没用（已实测：规则匹配成功但计算值仍是 block）。 */
+.app-menu .arco-menu-item > .arco-menu-item-inner { display: flex !important; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+/* 分组标题的第一段（图标+标题）吃掉剩余宽度，展开箭头才会被顶到最右 */
+.app-menu .arco-menu-inline-header > span:first-child { flex: 1 1 auto; min-width: 0; }
+
+/* 二级缩进交给 Arco 自带的 indent 占位。默认 20px 宽，这里设成与一级色块等宽（26px）：
+   内容起点 28 + 占位 26 + 间距 10 = 64，正好是一级文字列的位置，二级图标就落在父级文字正下方。 */
+.app-menu .arco-menu-indent { width: 26px; }
+
+.menu-group-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.menu-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 二级图标盒：固定 18px 且内容居中，图标视觉重心才落在同一条竖线上 */
+.menu-icon { flex: 0 0 auto; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+/* 一级图标做成 MPAY 那种彩色方块 */
+.menu-tile { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--on-primary); }
+.menu-tile.tone-blue { background: var(--primary); }
+.menu-tile.tone-green { background: var(--success); }
+.menu-tile.tone-orange { background: var(--warning); }
+.menu-tile.tone-purple { background: #7B61FF; }
+.menu-tile.tone-cyan { background: #0FC6C2; }
+.menu-tile.tone-red { background: var(--danger); }
+
+.app-menu .arco-menu-item:hover,
+.app-menu .arco-menu-inline-header:hover,
+.app-menu .arco-menu-sub-menu-title:hover { background: var(--fill-2); color: var(--ink); }
+.app-menu .arco-menu-selected,
+.app-menu .arco-menu-item.arco-menu-selected { background: var(--primary-soft); color: var(--primary-text); font-weight: 500; border-left: 3px solid var(--accent-green); padding-left: 9px; }
+.app-menu .arco-menu-selected .menu-label { color: var(--primary-text); }
+.app-menu .arco-menu-selected .menu-icon { color: var(--primary-text); }
+
+/* 折叠态：Arco 走弹出层，这里只留色块并居中 */
+.app-menu.arco-menu-collapse .arco-menu-item,
+.app-menu.arco-menu-collapse .arco-menu-inline-header,
+.app-menu.arco-menu-collapse .arco-menu-sub-menu-title { margin: 0 8px 4px; padding: 0; gap: 0; justify-content: center; }
+.app-menu.arco-menu-collapse .arco-menu-item-inner { margin-left: 0; justify-content: center; }
+.app-menu.arco-menu-collapse .menu-label { display: none; }
+.app-menu.arco-menu-collapse .menu-group-title { gap: 0; }
+
+.version-badge { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.version-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgba(0, 180, 42, .16); }
+.version-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- 右半区：顶栏 + 页签栏 + 内容 ---- */
+
+.app-main { min-width: 0; background: var(--paper); }
+.app-header.arco-layout-header { height: var(--header-h); line-height: normal; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 30; }
+.header-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.header-icon:hover { background: var(--fill-2); color: var(--ink); }
+.header-icon-text { font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--ink-2); }
+.app-breadcrumb { margin-left: 6px; }
+.app-breadcrumb .arco-breadcrumb-item { color: var(--muted); font-size: 14px; }
+.app-breadcrumb .arco-breadcrumb-item:last-child { color: var(--ink); font-weight: 500; }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.header-user { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; transition: background .15s ease; }
+.header-user:hover { background: var(--fill-2); }
+.header-avatar { background: var(--primary); color: var(--on-primary); font-size: 13px; }
+.header-name { font-size: 14px; }
+
+/* ---- 多页签栏（40px，对齐 SnowAdmin） ---- */
+
+.page-tabs { display: flex; align-items: center; height: var(--tabs-h); background: var(--panel); border-bottom: 1px solid var(--line); padding: 0 16px; gap: 8px; position: sticky; top: var(--header-h); z-index: 29; }
+.page-tabs-list { display: flex; flex: 1 1 auto; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.page-tabs-list::-webkit-scrollbar { display: none; }
+/* 关闭按钮与 tab 按钮是并列元素：不会产生交互元素嵌套或无法键盘关闭的问题。 */
+.page-tab-entry { display: inline-flex; align-items: center; flex: 0 0 auto; height: var(--tabs-h); border-bottom: 2px solid transparent; white-space: nowrap; transition: background .15s ease, border-color .15s ease; }
+.page-tab-entry:hover { background: var(--fill-2); }
+.page-tab-entry.active { border-bottom-color: var(--primary); }
+.page-tab { display: inline-flex; align-items: center; height: calc(var(--tabs-h) - 2px); padding: 0 10px; border: 0; background: transparent; color: var(--ink-2); font-size: 14px; cursor: pointer; white-space: nowrap; transition: color .15s ease; }
+.page-tab:hover, .page-tab.active { color: var(--primary-text); }
+.page-tab.active { font-weight: 500; }
+.page-tab-close { display: inline-grid; place-items: center; width: 25px; height: 25px; margin-right: 4px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+.page-tab-close:hover, .page-tab-close:focus-visible { background: var(--line); color: var(--ink); }
+.page-tabs-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.page-tabs-action { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
+.page-tabs-action:hover { background: var(--fill-2); color: var(--primary-text); }
+
+/* 内容区宽度上限：没有它，宽屏（2560）上表格会被拉到 2400+，单列「说明」吃掉整屏。
+   这个上限沿用重构前 .content 的取值，不是新拍的数。 */
+.app-content.arco-layout-content { min-width: 0; width: 100%; max-width: 1560px; margin: 0 auto; padding: 16px; }
+.app-footer.arco-layout-footer { padding: 12px 16px 18px; text-align: center; color: var(--muted); font-size: 12px; background: transparent; }
+
+/* ---- 页头 ---- */
+
+.page-head { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; margin-bottom: 16px; }
+
+/* ---- 指标卡：彩色顶条 ---- */
+
+.grid { display: grid; gap: 16px; }
+.stats { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 16px; }
+.stat { padding: 16px 20px; border-style: solid; border-top-width: 3px; }
+.stat:hover { box-shadow: var(--shadow-pop); }
+.stat-blue { border-top-color: var(--primary); }
+.stat-green { border-top-color: var(--success); }
+.stat-red { border-top-color: var(--danger); }
+.stat-orange { border-top-color: var(--warning); }
+.stat-label { color: var(--muted); font-size: 14px; font-weight: 400; }
+.stat-value { font-weight: 600; font-size: 26px; margin-top: 6px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat-note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* ---- 首页警示区：只在确有异常时出现，避免常驻的红橙卡片墙 ---- */
+
+.alert-strip { margin-bottom: 16px; padding: 16px 18px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.alert-strip-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 13px; color: var(--danger-text); font-size: 14px; font-weight: 500; }
+.alert-count { padding: 1px 7px; border-radius: var(--radius-xs); background: var(--danger-soft); color: var(--danger-text); font-size: 12px; font-weight: 500; }
+.alert-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.alert-action-card { position: relative; display: block; min-width: 0; border-radius: var(--radius-md); }
+.alert-action-card .stat { height: 100%; padding-bottom: 42px; transition: border-color .15s ease, box-shadow .15s ease; }
+.alert-action-card:hover .stat, .alert-action-card:focus-visible .stat { border-color: var(--primary-hover); box-shadow: var(--shadow-pop); }
+.alert-action-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.alert-action-link { position: absolute; bottom: 15px; left: 20px; color: var(--primary-text); font-size: 12px; font-weight: 500; }
+.alert-strip .stat { background: var(--panel); }
+.stat-clear { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; padding: 12px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--success-soft); color: var(--success-text); font-size: 14px; }
+.stat-clear::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: 0 0 auto; }
+
+.section { padding: 20px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.section-title h2 { font-size: 16px; font-weight: 500; margin: 0; }
+
+/* ---- 表格：仅在尚未迁移到 Arco Table 的页面使用 ---- */
+
+.table-wrap { overflow-x: auto; position: relative; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; z-index: 2; background: var(--fill-2); color: var(--ink); font-size: 14px; text-align: left; font-weight: 500; padding: 14px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+
+/* 可排序表头：整格是按钮，但视觉上仍像表头文字，不改变行高 */
+.th-sort { padding: 0; }
+.th-sort-button { display: inline-flex; align-items: center; gap: 5px; width: 100%; padding: 14px 16px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: var(--radius-xs); transition: color .12s ease, background .12s ease; }
+.th-sort-button:hover { color: var(--primary-text); background: var(--line); }
+.th-sort-button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.th-sort-button.active { color: var(--primary-text); }
+.th-sort-icon { display: inline-flex; opacity: .45; transition: opacity .12s ease; }
+.th-sort-button:hover .th-sort-icon, .th-sort-button.active .th-sort-icon { opacity: 1; }
+.th-sort-right .th-sort-button { justify-content: flex-end; }
+.amount-cell { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td { padding: 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tbody tr:hover td { background: var(--fill-2); }
+tbody tr:last-child td { border-bottom: 0; }
+
+.form-grid { display: grid; grid-template-columns: 1.2fr 1.5fr 1fr auto; gap: 12px; align-items: end; }
+
+/* ---- Toggle 开关 ---- */
+
+.toggle { position: relative; display: inline-flex; align-items: center; gap: 9px; border: 0; background: transparent; cursor: pointer; padding: 2px 0; }
+.toggle::before { content: ""; width: 38px; height: 21px; border-radius: 999px; background: var(--line-strong); transition: background .15s ease; order: 0; position: relative; }
+.toggle .toggle-knob { position: absolute; left: 3px; top: 50%; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transform: translateY(-50%); transition: transform .15s ease; }
+.toggle.on::before { background: var(--primary); }
+.toggle.on .toggle-knob { transform: translate(17px, -50%); }
+.toggle:disabled { opacity: .55; cursor: not-allowed; }
+.toggle-label { color: var(--ink); font-size: 13px; }
+
+/* ---- 标签 pill ---- */
+
+.tag { display: inline-flex; padding: 1px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 500; }
+.tag-blue { background: var(--primary-soft); color: var(--primary-text); }
+.tag-green { background: var(--success-soft); color: var(--success-text); }
+.tag-gray { background: var(--fill-2); color: var(--ink-2); }
+
+/* ---- 抽屉与页签 ---- */
+
+.drawer-mask { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .35); display: flex; justify-content: flex-end; animation: mask-in .18s ease; }
+@keyframes mask-in { from { opacity: 0; } }
+.drawer { width: min(560px, 100%); height: 100%; background: var(--panel); display: grid; grid-template-rows: auto 1fr; box-shadow: var(--shadow-pop); animation: drawer-in .22s cubic-bezier(.2, .8, .3, 1); }
+.drawer-wide { width: min(960px, 100%); }
+@keyframes drawer-in { from { transform: translateX(48px); opacity: .4; } }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--panel); border-bottom: 1px solid var(--line); padding: 13px 20px; }
+.drawer-head h2 { margin: 0; font-size: 16px; font-weight: 500; }
+.drawer-close { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer; transition: background .15s ease, color .15s ease; }
+.drawer-close:hover { background: var(--fill-2); color: var(--ink); }
+.drawer:focus, .modal:focus { outline: none; }
+.drawer-body { overflow-y: auto; padding: 20px; }
+.drawer-body .card { box-shadow: none; }
+
+.modal-mask { justify-content: center; align-items: center; padding: 24px; }
+.modal { width: min(640px, 100%); max-height: calc(100vh - 60px); background: var(--panel); border-radius: var(--radius-md); display: grid; grid-template-rows: auto 1fr; overflow: hidden; box-shadow: var(--shadow-pop); animation: modal-in .2s cubic-bezier(.2, .8, .3, 1); }
+.modal .drawer-head { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+@keyframes modal-in { from { opacity: 0; transform: scale(.97) translateY(10px); } }
+
+/* 自定义 tabs：保留 WAI-ARIA tabs 的 roving tabindex 行为，造型对齐 Arco Tabs */
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tabs-item { border: 0; background: transparent; padding: 8px 2px; color: var(--ink-2); font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s ease, border-color .15s ease; }
+.tabs-item:hover { color: var(--primary-text); }
+.tabs-item.active { color: var(--primary-text); font-weight: 500; border-bottom-color: var(--primary); }
+
+/* ---- 表单与设置 ---- */
+
+.settings-group { border: 0; margin: 0 0 24px; padding: 0; min-width: 0; }
+.settings-group:last-of-type { margin-bottom: 0; }
+.settings-group-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.settings-group-head h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.settings-group-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.settings-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.event-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); cursor: pointer; color: var(--ink); font-size: 13px; font-weight: 400; transition: border-color .15s ease, background .15s ease; }
+.event-option:hover { border-color: var(--primary-hover); background: var(--primary-soft); }
+.event-option input { width: auto; margin: 2px 0 0; }
+.event-option strong { display: block; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.event-option em { display: block; margin-top: 3px; color: var(--muted); font-style: normal; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.field-clear { display: flex; align-items: center; gap: 7px; margin-top: 1px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.field-clear input { width: auto; accent-color: var(--danger); }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+.settings-actions .muted { font-size: 12px; }
+
+.bill-settings-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.bill-settings-section { margin-bottom: 20px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.bill-settings-section:last-of-type { margin-bottom: 0; }
+.bill-settings-section-head { margin-bottom: 15px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+.bill-settings-section-head h3 { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink); }
+.bill-settings-section-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.bill-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.bill-settings-wide { grid-column: 1 / -1; }
+.bill-settings-grid textarea { width: 100%; resize: vertical; font-family: monospace; border: 1px solid var(--line-strong); border-radius: var(--radius-xs); padding: 8px 11px; background: var(--panel); color: inherit; }
+.bill-settings-switches, .bill-settings-actions { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; }
+.bill-settings-switches label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.bill-settings-switches input { width: auto; accent-color: var(--primary); }
+.bill-settings-advanced { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.bill-settings-advanced summary { cursor: pointer; margin-bottom: 14px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.bill-settings-advanced[open] summary { color: var(--primary-text); }
+
+.credentials { margin: 18px 0; padding: 16px; background: var(--warning-soft); border: 1px solid var(--warning-soft); border-radius: var(--radius-md); }
+.credentials strong { color: var(--warning-text); }
+.credentials-grid { margin-top: 12px; display: grid; gap: 9px; }
+.secret-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; align-items: start; }
+.secret-row code { min-width: 0; word-break: break-all; }
+.secret-row .id-line { margin-top: 0; }
+
+/* ---- 时间线与详情 ---- */
+
+.timeline { display: grid; gap: 0; }
+.timeline-item { position: relative; padding: 0 0 18px 26px; }
+.timeline-item::before { content: ""; position: absolute; left: 6px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.timeline-item.tone-ok::before { background: var(--success); }
+.timeline-item.tone-warn::before { background: var(--warning); }
+.timeline-item.tone-bad::before { background: var(--danger); }
+.timeline-item::after { content: ""; position: absolute; left: 9px; top: 18px; bottom: 0; width: 1px; background: var(--line); }
+.timeline-item:last-child::after { display: none; }
+.timeline-type { font-weight: 500; font-size: 13px; }
+.timeline-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.list-tools { display: grid; grid-template-columns: minmax(260px, 1fr) 190px auto; gap: 12px; align-items: center; margin-bottom: 16px; }
+.detail-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.detail-columns.nested { gap: 30px; }
+.detail-columns h3 { margin: 0 0 12px; font-size: 14px; font-weight: 500; }
+.detail-section { margin-top: 20px; }
+.detail-list { display: grid; }
+.detail-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.detail-row:last-child { border-bottom: 0; }
+.detail-row > span { color: var(--muted); }
+.detail-row > strong { font-weight: 500; }
+.detail-value-copy { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.detail-value-copy > strong { min-width: 0; font-weight: 500; }
+.detail-value-copy .copy-value { flex: 0 0 auto; }
+.detail-value { min-height: 34px; display: flex; align-items: center; }
+.detail-value .badge { font-size: 12px; }
+.event-payload { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.event-payload summary { cursor: pointer; }
+.event-payload pre { overflow-x: auto; margin: 8px 0 0; padding: 10px; border-radius: var(--radius-sm); background: var(--fill-2); color: var(--ink-2); font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.row-actions .button { padding: 4px 12px; font-size: 13px; white-space: nowrap; }
+.row-open { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; text-align: left; }
+.id-line { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 3px; }
+.id-line .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copy-value { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; border: 0; border-radius: var(--radius-xs); padding: 2px 5px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; }
+.copy-value span { display: none; }
+.copy-value:hover, .copy-value:focus-visible { background: var(--fill-2); color: var(--primary-text); }
+.credentials .copy-value span { display: inline; }
+.row-error { color: var(--danger-text); margin-top: 6px; font-size: 12px; max-width: 420px; }
+.recovery-note { margin-top: 7px; color: var(--warning-text); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* 次要信息（失败原因 / 验证说明）默认不占版面，悬浮或键盘聚焦时浮出。
+   浮层必须是 fixed：.table-wrap 为 overflow: auto，绝对定位会被裁掉。 */
+.hover-detail { position: relative; display: inline-flex; align-items: center; border-radius: var(--radius-sm); text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; cursor: help; }
+.hover-detail.tone-danger { text-decoration-color: var(--danger); }
+.hover-detail:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.hover-detail .badge { text-decoration: inherit; text-underline-offset: inherit; }
+.hover-detail-pop { position: fixed; z-index: 95; max-height: 60vh; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); box-shadow: var(--shadow-pop); color: var(--ink); font-size: 13px; font-weight: 400; line-height: 1.65; text-align: left; white-space: pre-line; overflow-wrap: anywhere; animation: notice-in .16s ease; }
+.hover-detail.tone-danger .hover-detail-pop { border-color: var(--danger-soft); color: var(--danger-text); }
+.record { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid; gap: 5px; font-size: 13px; }
+.record:last-child { border-bottom: 0; }
+
+/* ---- 确认类弹窗：影响清单 + 危险提示 + 底部按钮条 ---- */
+
+.dialog-copy { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.7; }
+.dialog-list { margin: 12px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; line-height: 1.8; }
+.dialog-warning { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--danger-soft); border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger-text); font-size: 13px; line-height: 1.7; }
+.dialog-warning.is-info { border-color: var(--primary-soft); background: var(--primary-soft); color: var(--primary-text); }
+.dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.dialog-actions .muted { font-size: 12px; }
+
+.resolution-form { display: grid; gap: 16px; }
+.resolution-form label { display: grid; gap: 7px; }
+.resolution-form textarea { width: 100%; resize: vertical; min-height: 104px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: var(--radius-sm); padding: 8px 11px; outline: none; font: inherit; line-height: 1.6; transition: border-color .15s ease, box-shadow .15s ease; }
+.resolution-form textarea:hover { border-color: var(--primary-hover); }
+.resolution-form textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), .12); }
+
+/* ---- 已归档应用：列表降噪，但保留可读性 ---- */
+
+.row-archived { background: var(--fill-2); }
+.row-archived td { color: var(--muted); }
+.tag-archived { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: var(--radius-xs); background: var(--fill-2); color: var(--muted); font-size: 11px; vertical-align: 1px; }
+.toggle-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13px; cursor: pointer; }
+.toggle-inline input { width: auto; margin: 0; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.section-head h2 { margin: 0; font-size: 16px; font-weight: 500; }
+
+/* ---- 渠道卡片 ---- */
+
+.channel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.channel-card { padding: 20px; }
+.channel-card:hover { border-color: var(--primary-hover); box-shadow: var(--shadow-pop); }
+.channel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.channel-head > div { display: flex; align-items: center; gap: 12px; }
+.channel-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 500; }
+.channel-head span { color: var(--muted); font-size: 12px; }
+.channel-icon { width: 40px; height: 40px; border-radius: var(--radius-md); display: grid; place-items: center; font-weight: 800; }
+.channel-icon.alipay { background: var(--primary-soft); color: var(--primary-text); }
+.channel-icon.mock { background: var(--fill-2); color: var(--ink-2); }
+.check-list { display: grid; gap: 9px; margin: 20px 0; }
+.check { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--fill-2); font-size: 13px; }
+.check.ok { color: var(--success-text); }
+.check.missing { color: var(--danger-text); }
+.check strong { font-size: 11px; }
+.channel-meta { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px 10px; margin-bottom: 16px; color: var(--muted); font-size: 12px; }
+.channel-meta code { color: var(--ink); word-break: break-all; }
+.channel-card > .button, .channel-card > .channel-config-link { display: inline-flex; align-items: center; gap: 7px; }
+.channel-config-link { margin-bottom: 16px; }
+.channel-safety { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border-radius: var(--radius-sm); background: var(--warning-soft); color: var(--warning-text); font-size: 12px; line-height: 1.5; }
+
+/* ---- 对账上传 ---- */
+
+.reconciliation-upload { padding: 20px; display: grid; gap: 18px; }
+.upload-copy { display: flex; gap: 13px; align-items: center; }
+.upload-copy h2 { margin: 0; font-size: 15px; font-weight: 500; }
+.upload-copy p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.upload-icon { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--primary-text); background: var(--primary-soft); }
+.upload-form { display: grid; grid-template-columns: 180px minmax(260px, 1fr) auto; gap: 12px; align-items: end; }
+.upload-form input[type="file"] { padding: 8px; }
+.upload-form input[type="file"]::file-selector-button { border: 0; border-radius: var(--radius-sm); margin-right: 10px; padding: 5px 9px; background: var(--primary-soft); color: var(--primary-text); cursor: pointer; }
+.match-count { font-size: 12px; font-weight: 500; }
+.match-count.ok { color: var(--success-text); }
+.match-count.bad { color: var(--danger-text); }
+.audit-agent { max-width: 240px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.severity { margin-top: 6px; font-size: 11px; font-weight: 500; color: var(--muted); }
+.severity.MEDIUM { color: var(--warning-text); }
+.severity.HIGH, .severity.CRITICAL { color: var(--danger-text); }
+.reconciliation-upload + .detail-section { margin-top: 16px; }
+.reconciliation-upload .channel-safety { display: block; }
+.reconciliation-upload .button, td .button { display: inline-flex; align-items: center; gap: 6px; }
+
+.plugin-capabilities { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 20px; }
+.plugin-capabilities span { border: 1px solid var(--line); padding: 3px 8px; border-radius: var(--radius-xs); font-size: 13px; }
+.channel-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; min-width: 200px; }
+.channel-id-cell { display: flex; gap: 10px; align-items: center; }
+.channel-icon.xs { width: 30px; height: 30px; border-radius: var(--radius-sm); font-size: 12px; }
+.link-button { border: 0; background: transparent; color: var(--primary-text); cursor: pointer; font-size: 13px; font-weight: 400; padding: 4px 0; }
+.link-button:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
+.link-button:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
+.channel-check-detail { max-width: 360px; white-space: normal; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.channel-enable { display: flex !important; align-items: center; gap: 8px; }
+.channel-enable input { width: auto !important; }
+
+/* ---- 命令面板 ---- */
+
+.command-palette { width: min(560px, 100%); }
+.command-palette .arco-modal-content { padding: 16px 16px 8px; }
+.command-list { list-style: none; margin: 12px 0 0; padding: 0; max-height: min(48vh, 420px); overflow-y: auto; }
+.command-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink); cursor: pointer; font-size: 14px; text-align: left; }
+.command-item.active { background: var(--primary-soft); color: var(--primary-text); }
+.command-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-group { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.command-item.active .command-group { color: var(--primary-text); }
+
+/* ---- 窄屏导航抽屉 ---- */
+.nav-drawer .arco-drawer-header { border-bottom: 1px solid var(--line); }
+.nav-drawer-title { display: inline-flex; align-items: center; gap: 8px; }
+.nav-drawer .arco-drawer-body { padding: 8px 0; }
+
+/* Arco Table 不在 .table-wrap 里，窄屏下不会走「折叠成卡片」那套规则。
+   列多的表在手机上硬挤会挤成竖排文字，这里改为横向滚动，和 MPAY 的处理一致。 */
+/* ---- 窄屏：隐藏侧栏，改用抽屉 ---- */
+@media (max-width: 980px) {
+  .app-shell.narrow > .app-sider { display: none; }
+  /* 窄屏下侧栏改成抽屉，面包屑就是唯一的"我在哪"提示，保留它并压成一行。
+     注意：Arco 的样式表加载在 admin.css 之后，覆盖 Arco 组件自身的属性
+     （这里是 .arco-breadcrumb 的 display）必须提高选择器权重，单类名会被反超。 */
+  .app-header .app-breadcrumb { display: flex; min-width: 0; overflow: hidden; }
+  .app-header .app-breadcrumb .arco-breadcrumb-item { white-space: nowrap; }
+  .app-content.arco-layout-content { padding: 12px; }
+  .header-name { display: none; }
+  .page-tabs { padding: 0 12px; }
+  .form-grid, .detail-columns, .channel-grid, .upload-form, .list-tools { grid-template-columns: 1fr; }
+  .detail-columns.nested { gap: 20px; }
+  .secret-row { grid-template-columns: 1fr; gap: 4px; }
+  .row-actions { gap: 9px 10px; }
+  .row-actions .button { padding: 7px 13px; font-size: 13px; }
+  .link-button { padding: 9px 0; }
+  .tabs { overflow-x: auto; gap: 18px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs-item { white-space: nowrap; padding: 10px 2px; }
+  .table-wrap { scrollbar-width: thin; }
+}
+
+/* 窄屏：数据表折叠成卡片，字段名由 td 的 data-label 提供，避免横向拖动 */
+@media (max-width: 700px) {
+  .table-wrap { overflow-x: visible; }
+  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: auto; }
+  .table-wrap thead { display: none; }
+  .table-wrap tbody tr { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); padding: 13px 14px; margin-bottom: 10px; }
+  .table-wrap tbody tr:last-child { margin-bottom: 0; }
+  .table-wrap tbody tr:hover td { background: transparent; }
+  .table-wrap td { border-bottom: 0; padding: 0; }
+  .table-wrap td:empty { display: none; }
+  .table-wrap td + td { margin-top: 9px; }
+  .table-wrap td[data-label] { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .table-wrap td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 500; padding-top: 1px; }
+  .table-wrap td:first-child { padding-bottom: 10px; margin-bottom: 11px; border-bottom: 1px solid var(--line); }
+  .table-wrap td:first-child::before { display: none; }
+  .table-wrap .row-actions { margin-top: 2px; }
+  .table-wrap .id-line { align-items: flex-start; }
+  .table-wrap .id-line .mono, .table-wrap .id-line .break-all { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .settings-group-head { flex-direction: column; gap: 12px; }
+}
+
+@media (max-width: 560px) {
+  .page-head { align-items: flex-start; flex-direction: column; }
+  .detail-row { grid-template-columns: 1fr; gap: 5px; }
+  .secret-row { grid-template-columns: 1fr; gap: 6px; }
+  .section-head { align-items: flex-start; flex-direction: column; }
+  .content, .app-content.arco-layout-content { padding: 12px 12px 44px; }
+  .section { padding: 16px; }
+}
+
+/* 轮询组沿用现有后台的表格、表单和弹窗体系。 */
+.routing-member-summary { max-width: 380px; white-space: normal; overflow-wrap: anywhere; margin-top: 5px; }
+.routing-help { margin-top: 16px; line-height: 1.8; }
+.routing-editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
+.routing-editor-fields .toggle-inline { display: inline-flex; flex-direction: row; width: fit-content; gap: 6px; }
+.routing-member-heading { display: flex; justify-content: space-between; gap: 12px; }
+.routing-member-list { display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.routing-member-row { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.routing-member-row.selected { background: var(--primary-soft); border-color: var(--primary-hover); }
+.routing-editor-fields .routing-member-choice { display: flex; flex-direction: row; align-items: center; gap: 10px; min-width: 0; }
+.routing-member-choice input, .routing-member-controls input[type="checkbox"] { width: auto; }
+.routing-member-choice > span { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.routing-member-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.routing-editor-fields .routing-weight { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.routing-weight input { width: 78px; }
+.routing-binding { min-width: 190px; max-width: 320px; width: 100%; }
+@media (max-width: 560px) {
+  .routing-member-list { max-height: min(280px, 32vh); }
+  .routing-member-row { align-items: stretch; flex-direction: column; }
+  .routing-member-controls { padding-left: 25px; }
+  .routing-binding { min-width: 0; }
+}
+
+/* ---- 共享页面操作 / 凭据展示 / 危险链接 ---- */
+.page-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.credential-secret { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); }
+.credential-secret code { min-width: 0; overflow-wrap: anywhere; word-break: break-all; }
+.settings-events code, .table-wrap code { overflow-wrap: anywhere; word-break: break-word; }
+.danger-link { color: var(--danger-text); }
+.danger-link:hover { color: var(--danger-text); opacity: .85; }
+.modal { max-height: calc(100dvh - 48px); }
+
+@media (max-width: 560px) {
+  .page-head-actions { width: 100%; justify-content: flex-start; }
+  .credential-secret { align-items: flex-start; flex-direction: column; }
+}
+
+/* ---- 查询卡：列表页统一的筛选区（对齐 MPAY：筛选 + 表格 + 分页同一张卡） ---- */
+
+/* MPAY 的版式：筛选区固定四列，控件 32px，行距 8px，整块与表格同处一张卡 */
+.list-page { overflow: hidden; }
+/* 一页里出现多张列表卡时（通知设置、对账、MCP）统一给间距，页面里不再写内联样式 */
+.list-page + .list-page,
+.list-page + .card,
+.card + .list-page { margin-top: 16px; }
+.filter-card { padding: 16px 16px 4px; }
+.filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; }
+.filter-item { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; }
+.filter-label { flex: 0 0 auto; width: 84px; color: var(--ink-2); font-size: 14px; text-align: right; }
+.filter-control .arco-input-wrapper, .filter-control .arco-select { width: 100%; }
+.filter-control { flex: 1 1 0; min-width: 0; }
+.filter-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.filter-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 0 8px; }
+
+.list-card { padding: 0; overflow: hidden; }
+.list-card .arco-table-container { border-top: 1px solid var(--line); }
+.list-card-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; }
+.list-card-toolbar .toolbar-note { color: var(--muted); font-size: 13px; }
+.list-card-toolbar .toolbar-spacer { margin-left: auto; }
+
+/* ---- Arco 表格：对齐 MPAY 的表头灰底、行分隔线与分页条 ---- */
+
+.list-table .arco-table-container,
+.list-table .arco-table-container-inner { border: 0; border-radius: 0; }
+.list-table .arco-table-th { background: var(--fill-2); border-bottom: 0; }
+.list-table .arco-table-th .arco-table-th-item-title { color: var(--ink); font-size: 14px; font-weight: 500; }
+.list-table .arco-table-td { border-bottom: 1px solid var(--line); font-size: 14px; padding: 14px 16px; }
+.list-table .arco-table-tr:last-child .arco-table-td { border-bottom: 0; }
+.list-table .arco-table-th { padding: 0; }
+.list-table .arco-table-th .arco-table-th-item { padding: 14px 16px; }
+.list-table .arco-table-tr:hover .arco-table-td { background: var(--fill-2); }
+.list-table .arco-table-empty { padding: 0; }
+/* 表头里的排序按钮撑满单元格，点击区域更大 */
+.list-table .th-sort-button { width: 100%; }
+.list-table .arco-table-align-right .th-sort-button { justify-content: flex-end; }
+/* 操作列里的动作用一行排开：换行会让行高翻倍、动作顺序也不再一目了然 */
+.list-table .row-actions { flex-wrap: nowrap; }
+.list-table .row-actions .link-button { white-space: nowrap; }
+
+.list-card-pager { display: flex; align-items: center; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line); }
+
+/* ---- 列表表格的统一模型（所有列表页共用；页面里不要再各写各的溢出行为）----
+   之前每页只在列上写死 width，溢出行为没人管，于是宽屏被拉成一条、窄屏各有各的挤法。
+   这里统一三件事：
+     1) 横向溢出只发生在卡片内部：容器始终可横向滚动，绝不撑宽页面；
+     2) 单元格默认允许换行：说明性长文本按容器宽度折行，而不是把列撑开；
+     3) 只有标识符（.mono / code）不换行：订单号、工具名、URL 这类值从词中间劈开
+        会直接失去可读性，让它们按内容取宽，放不下时由容器内部横向滚动兜底。 */
+.list-table .arco-table-container { overflow-x: auto; }
+.list-table .arco-table-td { white-space: normal; }
+/* 表头不换行：列头是固定短标签，放不下时折成两行（「订单状/态」）比缩排更难看，
+   宽度不够应由列宽解决，不是把标签劈开。 */
+.list-table .arco-table-th,
+.list-table .arco-table-th .th-sort-button,
+.list-table .arco-table-th .arco-table-th-item-title { white-space: nowrap; }
+.list-table .arco-table-td .mono,
+.list-table .arco-table-td code { white-space: nowrap; }
+/* 操作列与金额列不参与换行：它们的内容短且需要成组出现 */
+.list-table .arco-table-td .row-actions,
+.list-table .arco-table-td .amount-cell { white-space: nowrap; }
+.list-pager .arco-pagination-total { color: var(--ink-2); font-size: 13px; }
+
+/* ---- 首页 Hero：MPAY 的运营首页同款，左侧标题、右侧平台状态 ---- */
+
+.hero-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 20px 24px; margin-bottom: 16px; background: linear-gradient(180deg, var(--primary-soft), var(--panel) 92%); }
+.hero-main h1 { margin-top: 6px; }
+.hero-status { flex: 0 0 auto; display: grid; gap: 4px; min-width: 190px; padding-left: 24px; border-left: 1px solid var(--line); }
+.hero-status-item { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.hero-status-item > span { color: var(--muted); min-width: 60px; }
+.hero-status-item > strong { font-size: 18px; font-weight: 600; }
+.hero-status-item > strong.tone-ok { color: var(--success-text); }
+.hero-status-item > strong.tone-warn { color: var(--warning-text); }
+.hero-status-item > strong.tone-bad { color: var(--danger-text); }
+.hero-status-foot { margin-top: 4px; font-size: 12px; }
+.hero-badge { justify-self: start; margin-top: 6px; padding: 2px 8px; border-radius: var(--radius-xs); background: var(--danger-soft); color: var(--danger-text); font-size: 12px; font-weight: 500; }
+
+@media (max-width: 700px) {
+  .hero-card { flex-direction: column; }
+  .hero-status { width: 100%; padding-left: 0; padding-top: 14px; border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ---- 筛选区的响应式：必须写在基础规则之后，否则同优先级下会被基础声明覆盖 ---- */
+
+@media (max-width: 1200px) {
+  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .filter-grid { grid-template-columns: 1fr; }
+  .filter-label { width: 72px; }
+  .bill-settings-grid { grid-template-columns: 1fr; }
+}
+
+/* 分隔线在窄屏收窄，给面包屑让出空间 */
+@media (max-width: 700px) {
+  .app-header .app-breadcrumb .arco-breadcrumb-item:not(:last-child) { display: none; }
+}
+
+/* ---- 暗色主题下的侧栏与菜单 ----
+   Arco 的 Sider(theme="light") 与 light 版 Menu 把背景色写死成白色，不跟随 arco-theme；
+   而 Arco 的样式表加载在 admin.css 之后，单类名覆盖会被反超。
+   这里统一用 [arco-theme="dark"] 祖先选择器提高权重，只改需要跟随主题的表面与文字色。 */
+
+[arco-theme="dark"] .app-sider,
+[arco-theme="dark"] .app-shell > .arco-layout-sider { background: var(--panel); border-right-color: var(--line); }
+[arco-theme="dark"] .brand { border-bottom-color: var(--line); }
+[arco-theme="dark"] .sidebar-foot { border-top-color: var(--line); }
+[arco-theme="dark"] .app-menu.arco-menu { background: transparent; }
+[arco-theme="dark"] .app-menu .arco-menu-item,
+[arco-theme="dark"] .app-menu .arco-menu-inline-header,
+[arco-theme="dark"] .app-menu .arco-menu-sub-menu-title { color: var(--ink-2); }
+[arco-theme="dark"] .app-menu .arco-menu-inline-header,
+[arco-theme="dark"] .app-menu .arco-menu-sub-menu-title { color: var(--ink); }
+[arco-theme="dark"] .app-menu .arco-menu-item:hover,
+[arco-theme="dark"] .app-menu .arco-menu-inline-header:hover,
+[arco-theme="dark"] .app-menu .arco-menu-sub-menu-title:hover { background: var(--fill-2); color: var(--ink); }
+[arco-theme="dark"] .app-menu .arco-menu-selected { background: var(--fill-2); color: var(--primary-text); }
+[arco-theme="dark"] /* 折叠态与展开态的箭头图标 */
+[arco-theme="dark"] .app-menu .arco-menu-icon-suffix .arco-icon { color: var(--muted); }
+/* 窄屏抽屉里的菜单同样跟随主题 */
+[arco-theme="dark"] .nav-drawer .app-menu.arco-menu { background: transparent; }
+
+/* Row actions: keep compact typography while making mobile click targets less error-prone. */
+.list-table .link-button, .channel-actions .link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  line-height: 1.35;
+}
+@media (max-width: 700px) {
+  .list-table .link-button, .channel-actions .link-button {
+    min-height: 40px;
+    padding-inline: 6px;
+  }
+  .dialog-actions > button, .settings-actions > button, .bill-settings-actions > button {
+    min-height: 40px;
+  }
+}
+
+/* Nested form validation: errors are adjacent to the exact field, not hidden in a toast. */
+.form-field-error {
+  margin: 5px 0 0;
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Stage 3: unified action hierarchy and keyboard/touch behavior. */
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border-radius: var(--radius-xs);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease;
+}
+.row-action:hover:not(:disabled) {
+  background: var(--primary-soft);
+  text-decoration: none;
+}
+.row-action.danger-link:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+.row-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.row-action.danger-link:focus-visible {
+  outline-color: var(--danger);
+}
+.row-action:disabled { opacity: .55; cursor: not-allowed; }
+.action-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: action-spin .7s linear infinite;
+}
+@keyframes action-spin { to { transform: rotate(360deg); } }
+.dialog-actions > .button,
+.settings-actions > .button,
+.bill-settings-actions > .button { min-height: 38px; }
+.dialog-actions > .button[aria-busy="true"] { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 700px) {
+  .row-actions, .channel-actions { gap: 6px; }
+  .list-table .row-action, .channel-actions .row-action { min-height: 44px; padding: 9px 10px; }
+  .dialog-actions, .settings-actions, .bill-settings-actions { gap: 8px; }
+  .dialog-actions > button, .settings-actions > button, .bill-settings-actions > button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-spinner { animation: none; border-style: dotted; }
+  .row-action { transition: none; }
+}
+
+
+/* ---- 列表操作列 / 行高（集中修复，不影响弹窗和表单按钮） ----
+   Table 的宽度由各页面操作列预留；当视口过窄时由表格容器横向滚动，
+   绝不把同一行的“配置/检测/删除”压成两排。 */
+.list-table {
+  --list-row-height: 88px;
+}
+.list-table .arco-table-container,
+.list-table .arco-table-container-inner {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.list-table .arco-table-tr {
+  height: var(--list-row-height);
+}
+.list-table .arco-table-td {
+  height: var(--list-row-height);
+  box-sizing: border-box;
+  vertical-align: middle;
+  padding: 10px 12px;
+}
+.list-table .row-actions,
+.list-table .channel-actions {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+}
+.list-table .row-actions > *,
+.list-table .channel-actions > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.list-table .row-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+/* 未迁移至 Arco 的旧表格也禁止操作按钮换行；手机上只滚动动作区。 */
+.table-wrap .row-actions {
+  flex-wrap: nowrap;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+@media (max-width: 700px) {
+  .list-table .row-action { min-height: 40px; padding: 8px 9px; }
+}
+
+/* ============================================================
+   细节优化层 — 审计所有组件后打磨列表/表格/筛选/操作列
+   ============================================================ */
+
+/* ---- 列表页卡片间距 ---- */
+.list-page + .list-page { margin-top: 16px; }
+
+/* ---- 筛选区：输入框与下拉框统一高度 ---- */
+.filter-control .arco-input-wrapper,
+.filter-control .arco-select { width: 100%; height: 32px; }
+.filter-control .arco-select-view { min-height: 32px; }
+
+/* ---- 筛选区：查询/重置按钮统一高度 ---- */
+.filter-footer .button { height: 32px; padding: 0 16px; }
+
+/* ---- 表格：行高与单元格内边距 ---- */
+.list-table .arco-table-td { padding: 12px 16px; }
+
+/* ---- 表格：操作列按钮统一高度 ---- */
+.list-table .row-actions .link-button,
+.list-table .row-actions .row-action { min-height: 32px; padding: 5px 10px; }
+
+/* ---- 表格：排序按钮 hover ---- */
+.list-table .th-sort-button:hover { background: var(--fill-2); }
+
+/* ---- 表格：空状态 ---- */
+.list-table .arco-table-empty { padding: 40px 16px; }
+
+/* ---- 分页：总数文字 ---- */
+.list-pager .arco-pagination-total { margin-right: 12px; }
+
+/* ---- 工具栏：按钮与文字间距 ---- */
+.list-card-toolbar { gap: 8px; }
+
+/* ---- 指标卡：数值等宽对齐 ---- */
+.stat-value { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; }
+
+/* ---- 警示区：卡片 hover ---- */
+.alert-action-card:hover .stat { border-color: var(--primary-hover); }
+
+/* ---- 详情行：标签列固定宽度 ---- */
+.detail-row > span { flex: 0 0 120px; }
+
+/* ---- 时间线：节点与文字间距 ---- */
+.timeline-item { padding-left: 24px; }
+.timeline-item::before { left: 5px; width: 7px; height: 7px; }
+.timeline-item::after { left: 8px; width: 1px; }
+
+/* ---- 抽屉：头部与内容间距 ---- */
+.drawer-head { padding: 14px 20px; }
+.drawer-body { padding: 20px; }
+
+/* ---- 弹窗：内容间距 ---- */
+.modal .drawer-body { padding: 20px; }
+
+/* ---- 按钮：统一圆角与内边距 ---- */
+.button { border-radius: var(--radius-sm); padding: 7px 14px; }
+.button.secondary { background: var(--fill-2); color: var(--ink-2); }
+.button.secondary:hover { background: var(--line); }
+
+/* ---- 链接按钮：统一高度 ---- */
+.link-button { min-height: 32px; padding: 4px 8px; }
+
+/* ---- 标签页：active 下划线 ---- */
+.tabs-item.active { border-bottom-width: 2px; }
+
+/* ---- 命令面板：列表项高度 ---- */
+.command-item { min-height: 36px; }
+
+/* ---- 头部：图标按钮 hover ---- */
+.header-icon:hover { background: var(--fill-2); color: var(--primary-text); }
+
+/* ---- 侧栏：菜单项 hover 过渡 ---- */
+.app-menu .arco-menu-item { transition: background-color .12s ease, color .12s ease; }
+
+/* ---- 表单：输入框 focus 光晕 ---- */
+input:focus, select:focus { box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .15); }
+
+/* ---- 表单：错误提示 ---- */
+.form-field-error { margin-top: 4px; }
+
+/* ---- 确认弹窗：危险提示 ---- */
+.dialog-warning { border-radius: var(--radius-sm); }
+
+/* ---- 骨架屏：动画 ---- */
+.skeleton::after { animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+
+/* ---- 窄屏适配 ---- */
+@media (max-width: 700px) {
+  .filter-grid { grid-template-columns: 1fr; }
+  .list-table .row-actions .link-button,
+  .list-table .row-actions .row-action { min-height: 36px; padding: 6px 8px; }
+  .detail-row > span { flex: 0 0 80px; }
+}
+
+/* ---- 动效偏好 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  .list-table .arco-table-tr { transition: none; }
+  .button:active { transform: none; }
+}
+
+
+/* ============================================================
+   配色设置：源头色只有两个，派生色由 lib/theme.ts 现算
+   ============================================================ */
+
+.theme-intro { margin: 0 0 18px; max-width: 68ch; }
+
+.theme-fieldset { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.theme-field { display: grid; gap: 6px; min-width: 0; }
+.theme-field-label { color: var(--ink); font-size: 13px; font-weight: 500; }
+.theme-field-control { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+/* 原生取色器：去掉默认的圆角方框，做成和输入框同高的色块 */
+.theme-color-input {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.theme-color-input:hover { border-color: var(--primary-hover); }
+.theme-color-input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .18);
+  outline: none;
+}
+.theme-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.theme-color-input::-webkit-color-swatch { border: 0; border-radius: 3px; }
+.theme-color-input::-moz-color-swatch { border: 0; border-radius: 3px; }
+
+.theme-hex-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.theme-hex-input.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.theme-field-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.theme-field-hint.error { color: var(--danger-text); }
+
+/* ---- 效果预览：让用户改完立刻看到按钮/徽章长什么样 ---- */
+
+.theme-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--fill-2);
+}
+.theme-preview-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.theme-preview .button { cursor: default; }
+.theme-preview-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  margin-left: auto;
+}
+
+/* ---- 预设方案 ---- */
+
+.theme-presets { margin-top: 20px; display: grid; gap: 10px; }
+.theme-presets-label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.theme-presets-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.theme-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.theme-preset:hover { border-color: var(--primary-hover); color: var(--ink); }
+.theme-preset.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  font-weight: 500;
+}
+.theme-preset:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.theme-preset-dots { display: inline-flex; gap: 3px; }
+.theme-preset-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .12);
+}
+
+@media (max-width: 700px) {
+  .theme-fieldset { grid-template-columns: 1fr; }
+  .theme-preset { min-height: 40px; }
+  .theme-preview-swatch { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-color-input, .theme-preset { transition: none; }
+}
+
+/* ============================================================
+   移动端适配层
+   ------------------------------------------------------------
+   依据 Vercel Web Interface Guidelines + WCAG 2.2（目标尺寸、文字缩放）
+   与 iOS/Android 实机行为补齐。只做移动端需要的覆盖，不改桌面布局。
+
+   断点沿用项目既有的 980 / 700 / 560，另加 380 处理超窄机型。
+   ============================================================ */
+
+/* ---- 1. 触摸目标：主要交互元素不小于 44px -------------------
+   Apple HIG / Material 的推荐下限是 44×44。原实现里页签栏的关闭按钮
+   只有 25×25、页签操作按钮 28×28、顶栏图标 32×32，在手机上极易误触
+   （关闭按钮紧挨着页签本身，点偏一点就关错了页）。
+   注意：Arco 的样式表在 admin.css 之后加载，覆盖 Arco 组件自身的
+   尺寸需要提高选择器权重，单类名会被反超。 */
+@media (max-width: 980px) {
+  .header-icon { width: 44px; height: 44px; }
+  .header-user { min-height: 44px; }
+  .page-tabs-action { width: 44px; height: 44px; }
+  /* 关闭按钮不做满 44：它和页签是并列元素，占满会让页签文字没地方放。
+     40px 已高于 WCAG 2.2 AA 的 24px 下限，也明显大于原来的 25px。 */
+  .page-tab-close { width: 40px; height: 40px; }
+  .link-button { min-height: 44px; }
+  .copy-value { min-height: 44px; display: inline-flex; align-items: center; }
+  .toast button { min-width: 36px; min-height: 36px; }
+
+  /* Arco 按钮/下拉触发器不受 .button 规则影响（类名不同），单独覆盖。
+     管理台里有 17 个组件直接用 Arco Button，默认高度 32px，手机上偏小。 */
+  .arco-btn { min-height: 44px; }
+  .arco-btn-size-small { min-height: 40px; }
+  .arco-select-view, .arco-picker { min-height: 44px; }
+  /* 分页器按钮同样需要可点面积 */
+  .arco-pagination-item { min-width: 36px; min-height: 36px; line-height: 34px; }
+
+  /* 抽屉里的菜单项：整行可点，行高提到 44 */
+  .app-menu .arco-menu-item,
+  .app-menu .arco-menu-inline-header,
+  .app-menu .arco-menu-sub-menu-title { height: 44px; }
+  /* 色块随行高一起放大，否则视觉重心偏上 */
+  .menu-tile { width: 30px; height: 30px; }
+  .brand-mark { width: 32px; height: 32px; }
+}
+
+/* ---- 2. 输入框字号：≥16px 阻止 iOS 自动放大 ------------------
+   Safari on iOS 在聚焦 font-size < 16px 的输入框时会自动缩放整个页面，
+   缩放后用户还得手动捏回来。项目基础字号是 14px，移动端统一提到 16px。
+   Arco 的 .arco-input / .arco-select-view 自带字号，一并覆盖。 */
+@media (max-width: 980px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .arco-input,
+  .arco-input-inner-wrapper,
+  .arco-select-view,
+  .arco-textarea,
+  .arco-input-number { font-size: 16px; }
+  /* 日期/时间类控件同样受缩放影响 */
+  input[type="date"], input[type="time"], input[type="datetime-local"] { font-size: 16px; }
+}
+
+/* ---- 3. 移动端视口高度：用 dvh 而不是 vh ---------------------
+   移动浏览器地址栏收放会改变可视高度，vh 取的是「最大高度」，
+   导致底部内容被地址栏盖住或出现多余空白。dvh 跟随实际可视区。 */
+@media (max-width: 700px) {
+  .app-shell { min-height: 100dvh; }
+  .error-shell { min-height: 100dvh; }
+}
+
+/* ---- 4. 安全区：刘海屏 / 手势条 ---------------------------------
+   env() 在非刘海设备上取值为 0，不影响普通机型。 */
+.app-header.arco-layout-header {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+.page-tabs {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+@media (max-width: 980px) {
+  .page-tabs { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  /* 底部留出手势条的高度，否则最后一行操作按钮压在 Home 指示条上 */
+  .app-content.arco-layout-content { padding-bottom: calc(44px + env(safe-area-inset-bottom)); }
+  .nav-drawer .arco-drawer-body { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+}
+
+/* ---- 5. 页签栏：横向滑动 + 加大触控高度 -------------------------
+   页签栏是横向滚动列表，移动端要能惯性滑动，且高度要够。
+   同时给滚动容器加 overscroll-behavior，避免滑动到边缘时带动整页刷新。 */
+@media (max-width: 980px) {
+  .page-tabs { height: 48px; }
+  .page-tab-entry { height: 48px; }
+  .page-tab { height: 46px; padding: 0 12px; }
+  .page-tabs-list { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .tabs { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  /* 滚动容器不要触发页面级横向回弹 */
+  .table-wrap, .list-table .arco-table-container { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+}
+
+/* ---- 6. 表格：卡片化布局在窄屏的收尾 ---------------------------
+   700px 以下自定义表格已折叠成卡片（td 用 data-label 显示字段名）。
+   这里收窄字段名列宽，让值列在 320~390px 上有足够宽度。 */
+@media (max-width: 380px) {
+  .table-wrap td[data-label] { grid-template-columns: 68px minmax(0, 1fr); gap: 8px; }
+  .table-wrap tbody tr { padding: 11px 12px; }
+}
+
+/* Arco Table 不走卡片折叠（列多且是虚拟滚动结构），窄屏靠容器横向滚动。
+   缩小单元格内边距，让更多列在首屏可见，减少横向拖动的距离。 */
+@media (max-width: 700px) {
+  .list-table .arco-table-td { padding: 12px 12px; }
+  .list-table .arco-table-th .arco-table-th-item { padding: 12px 12px; }
+  /* 横向滚动时给右侧留一点「还有内容」的暗示，避免用户以为表格被截断 */
+  .list-table .arco-table-container { padding-right: 2px; }
+  .list-pager { flex-wrap: wrap; gap: 10px; }
+}
+
+/* ---- 7. 弹窗：移动端接近全屏 ----------------------------------
+   640px 宽的弹窗在 390px 屏上只剩边距，操作按钮容易挤成两行。
+   改为占满可用宽度并抬高高度上限，操作按钮在窄屏改为等宽铺满。 */
+@media (max-width: 700px) {
+  .modal-mask { padding: 12px; align-items: flex-end; }
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: var(--radius-md);
+  }
+  .dialog-actions { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+  .dialog-actions .button { width: 100%; justify-content: center; }
+  .dialog-actions .muted { text-align: center; }
+}
+
+/* ---- 8. 主题设置面板：色板在窄屏两列 --------------------------- */
+@media (max-width: 560px) {
+  .theme-presets-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-preset { width: 100%; justify-content: center; }
+  .theme-hex-input { min-width: 0; }
+}
+
+/* ---- 9. 指标卡与内容卡片：窄屏单列 -----------------------------
+   .stats 用的是 auto-fit minmax(200px,1fr)：在 390px 上自动变成单列，
+   但在 320px 上 200px 的下限会撑出横向滚动，这里显式改成单列。 */
+@media (max-width: 560px) {
+  .grid.stats, .stats { grid-template-columns: minmax(0, 1fr); }
+  .card, .section { border-radius: var(--radius-sm); }
+  .page-head-actions { width: 100%; justify-content: flex-start; }
+  .page-head-actions .button { flex: 1 1 auto; justify-content: center; }
+}
+
+/* ---- 10. 长标识符：窄屏允许从中间断开 --------------------------
+   订单号、回调地址这类长串在 320px 上会把卡片撑破。
+   桌面端保持不换行（可读性更好），只在窄屏放开断词。 */
+@media (max-width: 560px) {
+  .mono, .break-all, .credential-secret code, .event-payload pre { overflow-wrap: anywhere; word-break: break-word; }
+}
+
+/* ---- 11. 横向手势：避免误触系统返回 ---------------------------- */
+@media (max-width: 980px) {
+  /* 可横向滑动的容器吃掉手势，不要让浏览器当成「返回上一页」 */
+  .page-tabs-list, .tabs, .table-wrap, .list-table .arco-table-container { touch-action: pan-x pan-y; }
+}

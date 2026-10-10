@@ -1,0 +1,22 @@
+CREATE TABLE `mcp_action_approvals` (
+  `id` VARCHAR(64) NOT NULL,
+  `clientId` VARCHAR(64) NULL,
+  `action` VARCHAR(40) NOT NULL,
+  `arguments` JSON NOT NULL,
+  `summary` VARCHAR(500) NOT NULL,
+  `requestedBy` VARCHAR(120) NOT NULL,
+  `approvedBy` VARCHAR(120) NULL,
+  `status` VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  `expiresAt` DATETIME(3) NOT NULL,
+  `approvedAt` DATETIME(3) NULL,
+  `rejectedAt` DATETIME(3) NULL,
+  `executedAt` DATETIME(3) NULL,
+  `result` JSON NULL,
+  `lastError` VARCHAR(500) NULL,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+  INDEX `mcp_action_approvals_clientId_createdAt_idx`(`clientId`, `createdAt`),
+  INDEX `mcp_action_approvals_status_expiresAt_idx`(`status`, `expiresAt`),
+  INDEX `mcp_action_approvals_createdAt_idx`(`createdAt`),
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

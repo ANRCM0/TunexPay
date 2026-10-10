@@ -1,0 +1,186 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { api, useApi } from "../lib/api";
+import { nextSortState, sortRows, type SortColumn } from "../lib/sort";
+import { ChannelTag, ConfirmModal, CopyValue, HoverDetail, LoadingState, Section, SortableTh, Stat, Status, Tabs, Toast, sortValueProps, money, time } from "./common";
+import { eventLabel, eventSourceLabel, eventTone, exceptionSeverityLabel, exceptionTypeLabel, protocolLabel } from "../lib/labels";
+
+type Refund = { refundNo: string; externalRefundNo: string; amount: number; status: string; reason: string | null; createdAt: string };
+type Payment = {
+  id: string; paymentNo: string; attemptNo: number; channel: string; method: string; status: string; amount: number; channelAmount: number; receivedAmount: number | null;
+  receiptMatchMode: string | null; receiptMatchReference: string | null; receiptValidUntil: string | null;
+  channelTradeNo: string | null; channelOrderNo: string | null; errorCode: string | null; errorMessage: string | null;
+  queryAttempts: number; nextQueryAt: string | null; lastQueriedAt: string | null; paidAt: string | null; createdAt: string; refunds: Refund[];
+};
+type Event = { id: string; type: string; source: string; aggregateId: string; payload: unknown; createdAt: string };
+type Delivery = { id: string; eventType: string; url: string; status: string; attempts: number; lastError: string | null; deliveredAt: string | null; createdAt: string };
+type PaymentException = { id: string; exceptionNo: string; type: string; status: string; severity: string; summary: string; resolution: string | null; detectedAt: string };
+type Order = {
+  orderNo: string; externalOrderNo: string; subject: string; description: string | null; amount: number; currency: string;
+  status: string; protocol: string; notifyUrl: string | null; returnUrl: string | null; createdAt: string; paidAt: string | null; expiresAt: string | null;
+  expirationAttempts: number; expirationNextAttemptAt: string | null; expirationError: string | null;
+  application: { name: string; appId: string }; payments: Payment[]; events: Event[]; webhookDeliveries: Delivery[]; paymentExceptions: PaymentException[];
+};
+
+const PAYMENT_COLUMNS: SortColumn<Payment>[] = [
+  { key: "attemptNo", label: "尝试", type: "number" },
+  { key: "paymentNo", label: "渠道 / 支付单号" },
+  { key: "status", label: "状态" },
+  { key: "channelAmount", label: "金额", type: "number" },
+  { key: "channelTradeNo", label: "渠道交易号", accessor: (row) => row.channelTradeNo ?? row.channelOrderNo ?? "" },
+  { key: "createdAt", label: "创建 / 支付时间", type: "date" },
+];
+
+// 支付状态列的查单进度与通道错误默认收起，悬浮或聚焦徽章才展开。
+function paymentRecovery(payment: Payment): string {
+  return [
+    payment.queryAttempts > 0 ? `已自动查询 ${payment.queryAttempts} 次` : null,
+    payment.queryAttempts > 0 ? (payment.nextQueryAt ? `下次查询 ${time(payment.nextQueryAt)}` : "查单已达上限，等待人工处理") : null,
+    payment.errorMessage ? `${payment.errorCode ?? "通道错误"}：${payment.errorMessage}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+const DETAIL_TABS = ["概览", "事件时间线", "退款与通知"] as const;
+
+export function OrderDetailBody({ orderNo }: { orderNo: string }) {
+  const { data, loading, error, reload } = useApi<Order>(`/orders/${encodeURIComponent(orderNo)}`, 8_000);
+  const [tab, setTab] = useState<string>(DETAIL_TABS[0]);
+  const [working, setWorking] = useState("");
+  const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [pendingClose, setPendingClose] = useState<string | null>(null);
+
+  async function operate(paymentNo: string, action: "query" | "close") {
+    setWorking(`${paymentNo}:${action}`);
+    setNotice(null);
+    try {
+      await api(`/payments/${paymentNo}/${action}`, { method: "POST" });
+      setNotice({ type: "ok", text: action === "query" ? "主动查单完成，状态已刷新。" : "支付已关闭。" });
+      await reload();
+    } catch (cause) {
+      setNotice({ type: "error", text: cause instanceof Error ? cause.message : "操作失败" });
+    } finally {
+      setWorking("");
+    }
+  }
+
+  return <LoadingState loading={loading} error={error}>
+    {data && <>
+      {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
+      {data.paymentExceptions.some(item => ["OPEN", "PROCESSING"].includes(item.status)) && <div className="operation-notice error">这张订单存在待处理的资金异常，请前往“支付异常”核实，勿直接修改订单状态。</div>}
+      {data.expirationError && <div className="operation-notice error">订单过期关闭暂未完成：{data.expirationError}。系统将在 {time(data.expirationNextAttemptAt)} 重试。</div>}
+      <Tabs items={DETAIL_TABS} active={tab} onChange={setTab} />
+
+      {tab === "概览" && <>
+        <div className="grid stats">
+          <Stat detail tone="blue" label="订单金额" value={money(data.amount)} note={data.currency} />
+          <Stat detail tone={data.status === "SUCCESS" ? "green" : "orange"} label="订单状态" value={<Status value={data.status} />} note={data.paidAt ? `支付于 ${time(data.paidAt)}` : "尚未完成支付"} />
+          <Stat detail tone="blue" label="支付尝试" value={String(data.payments.length)} note={`${data.payments.filter(item => item.status === "SUCCESS").length} 笔成功`} />
+          <Stat detail tone="blue" label="通知任务" value={String(data.webhookDeliveries.length)} note={`${data.webhookDeliveries.filter(item => item.status === "SUCCESS").length} 次送达`} />
+        </div>
+
+        <Section title="订单信息" action={<span className="id-line"><span className="mono muted">{data.orderNo}</span><CopyValue value={data.orderNo} label="复制订单号" /></span>}>
+          <div className="detail-list">
+            <Detail label="应用" value={`${data.application.name} (${data.application.appId})`} mono />
+            <Detail label="业务订单号" value={data.externalOrderNo} mono />
+            <Detail label="接入协议" value={protocolLabel(data.protocol)} />
+            <Detail label="创建时间" value={time(data.createdAt)} />
+            <Detail label="订单到期" value={time(data.expiresAt)} />
+            <Detail label="过期处理" value={data.expirationAttempts ? `${data.expirationAttempts} 次` : "尚未触发"} />
+            <Detail label="商品说明" value={data.description || "—"} />
+            <Detail label="通知地址" value={data.notifyUrl || "—"} mono />
+            <Detail label="返回地址" value={data.returnUrl || "—"} mono />
+          </div>
+        </Section>
+
+        <Section title="支付尝试" action={<span className="muted">可信晚到成功会保留记录</span>} className="detail-section">
+          <PaymentTable
+            payments={data.payments}
+            working={working}
+            onQuery={paymentNo => void operate(paymentNo, "query")}
+            onRequestClose={paymentNo => setPendingClose(paymentNo)}
+          />
+        </Section>
+
+        {data.paymentExceptions.length > 0 && <Section title="支付异常" action={<span className="muted">处置请前往“支付异常”队列</span>} className="detail-section">
+          {data.paymentExceptions.map(item => <div className="record" key={item.id}><div><strong>{item.summary}</strong> <Status value={item.status} /></div><div className="mono muted">{item.exceptionNo} · {exceptionTypeLabel(item.type)} · {exceptionSeverityLabel(item.severity)}</div><div className="muted">{item.resolution || "尚未填写处置结果"} · {time(item.detectedAt)}</div></div>)}
+        </Section>}
+      </>}
+
+      {tab === "事件时间线" && <Section title="事件时间线" action={<span className="muted">{data.events.length} 条</span>}>
+        {data.events.length ? <div className="timeline">{data.events.map(event => <div className={`timeline-item tone-${eventTone(event.type)}`} key={event.id}>
+          <div className="timeline-type">{eventLabel(event.type)}</div>
+          <div className="timeline-meta"><span className="mono">{event.aggregateId}</span> · {eventSourceLabel(event.source)} · {time(event.createdAt)}</div>
+          {hasPayload(event.payload) && <details className="event-payload"><summary>查看事件数据</summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>}
+        </div>)}</div> : <div className="empty compact">暂无事件</div>}
+      </Section>}
+
+      {tab === "退款与通知" && <Section title="退款与通知">
+        <div className="detail-columns nested">
+          <div><h3>退款记录</h3>{data.payments.flatMap(payment => payment.refunds.map(refund => ({ ...refund, paymentNo: payment.paymentNo }))).map(refund => <div className="record" key={refund.refundNo}>
+            <div><strong>{money(refund.amount)}</strong> <Status value={refund.status} /></div><div className="id-line"><span className="mono muted">{refund.refundNo} · {refund.paymentNo}</span><CopyValue value={refund.refundNo} label="复制退款单号" /></div><div className="muted">{refund.reason || "未填写原因"} · {time(refund.createdAt)}</div>
+          </div>)}{data.payments.every(payment => payment.refunds.length === 0) && <div className="empty compact">暂无退款</div>}</div>
+          <div><h3>Webhook 投递</h3>{data.webhookDeliveries.map(delivery => <div className="record" key={delivery.id}>
+            <div><strong>{eventLabel(delivery.eventType)}</strong> <HoverDetail text={delivery.lastError} tone="danger"><Status value={delivery.status} /></HoverDetail></div><div className="id-line"><span className="mono muted break-all">{delivery.url}</span><CopyValue value={delivery.url} label="复制 Webhook 地址" /></div><div className="muted">尝试 {delivery.attempts} 次 · {time(delivery.deliveredAt || delivery.createdAt)}</div>
+          </div>)}{!data.webhookDeliveries.length && <div className="empty compact">暂无通知任务</div>}</div>
+        </div>
+      </Section>}
+    </>}
+    {pendingClose && <ConfirmModal
+      title="关闭支付尝试"
+      copy="关闭后，当前付款码将不再接受继续支付。若用户已经完成付款，请先主动查单确认状态，避免误关闭有效交易。"
+      confirmLabel="确认关闭"
+      danger
+      working={working === `${pendingClose}:close`}
+      onClose={() => setPendingClose(null)}
+      onConfirm={() => void operate(pendingClose, "close").then(() => setPendingClose(null))}
+    />}
+  </LoadingState>;
+}
+
+/**
+ * 支付尝试表。排序状态放在这个子组件里，而不是父组件里 ——
+ * 父组件只在"有支付记录"时才渲染这张表，把 useState/useMemo 放在那个条件分支内
+ * 会让 Hook 调用数量随数据变化，违反 Hooks 规则。
+ */
+function PaymentTable({ payments, working, onQuery, onRequestClose }: {
+  payments: Payment[];
+  working: string;
+  onQuery: (paymentNo: string) => void;
+  onRequestClose: (paymentNo: string) => void;
+}) {
+  const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
+  const rows = useMemo(() => sortRows(payments, PAYMENT_COLUMNS, sort), [payments, sort]);
+
+  if (!payments.length) return <div className="empty compact">尚未发起支付</div>;
+
+  return <div className="table-wrap"><table><thead><tr>
+    <SortableTh label="尝试" sortKey="attemptNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+    <SortableTh label="渠道 / 支付单号" sortKey="paymentNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+    <SortableTh label="状态" sortKey="status" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+    <SortableTh label="金额" sortKey="channelAmount" sort={sort} onSort={key => setSort(nextSortState(sort, key))} alignRight />
+    <SortableTh label="渠道交易号" sortKey="channelTradeNo" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+    <SortableTh label="创建 / 支付时间" sortKey="createdAt" sort={sort} onSort={key => setSort(nextSortState(sort, key))} />
+    <th scope="col">操作</th>
+  </tr></thead>
+  <tbody>{rows.map(payment => <tr key={payment.id}>
+    <td {...sortValueProps(payment, PAYMENT_COLUMNS[0])}>#{payment.attemptNo}</td>
+    <td data-label="渠道" {...sortValueProps(payment, PAYMENT_COLUMNS[1])}><ChannelTag code={payment.channel} /><div className="id-line"><span className="mono muted">{payment.method} · {payment.paymentNo}</span><CopyValue value={payment.paymentNo} label="复制支付单号" /></div></td>
+    <td data-label="状态" {...sortValueProps(payment, PAYMENT_COLUMNS[2])}><HoverDetail text={paymentRecovery(payment)} tone={payment.errorMessage ? "danger" : "muted"}><Status value={payment.status} /></HoverDetail></td><td data-label="金额" {...sortValueProps(payment, PAYMENT_COLUMNS[3])}>{money(payment.channelAmount)}{payment.channelAmount !== payment.amount && <div className="muted">业务 {money(payment.amount)}</div>}{payment.receivedAmount !== null && <div className="muted">实收 {money(payment.receivedAmount)}</div>}{payment.receiptMatchReference && <div className="mono muted">{payment.receiptMatchMode}: {payment.receiptMatchReference}</div>}</td>
+    <td data-label="渠道交易号" {...sortValueProps(payment, PAYMENT_COLUMNS[4])}>{payment.channelTradeNo || payment.channelOrderNo ? <div className="id-line"><span className="mono">{payment.channelTradeNo || payment.channelOrderNo}</span><CopyValue value={payment.channelTradeNo || payment.channelOrderNo || ""} label="复制渠道交易号" /></div> : "—"}</td>
+    <td data-label="时间" {...sortValueProps(payment, PAYMENT_COLUMNS[5])}>{time(payment.createdAt)}<div className="muted">{payment.paidAt ? time(payment.paidAt) : "未支付"}</div></td>
+    <td data-label="操作"><div className="row-actions">
+      {payment.status !== "SUCCESS" && <button className="button secondary" disabled={working !== ""} onClick={() => onQuery(payment.paymentNo)}>{working === `${payment.paymentNo}:query` ? "查询中…" : "主动查单"}</button>}
+      {["CREATED", "PROCESSING", "UNKNOWN"].includes(payment.status) && <button className="button danger" disabled={working !== ""} onClick={() => onRequestClose(payment.paymentNo)}>{working === `${payment.paymentNo}:close` ? "关闭中…" : "关闭"}</button>}
+    </div></td>
+  </tr>)}</tbody>
+  </table></div>;
+}
+
+function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="detail-row"><span>{label}</span><span className="detail-value-copy"><strong className={mono ? "mono break-all" : ""}>{value}</strong>{mono && value !== "—" && <CopyValue value={value} label={`复制${label}`} />}</span></div>;
+}
+
+function hasPayload(payload: unknown): boolean {
+  return payload !== null && payload !== undefined && (typeof payload !== "object" || Object.keys(payload as object).length > 0);
+}

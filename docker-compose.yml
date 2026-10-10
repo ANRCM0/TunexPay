@@ -1,0 +1,105 @@
+name: tuoxin-pay
+
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3000}
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
+  ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in .env}
+  MCP_ENABLED: ${MCP_ENABLED:-false}
+  MCP_TOKEN: ${MCP_TOKEN:-}
+  SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set SECRETS_ENCRYPTION_KEY in .env}
+  ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+  ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY:-}
+  ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+  ALIPAY_GATEWAY: ${ALIPAY_GATEWAY:-https://openapi.alipay.com/gateway.do}
+  ALIPAY_SIGN_TYPE: RSA2
+  ALIPAY_BILL_ENABLED: ${ALIPAY_BILL_ENABLED:-false}
+  ALIPAY_BILL_COLLECTOR_ENABLED: ${ALIPAY_BILL_COLLECTOR_ENABLED:-false}
+  ALIPAY_BILL_USER_ID: ${ALIPAY_BILL_USER_ID:-}
+  ALIPAY_BILL_POLL_SECONDS: ${ALIPAY_BILL_POLL_SECONDS:-10}
+  ALIPAY_BILL_LOOKBACK_SECONDS: ${ALIPAY_BILL_LOOKBACK_SECONDS:-3600}
+  ALIPAY_BILL_OVERLAP_SECONDS: ${ALIPAY_BILL_OVERLAP_SECONDS:-300}
+  ALIPAY_BILL_LAG_SECONDS: ${ALIPAY_BILL_LAG_SECONDS:-15}
+  ALIPAY_BILL_QR_CONTENT: ${ALIPAY_BILL_QR_CONTENT:-}
+  ALIPAY_BILL_MATCH_MODE: ${ALIPAY_BILL_MATCH_MODE:-AMOUNT}
+  ALIPAY_BILL_VALID_SECONDS: ${ALIPAY_BILL_VALID_SECONDS:-300}
+  ALIPAY_BILL_AMOUNT_OFFSET_MAX: ${ALIPAY_BILL_AMOUNT_OFFSET_MAX:-99}
+  ALIPAY_BILL_WATCHER_TOKEN: ${ALIPAY_BILL_WATCHER_TOKEN:-}
+  MOCK_CHANNEL_ENABLED: ${MOCK_CHANNEL_ENABLED:-false}
+  MOCK_CHANNEL_TOKEN: ${MOCK_CHANNEL_TOKEN:-}
+  ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  mysql:
+    container_name: ${TUNEXPAY_MYSQL_CONTAINER_NAME:-tunexpay-mysql}
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: tuoxin_pay
+      MYSQL_USER: tuoxin
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-tuoxin-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-change-me}
+      TZ: Asia/Shanghai
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    container_name: ${TUNEXPAY_REDIS_CONTAINER_NAME:-tunexpay-redis}
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    container_name: ${TUNEXPAY_CONTAINER_NAME:-tunexpay}
+    image: ${TUNEXPAY_IMAGE:-ghcr.io/anrcm0/tunexpay}:${TUNEXPAY_IMAGE_TAG:-latest}
+    build:
+      context: .
+      # 发布版本号（<提交日期 YYYYMMDD>-<7 位提交号>）。本地 build 时可用
+      # `APP_VERSION=v0.1.0 docker compose build` 或写进 .env 注入；
+      # 不传则镜像内为 0.1.0-dev，管理台左下角会如实显示这不是一次发布。
+      args:
+        APP_VERSION: ${APP_VERSION:-}
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+      INTERNAL_API_URL: http://127.0.0.1:3001
+      API_INTERNAL_PORT: 3001
+      WEB_INTERNAL_PORT: 3000
+      GATEWAY_PORT: 8080
+      DB_MIGRATION_RETRY_SECONDS: ${DB_MIGRATION_RETRY_SECONDS:-5}
+      DB_MIGRATION_MAX_ATTEMPTS: ${DB_MIGRATION_MAX_ATTEMPTS:-0}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?Set ADMIN_SESSION_SECRET in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+
+volumes:
+  mysql-data:
+  redis-data:

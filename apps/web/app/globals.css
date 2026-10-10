@@ -1,0 +1,387 @@
+/*
+ * 设计令牌 — Sentry 紫色系，浅色/深色双模式。
+ * 默认跟随系统（prefers-color-scheme），用户可手动切换。
+ * 变量名沿用原命名，页面样式不必跟着改名。
+ */
+:root {
+  color-scheme: light;
+
+  /* 主色：Sentry Purple 系 */
+  --primary: #6A5FC1;
+  --primary-hover: #8B7FD4;
+  --primary-active: #4E44A0;
+  --primary-soft: #F0EEFA;
+  --primary-rgb: 106, 95, 193;
+  --primary-text: #6A5FC1;
+  --on-primary: #FFFFFF;
+
+  /* 强调色：Green，作为紫色的第二强调色 */
+  --accent-green: #00B42A;
+  --accent-green-hover: #23C343;
+  --accent-green-active: #009A29;
+  --accent-green-soft: #E8FFEA;
+  --accent-green-rgb: 0, 180, 42;
+  --on-accent-green: #1D2129;
+
+  /* 文字：浅灰白上的深灰 */
+  --ink: #1D2129;
+  --ink-2: #4E5969;
+  --muted: #666A70;
+
+  /* 填充与边框：浅灰层次 */
+  --paper: #F7F8FA;
+  --fill-2: #F2F3F5;
+  --line: #E5E6EB;
+  --line-strong: #C9CDD4;
+  --panel: #FFFFFF;
+
+  /* 语义色：紫+绿双色主题 */
+  --success: #00B42A;
+  --success-soft: #E8FFEA;
+  --warning: #EC7E00;
+  --warning-soft: #FFF4E6;
+  --danger: #E23B4A;
+  --danger-soft: #FDECEA;
+
+  /* 语义文字色：与底色分离，确保 WCAG AA 对比度（4.5:1） */
+  --success-text: #0A7A1E;
+  --warning-text: #B45309;
+  --danger-text: #B91C1C;
+
+  /* 阴影：浅灰调 */
+  --shadow: 0 1px 3px rgba(0, 0, 0, .04);
+  --shadow-pop: 0 4px 10px rgba(0, 0, 0, .1);
+
+  /* 圆角：Sentry 风格 — 卡片 12px，按钮 13px，输入 6px */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+
+  --header-h: 60px;
+  --tabs-h: 40px;
+  --sider-w: 220px;
+  --sider-collapsed-w: 48px;
+}
+
+/* 暗色主题：深紫黑 + 紫色 accent */
+[arco-theme="dark"] {
+  color-scheme: dark;
+  --primary: #6A5FC1;
+  --primary-hover: #8B7FD4;
+  --primary-active: #4E44A0;
+  --primary-soft: #2A2150;
+  --primary-rgb: 106, 95, 193;
+  --primary-text: #9A92D5;
+  --on-primary: #FFFFFF;
+
+  --accent-green: #23C343;
+  --accent-green-hover: #42D160;
+  --accent-green-active: #1AA83A;
+  --accent-green-soft: #1A2E1F;
+  --accent-green-rgb: 35, 195, 67;
+  --on-accent-green: #1D2129;
+
+  --ink: #F7F8FA;
+  --ink-2: #C9CDD4;
+  --muted: #92959B;
+
+  --paper: #150F23;
+  --fill-2: #1F1633;
+  --line: #362D59;
+  --line-strong: #584674;
+  --panel: #1F1633;
+
+  --success: #23C343;
+  --success-soft: #1A2E1F;
+  --warning: #EC7E00;
+  --warning-soft: #2E2418;
+  --danger: #E23B4A;
+  --danger-soft: #2E1C1C;
+
+  /* 深色底更暗，文字色需更亮以维持 AA 对比度 */
+  --success-text: #42D160;
+  --warning-text: #F59E0B;
+  --danger-text: #F87171;
+
+  --shadow: 0 1px 3px rgba(22, 15, 36, .3);
+  --shadow-pop: 0 4px 12px rgba(22, 15, 36, .45);
+}
+
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px; line-height: 1.5715;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+button, input, select { font: inherit; }
+a { color: inherit; text-decoration: none; }
+::selection { background: rgba(var(--primary-rgb), .3); }
+
+/* ---- 跨界面共享原语（admin / cashier / login 都可用） ---- */
+
+/* 只给读屏器的文本：视觉上不可见，但仍会被朗读（不能再用 display:none，那样就不会播报） */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.eyebrow { text-transform: uppercase; letter-spacing: .12em; color: var(--primary-text); font-size: 11px; font-weight: 700; }
+h1 { font-size: 22px; font-weight: 600; margin: 5px 0 0; letter-spacing: -.015em; }
+.page-copy { color: var(--muted); margin: 7px 0 0; font-size: 13.5px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow); transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
+
+/* Sentry 风格按钮：13px 圆角，inset 阴影，uppercase 标签 */
+.button { border: 0; border-radius: var(--radius-sm); background: var(--primary); color: var(--on-primary); padding: 8px 15px; font-weight: 500; cursor: pointer; font-size: 14px; transition: background .15s ease, box-shadow .15s ease; }
+.button:hover { background: var(--primary-hover); box-shadow: rgba(0, 0, 0, .18) 0 4px 12px; }
+.button:active { background: var(--primary-active); }
+.button-accent { background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-hover) 100%); color: var(--on-accent-green); }
+.button-accent:hover { background: linear-gradient(135deg, var(--accent-green-hover) 0%, var(--accent-green) 100%); }
+.button-accent:active { background: var(--accent-green-active); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.button.secondary { background: var(--fill-2); color: var(--ink-2); }
+.button.secondary:hover { background: var(--line); }
+.button.danger { background: var(--danger-soft); color: var(--danger-text); }
+.button.danger:hover { background: var(--danger-soft); filter: brightness(.96); }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+
+.badge { display: inline-flex; padding: 2px 8px; border-radius: var(--radius-xs); background: var(--fill-2); color: var(--ink-2); font-size: 12px; font-weight: 500; letter-spacing: 0; white-space: nowrap; }
+.badge-success { background: var(--success-soft); color: var(--success-text); }
+.badge-warning { background: var(--warning-soft); color: var(--warning-text); }
+.badge-danger { background: var(--danger-soft); color: var(--danger-text); }
+.badge-neutral { background: var(--fill-2); color: var(--ink-2); }
+
+.mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.break-all { word-break: break-all; }
+
+label { display: grid; gap: 6px; color: var(--ink-2); font-size: 13px; font-weight: 400; }
+input, select { min-width: 0; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: var(--radius-xs); padding: 6px 11px; font-size: 14px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
+input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--primary); }
+input:hover, select:hover { border-color: var(--primary-hover); }
+input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), .2); }
+
+.operation-notice { margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--primary-soft); background: var(--primary-soft); color: var(--primary-text); font-size: 13px; animation: notice-in .18s ease; }
+.operation-notice.error { border-color: var(--danger-soft); background: var(--danger-soft); color: var(--danger-text); }
+.load-error-notice { display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; }
+.load-error-copy { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.load-error-copy strong { font-size: 13px; font-weight: 600; }
+.load-error-copy span { font-size: 12px; }
+.load-retry { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 560px) { .load-error-notice { align-items: stretch; flex-direction: column; } .load-retry { align-self: flex-start; } }
+@keyframes notice-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ---- 页面级错误 / 404：结构由 components/error-state.tsx 与 app/not-found.tsx 复用 ---- */
+
+.error-shell { min-height: 100vh; display: grid; place-items: center; padding: 32px 18px; }
+.error-state { max-width: 460px; margin: 0 auto; padding: 32px 26px; display: grid; gap: 9px; justify-items: center; text-align: center; }
+.error-state h2 { margin: 0; font-size: 18px; }
+.error-state p { margin: 0; font-size: 13px; line-height: 1.65; }
+.error-state-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
+.error-state-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--danger-soft); color: var(--danger-text); font-weight: 900; font-size: 19px; }
+.error-state-mark.neutral { background: var(--fill-2); color: var(--ink-2); }
+
+.empty, .loading, .error { padding: 34px; text-align: center; color: var(--muted); }
+.empty { border-style: dashed; background: transparent; line-height: 1.8; }
+.compact { padding: 18px; }
+.error { color: var(--danger-text); }
+
+.skeleton-card { padding: 24px; display: grid; gap: 11px; overflow: hidden; }
+.skeleton { position: relative; overflow: hidden; border-radius: var(--radius-sm); background: var(--fill-2); }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); animation: skeleton-shimmer 1.25s ease-in-out infinite; }
+.skeleton-title { width: 34%; height: 18px; }
+.skeleton-line { width: 82%; height: 11px; }
+.skeleton-line.short { width: 58%; }
+@keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+
+.toast { position: fixed; right: 22px; bottom: 22px; z-index: 90; width: min(360px, calc(100vw - 32px)); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px 13px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); box-shadow: var(--shadow-pop); color: var(--ink); font-size: 13px; animation: toast-in .2s ease; }
+.toast-icon { display: grid; place-items: center; color: var(--success-text); }
+.toast-error .toast-icon { color: var(--danger-text); }
+.toast button { border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 3px; border-radius: var(--radius-sm); }
+.toast button:hover { color: var(--ink); background: var(--fill-2); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+
+.data-link { color: var(--primary-text); }
+.data-link:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
+
+.brand-badge { margin: 0 auto 18px; width: 40px; height: 40px; display: grid; place-items: center; background: linear-gradient(135deg, var(--primary) 0%, var(--accent-green) 100%); color: var(--on-primary); border-radius: var(--radius-md); font-weight: 900; font-size: 18px; box-shadow: 0 2px 8px rgba(var(--primary-rgb), .25); }
+
+/* ---- 路由进度条 ---- */
+
+.route-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 200; background: transparent; }
+.route-progress-bar { display: block; height: 100%; background: var(--primary); box-shadow: 0 0 6px rgba(var(--primary-rgb), .5); }
+.route-progress-bar.running { width: 80%; transition: width 1.6s cubic-bezier(.1, .8, .2, 1); }
+.route-progress-bar.done { width: 100%; opacity: 0; transition: width .18s ease, opacity .22s ease; }
+
+/* ---- 窄屏触控目标：可点区域不小于 44px，避免误触 ---- */
+
+@media (max-width: 980px) {
+  .button { min-height: 40px; padding: 9px 16px; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { min-height: 40px; }
+  .toggle { padding: 10px 0; }
+}
+
+/* ---- 动效偏好：系统要求减少动态效果时，只保留状态变化本身 ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .stat:hover, .channel-card:hover { transform: none !important; }
+}
+
+@media (max-width: 560px) {
+  .toast { left: 12px; right: 12px; bottom: 12px; width: auto; }
+  .page-copy { font-size: 13px; line-height: 1.7; }
+  h1 { font-size: 21px; }
+}
+
+/* Reduced-motion: still show loading feedback without persistent shimmer/entrance animations. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after, .card, .operation-notice, .toast { animation: none; transition: none; }
+}
+
+/* ============================================================
+   细节优化层 — 审计所有组件后补缺 + 打磨
+   只补前面审计发现的缺失样式和不一致，不重复已有规则。
+   ============================================================ */
+
+/* ---- 登录页（login.tsx）---- */
+.login-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: var(--paper); }
+.login-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: min(880px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); overflow: hidden; }
+.login-aside { padding: 40px 36px; background: var(--fill-2); display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.login-aside-brand { display: flex; align-items: center; gap: 10px; }
+.login-aside-name { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+.login-aside h2 { margin: 0; font-size: 22px; font-weight: 600; }
+.login-aside p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+.login-aside-list { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 13px; line-height: 2; }
+.login-form-panel { padding: 40px 36px; display: flex; flex-direction: column; justify-content: center; }
+.login-form-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.login-form-head h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.login-form { display: grid; gap: 16px; margin-top: 20px; }
+.login-note { margin: 18px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+/* ---- 收银台（cashier.tsx）---- */
+.cashier-shell { min-height: 100dvh; background: var(--paper); }
+.cashier-brand { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.cashier-brand-copy { display: flex; flex-direction: column; }
+.cashier-brand-copy strong { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.cashier-brand-copy span { color: var(--muted); font-size: 12px; }
+.cashier-secure { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--success-text); font-size: 12px; font-weight: 500; }
+.cashier-secure i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.cashier-loading { margin: 24px; }
+.cashier-layout { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+.cashier-main { padding: 28px 24px; }
+.cashier-main-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.cashier-main-head h1 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+.cashier-amount-block { text-align: center; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.cashier-amount-block span { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+.cashier-amount-block strong { font-size: 32px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cashier-amount-block small { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }
+.cashier-state { padding: 16px; border-radius: var(--radius-md); text-align: center; }
+.cashier-state strong { display: block; font-size: 16px; margin-bottom: 4px; }
+.cashier-state span { color: var(--ink-2); font-size: 13px; }
+.cashier-state.success { background: var(--success-soft); color: var(--success-text); }
+.cashier-state.success span { color: var(--success-text); }
+.cashier-state.failure { background: var(--danger-soft); color: var(--danger-text); }
+.cashier-state.failure span { color: var(--danger-text); }
+.cashier-state.warning { background: var(--warning-soft); color: var(--warning-text); }
+.cashier-state.warning span { color: var(--warning-text); }
+.cashier-state.neutral { background: var(--fill-2); color: var(--ink-2); }
+.cashier-state.neutral span { color: var(--ink-2); }
+.cashier-paybox { text-align: center; padding: 20px 0; }
+.cashier-scan-label { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+.cashier-paybox .qr { width: 200px; height: 200px; margin: 0 auto; border-radius: var(--radius-md); }
+.cashier-paybox .qr-placeholder { width: 200px; height: 200px; margin: 0 auto; border-radius: var(--radius-md); }
+.cashier-paybox .qr-skeleton { width: 100%; height: 100%; }
+.cashier-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+.cashier-duo-item { padding: 14px; background: var(--fill-2); border-radius: var(--radius-md); text-align: center; }
+.cashier-duo-item span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.cashier-duo-item strong { font-size: 16px; font-weight: 600; }
+.cashier-live i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warning); margin-right: 6px; animation: pulse 1.5s ease-in-out infinite; }
+.cashier-countdown { font-variant-numeric: tabular-nums; }
+.cashier-note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 12px; }
+.cashier-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 16px; border-top: 1px solid var(--line); margin-top: 20px; font-size: 12px; color: var(--muted); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ---- 错误状态（error-state.tsx）---- */
+.error-state { max-width: 460px; margin: 0 auto; padding: 32px 26px; display: grid; gap: 9px; justify-items: center; text-align: center; }
+
+/* ---- 系统监控页（system.tsx）---- */
+.system-card-wide { grid-column: 1 / -1; }
+
+/* ---- 审计发现的不一致修复 ---- */
+
+/* 骨架屏颜色统一为紫色调 */
+.cashier-loading .skeleton::after,
+.skeleton-card .skeleton::after { background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), .08), transparent); }
+
+/* 操作列按钮统一间距 */
+.list-table .row-actions { gap: 6px; }
+.list-table .row-actions .link-button,
+.list-table .row-actions .row-action { min-height: 34px; padding: 6px 10px; }
+
+/* 抽屉内表格不重复圆角 */
+.drawer-body .card { box-shadow: none; border-color: var(--line); }
+
+/* 弹窗内表单统一间距 */
+.modal .resolution-form { gap: 16px; }
+.modal .dialog-actions { margin-top: 18px; padding-top: 16px; }
+
+/* 时间线节点间距微调 */
+.timeline-item { padding-bottom: 16px; }
+.timeline-item::before { top: 6px; }
+
+/* 侧栏菜单选中态增强 */
+.app-menu .arco-menu-selected .menu-tile { box-shadow: 0 0 0 2px var(--primary-soft); }
+
+/* 徽章文字不换行 */
+.badge { white-space: nowrap; }
+
+/* 长文本单元格换行 */
+.list-table .arco-table-td .mono,
+.list-table .arco-table-td code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* 筛选标签文字对齐 */
+.filter-label { white-space: nowrap; }
+
+/* 渠道卡片 hover 增强 */
+.channel-card:hover .channel-head h2 { color: var(--primary-text); }
+
+/* 表格行 hover 过渡 */
+.list-table .arco-table-tr { transition: background-color .15s ease; }
+
+/* 输入框 focus 过渡 */
+input, select, textarea { transition: border-color .15s ease, box-shadow .15s ease; }
+
+/* 按钮 active 状态 */
+.button:active { transform: translateY(1px); }
+
+/* 链接按钮 hover 下划线偏移 */
+.link-button:hover { text-underline-offset: 3px; }
+
+/* Toast 动画优化 */
+.toast { animation: toast-in .25s cubic-bezier(.2, .8, .3, 1); }
+
+/* 骨架屏动画优化 */
+.skeleton::after { animation: skeleton-shimmer 1.5s ease-in-out infinite; }
+
+/* 窄屏适配 */
+@media (max-width: 700px) {
+  .login-card { grid-template-columns: 1fr; }
+  .login-aside { display: none; }
+  .cashier-main { padding: 20px 16px; }
+  .cashier-duo { grid-template-columns: 1fr; }
+  .cashier-amount-block strong { font-size: 28px; }
+}
+
+/* 动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .cashier-live i { animation: none; }
+  .button:active { transform: none; }
+}

@@ -1,0 +1,698 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum ApplicationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrderStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  CLOSED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum IntegrationProtocol {
+  NATIVE_V1
+  EPAY_V1
+}
+
+enum PaymentStatus {
+  CREATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  UNKNOWN
+  CLOSED
+}
+
+enum PaymentChannelCode {
+  ALIPAY
+  ALIPAY_BILL
+  MOCK
+}
+
+enum RoutingStrategy {
+  RANDOM
+  WEIGHTED_RANDOM
+}
+
+enum RefundStatus {
+  CREATED
+  PROCESSING
+  SUCCESS
+  FAILED
+  UNKNOWN
+}
+
+enum WebhookStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  DEAD
+}
+
+enum ReceiptDirection {
+  INCOME
+  REFUND
+}
+
+enum ReceiptMatchStatus {
+  UNMATCHED
+  PROCESSING
+  MATCHED
+  MISMATCH
+  IGNORED
+}
+
+enum ReceiptMatchMode {
+  DIRECT
+  REMARK
+  AMOUNT
+}
+
+enum PaymentExceptionType {
+  LATE_DUPLICATE
+  RECEIPT_AMBIGUOUS
+  PAYMENT_STATE_CONFLICT
+}
+
+enum PaymentExceptionStatus {
+  OPEN
+  PROCESSING
+  RESOLVED
+  IGNORED
+}
+
+enum PaymentExceptionSeverity {
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReconciliationRunStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model Application {
+  id                     String             @id @default(cuid())
+  appId                  String             @unique @db.VarChar(40)
+  name                   String             @db.VarChar(120)
+  status                 ApplicationStatus  @default(ACTIVE)
+  apiKeyHash             String             @db.Char(64)
+  webhookUrl             String?            @db.VarChar(500)
+  webhookSecretEncrypted String             @db.Text
+  epayPid                String             @unique @db.VarChar(32)
+  epayKeyEncrypted       String             @db.Text
+  defaultChannel         PaymentChannelCode @default(MOCK)
+  defaultChannelId       String?            @db.VarChar(80)
+  routingGroupId         String?            @db.VarChar(80)
+  routingGroup           RoutingGroup?      @relation(fields: [routingGroupId], references: [id], onDelete: SetNull)
+  // 归档软删除标记：非空表示该应用已被管理端移除。行保留是因为历史订单、事件、退款推进与异常
+  // 记录仍挂在它上面；应用列表不再展示，凭证立即失效，pausedAt 记录归档时刻用于区分新增与历史数据。
+  archivedAt             DateTime?
+  pausedAt               DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  orders                 Order[]
+  refunds                Refund[]
+  webhookDeliveries      WebhookDelivery[]
+
+  @@index([routingGroupId])
+  @@index([status, createdAt])
+  @@index([archivedAt, createdAt])
+  @@map("applications")
+}
+
+model Order {
+  id                       String              @id @default(cuid())
+  orderNo                  String              @unique @db.VarChar(40)
+  externalOrderNo          String              @db.VarChar(80)
+  applicationId            String
+  amount                   Int                 @db.UnsignedInt
+  currency                 String              @default("CNY") @db.Char(3)
+  subject                  String              @db.VarChar(160)
+  description              String?             @db.VarChar(500)
+  metadata                 Json?
+  protocol                 IntegrationProtocol @default(NATIVE_V1)
+  notifyUrl                String?             @db.VarChar(500)
+  returnUrl                String?             @db.VarChar(500)
+  status                   OrderStatus         @default(CREATED)
+  idempotencyKey           String?             @db.VarChar(120)
+  requestHash              String              @db.Char(64)
+  winningPaymentId         String?             @db.VarChar(32)
+  expiresAt                DateTime?
+  expirationAttempts       Int                 @default(0) @db.UnsignedSmallInt
+  expirationNextAttemptAt  DateTime?
+  expirationLockedUntil    DateTime?
+  expirationError          String?             @db.VarChar(500)
+  paidAt                   DateTime?
+  closedAt                 DateTime?
+  // 软删除标记：管理端「删除业务应用」时，该应用下的订单会连同支付尝试、事件、退款推进、
+  // 回执线索、异常记录一起移出在用数据集（凭证失效、业务单号释放），但行本身保留在库里，
+  // 随时可由 DBA 按 applicationId 还原。非空表示「已随应用归档」，业务接口不再可见、不再可用。
+  deletedAt                DateTime?
+  deletedWithApplicationId String?             @db.VarChar(40)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  application              Application         @relation(fields: [applicationId], references: [id])
+  payments                 Payment[]
+  events                   PaymentEvent[]
+  webhookDeliveries        WebhookDelivery[]
+  paymentExceptions        PaymentException[]
+
+  @@unique([applicationId, externalOrderNo])
+  @@unique([applicationId, idempotencyKey])
+  @@index([applicationId, status, createdAt])
+  @@index([applicationId, deletedAt])
+  @@index([deletedAt, createdAt])
+  @@index([deletedAt, paidAt])
+  @@index([createdAt, id])
+  @@index([status, expirationNextAttemptAt, id])
+  @@map("orders")
+}
+
+model Payment {
+  id                    String                   @id @default(cuid())
+  paymentNo             String                   @unique @db.VarChar(40)
+  orderId               String
+  attemptNo             Int                      @db.UnsignedSmallInt
+  idempotencyKey        String?                  @db.VarChar(120)
+  channel               PaymentChannelCode
+  channelId             String?                  @db.VarChar(80)
+  // 历史选路来源快照，不参与查单或退款选路，组删除后仍保留。
+  routingGroupId        String?                  @db.VarChar(80)
+  method                String                   @db.VarChar(32)
+  status                PaymentStatus            @default(CREATED)
+  amount                Int                      @db.UnsignedInt
+  channelAmount         Int                      @db.UnsignedInt
+  receivedAmount        Int?                     @db.UnsignedInt
+  channelTradeNo        String?                  @unique @db.VarChar(100)
+  channelOrderNo        String?                  @db.VarChar(100)
+  receiptMatchMode      ReceiptMatchMode?
+  receiptMatchReference String?                  @db.VarChar(64)
+  receiptValidFrom      DateTime?
+  receiptValidUntil     DateTime?
+  clientPayload         Json?
+  rawResponse           Json?
+  errorCode             String?                  @db.VarChar(80)
+  errorMessage          String?                  @db.VarChar(500)
+  queryAttempts         Int                      @default(0) @db.UnsignedSmallInt
+  nextQueryAt           DateTime?
+  lastQueriedAt         DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  order                 Order                    @relation(fields: [orderId], references: [id])
+  refunds               Refund[]
+  events                PaymentEvent[]
+  receipts              Receipt[]
+  paymentExceptions     PaymentException[]
+  receiptReservation    ReceiptMatchReservation?
+
+  @@unique([orderId, attemptNo])
+  @@unique([orderId, idempotencyKey])
+  @@index([orderId, status, createdAt])
+  @@index([status, updatedAt])
+  @@index([status, nextQueryAt, id])
+  @@index([channel, receiptMatchReference])
+  @@index([channelId, status])
+  @@index([routingGroupId, createdAt])
+  @@index([channel, channelAmount, receiptValidUntil])
+  @@index([status, paidAt])
+  @@map("payments")
+}
+
+model ChannelInstance {
+  id               String             @id @db.VarChar(80)
+  plugin           PaymentChannelCode
+  name             String             @db.VarChar(120)
+  enabled          Boolean            @default(false)
+  revision         Int                @default(1)
+  payloadEncrypted String             @db.LongText
+  checkStatus      String             @default("UNCHECKED") @db.VarChar(32)
+  checkMessage     String?            @db.VarChar(500)
+  checkedAt        DateTime?
+  checkRevision    Int?
+  checkLease       String?            @db.VarChar(40)
+  checkLockedUntil DateTime?
+  testPaymentNo    String?            @db.VarChar(40)
+  testRevision     Int?
+  // 归档软删除标记：非空表示该通道已被管理端移除。行必须保留，因为
+  // payloadEncrypted 里存着对接密钥 —— 历史支付单的查单、关闭与原路退款都还要用它，
+  // 硬删会让已经动过的钱再也对不上账。归档后不再出现在列表与分配选项里，也不能建新支付。
+  archivedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  routingMembers   RoutingGroupMember[]
+
+  @@index([plugin, createdAt])
+  @@index([archivedAt, createdAt])
+  @@map("channel_instances")
+}
+
+model RoutingGroup {
+  id           String               @id @default(cuid()) @db.VarChar(80)
+  name         String               @db.VarChar(120)
+  strategy     RoutingStrategy      @default(RANDOM)
+  enabled      Boolean              @default(true)
+  revision     Int                  @default(1)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  members      RoutingGroupMember[]
+  applications Application[]
+
+  @@index([enabled, createdAt])
+  @@map("routing_groups")
+}
+
+model RoutingGroupMember {
+  groupId   String          @db.VarChar(80)
+  channelId String          @db.VarChar(80)
+  weight    Int             @default(1) @db.UnsignedInt
+  enabled   Boolean         @default(true)
+  group     RoutingGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  channel   ChannelInstance @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, channelId])
+  @@index([channelId])
+  @@map("routing_group_members")
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  refundNo         String       @unique @db.VarChar(40)
+  externalRefundNo String       @db.VarChar(80)
+  applicationId    String
+  paymentId        String
+  amount           Int          @db.UnsignedInt
+  reason           String?      @db.VarChar(300)
+  status           RefundStatus @default(CREATED)
+  channelRefundNo  String?      @db.VarChar(100)
+  rawResponse      Json?
+  errorCode        String?      @db.VarChar(80)
+  errorMessage     String?      @db.VarChar(500)
+  queryAttempts    Int          @default(0) @db.UnsignedSmallInt
+  nextQueryAt      DateTime?
+  lastQueriedAt    DateTime?
+  succeededAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  application      Application  @relation(fields: [applicationId], references: [id])
+  payment          Payment      @relation(fields: [paymentId], references: [id])
+  receipts         Receipt[]
+
+  @@unique([applicationId, externalRefundNo])
+  @@index([paymentId, status, createdAt])
+  @@index([applicationId, createdAt])
+  @@index([createdAt, id])
+  @@index([status, nextQueryAt, id])
+  @@map("refunds")
+}
+
+model PaymentEvent {
+  id            BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  aggregateType String                 @db.VarChar(24)
+  aggregateId   String                 @db.VarChar(40)
+  orderId       String?
+  paymentId     String?
+  type          String                 @db.VarChar(64)
+  source        String                 @db.VarChar(32)
+  requestId     String?                @db.VarChar(64)
+  payload       Json?
+  createdAt     DateTime               @default(now())
+  order         Order?                 @relation(fields: [orderId], references: [id])
+  payment       Payment?               @relation(fields: [paymentId], references: [id])
+  ownerSeen     OwnerNotificationSeen?
+
+  @@index([aggregateType, aggregateId, id])
+  @@index([orderId, id])
+  @@index([paymentId, id])
+  @@index([createdAt, id])
+  @@map("payment_events")
+}
+
+model ChannelCallback {
+  id           BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  channel      PaymentChannelCode
+  eventKey     String             @db.VarChar(160)
+  paymentNo    String?            @db.VarChar(40)
+  verified     Boolean            @default(false)
+  processed    Boolean            @default(false)
+  rawPayload   Json
+  errorMessage String?            @db.VarChar(500)
+  createdAt    DateTime           @default(now())
+  processedAt  DateTime?
+
+  @@unique([channel, eventKey])
+  @@index([paymentNo, createdAt])
+  @@map("channel_callbacks")
+}
+
+model WebhookDelivery {
+  id             String              @id @default(cuid())
+  applicationId  String
+  orderId        String
+  // SQL migration uses ASCII for this internal event name to keep the full URL unique key within 3072 bytes.
+  eventType      String              @db.VarChar(80)
+  protocol       IntegrationProtocol
+  url            String              @db.VarChar(500)
+  payload        Json
+  status         WebhookStatus       @default(PENDING)
+  attempts       Int                 @default(0) @db.UnsignedSmallInt
+  maxAttempts    Int                 @default(8) @db.UnsignedSmallInt
+  nextAttemptAt  DateTime            @default(now())
+  lockedUntil    DateTime?
+  lastError      String?             @db.VarChar(500)
+  responseStatus Int?
+  responseBody   String?             @db.Text
+  deliveredAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  application    Application         @relation(fields: [applicationId], references: [id])
+  order          Order               @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId, eventType, url])
+  @@index([status, nextAttemptAt, id])
+  @@index([lockedUntil, status])
+  @@index([applicationId, createdAt])
+  @@index([createdAt, id])
+  @@map("webhook_deliveries")
+}
+
+model Receipt {
+  id               String             @id @default(cuid())
+  provider         PaymentChannelCode
+  statementDate    DateTime           @db.Date
+  direction        ReceiptDirection
+  providerTradeNo  String?            @db.VarChar(100)
+  merchantOrderNo  String?            @db.VarChar(80)
+  providerRefundNo String?            @db.VarChar(100)
+  merchantRefundNo String?            @db.VarChar(80)
+  amount           Int                @db.UnsignedInt
+  currency         String             @default("CNY") @db.Char(3)
+  occurredAt       DateTime
+  fingerprint      String             @unique @db.Char(64)
+  matchStatus      ReceiptMatchStatus @default(UNMATCHED)
+  mismatchReason   String?            @db.VarChar(500)
+  accountKey       String?            @db.VarChar(80)
+  remark           String?            @db.VarChar(300)
+  matchMode        ReceiptMatchMode?
+  lockedUntil      DateTime?
+  rawPayload       Json
+  paymentId        String?
+  refundId         String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  payment          Payment?           @relation(fields: [paymentId], references: [id])
+  refund           Refund?            @relation(fields: [refundId], references: [id])
+
+  @@index([provider, statementDate, id])
+  @@index([matchStatus, occurredAt, id])
+  @@index([provider, matchStatus, lockedUntil])
+  @@index([paymentId, id])
+  @@index([refundId, id])
+  @@index([occurredAt, id])
+  @@map("receipts")
+}
+
+model ReconciliationRun {
+  id              String                  @id @default(cuid())
+  provider        PaymentChannelCode
+  statementDate   DateTime                @db.Date
+  status          ReconciliationRunStatus @default(PROCESSING)
+  fileName        String?                 @db.VarChar(255)
+  importedCount   Int                     @default(0) @db.UnsignedInt
+  duplicateCount  Int                     @default(0) @db.UnsignedInt
+  matchedCount    Int                     @default(0) @db.UnsignedInt
+  mismatchedCount Int                     @default(0) @db.UnsignedInt
+  unmatchedCount  Int                     @default(0) @db.UnsignedInt
+  skippedCount    Int                     @default(0) @db.UnsignedInt
+  errorMessage    String?                 @db.VarChar(500)
+  startedAt       DateTime                @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([provider, statementDate])
+  @@index([status, statementDate])
+  @@map("reconciliation_runs")
+}
+
+model OwnerNotificationSettings {
+  id               String   @id @db.VarChar(40)
+  revision         Int      @default(1)
+  payloadEncrypted String   @db.LongText
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("owner_notification_settings")
+}
+
+model OwnerNotificationSeen {
+  eventId BigInt       @id @db.UnsignedBigInt
+  event   PaymentEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("owner_notification_seen")
+}
+
+model NotificationInstance {
+  id               String                     @id @db.VarChar(80)
+  plugin           String                     @db.VarChar(32)
+  name             String                     @db.VarChar(120)
+  enabled          Boolean                    @default(false)
+  revision         Int                        @default(1)
+  payloadEncrypted String                     @db.LongText
+  archivedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  subscriptions    NotificationSubscription[]
+  deliveries       OwnerNotificationDelivery[]
+
+  @@index([plugin, createdAt])
+  @@index([archivedAt, createdAt])
+  @@map("notification_instances")
+}
+
+model NotificationSubscription {
+  id         String               @id @default(cuid())
+  instanceId String               @db.VarChar(80)
+  eventType  String               @db.VarChar(64)
+  enabled    Boolean              @default(true)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  instance   NotificationInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, eventType])
+  @@index([eventType, enabled])
+  @@map("notification_subscriptions")
+}
+
+model OwnerNotificationDelivery {
+  id            String                @id @default(cuid())
+  dedupeKey     String                @unique @db.VarChar(160)
+  channel       String                @db.VarChar(32)
+  instanceId    String?               @db.VarChar(80)
+  eventType     String?               @db.VarChar(64)
+  title         String                @db.VarChar(160)
+  message       String                @db.Text
+  payload       Json?
+  status        String                @default("PENDING") @db.VarChar(16)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now())
+  leaseOwner    String?               @db.VarChar(40)
+  lockedUntil   DateTime?
+  lastError     String?               @db.VarChar(80)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  instance      NotificationInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([instanceId, createdAt])
+  @@map("owner_notification_deliveries")
+}
+
+model BillChannelSettings {
+  id               String   @id @db.VarChar(80)
+  revision         Int      @default(1)
+  payloadEncrypted String   @db.LongText
+  updatedAt        DateTime @updatedAt
+
+  @@map("bill_channel_settings")
+}
+
+model BillCollectorState {
+  id                String    @id @db.VarChar(80)
+  binding           String    @db.Char(64)
+  cursorAt          DateTime
+  windowStart       DateTime?
+  windowEnd         DateTime?
+  nextPage          Int       @default(1)
+  leaseOwner        String?   @db.VarChar(64)
+  lockedUntil       DateTime?
+  nextRunAt         DateTime  @default(now())
+  heartbeatAt       DateTime?
+  lastSuccessAt     DateTime?
+  lastError         String?   @db.VarChar(500)
+  consecutiveErrors Int       @default(0)
+  processedRecords  Int       @default(0)
+  updatedAt         DateTime  @updatedAt
+
+  @@map("bill_collector_states")
+}
+
+model ReceiptAccount {
+  id           String                    @id @db.VarChar(80)
+  name         String                    @db.VarChar(120)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  reservations ReceiptMatchReservation[]
+
+  @@map("receipt_accounts")
+}
+
+model ReceiptMatchReservation {
+  id        String           @id @default(cuid())
+  accountId String           @db.VarChar(80)
+  mode      ReceiptMatchMode
+  value     String           @db.VarChar(64)
+  paymentId String           @unique
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+  account   ReceiptAccount   @relation(fields: [accountId], references: [id])
+  payment   Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, mode, value])
+  @@index([accountId, expiresAt])
+  @@map("receipt_match_reservations")
+}
+
+model PaymentException {
+  id            String                   @id @default(cuid())
+  exceptionNo   String                   @unique @db.VarChar(40)
+  type          PaymentExceptionType
+  status        PaymentExceptionStatus   @default(OPEN)
+  severity      PaymentExceptionSeverity
+  subjectType   String                   @db.VarChar(24)
+  subjectId     String                   @db.VarChar(191)
+  orderId       String?
+  paymentId     String?
+  source        String                   @db.VarChar(32)
+  summary       String                   @db.VarChar(300)
+  detail        Json?
+  resolution    String?                  @db.VarChar(500)
+  resolutionRef String?                  @db.VarChar(80)
+  detectedAt    DateTime                 @default(now())
+  resolvedAt    DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  order         Order?                   @relation(fields: [orderId], references: [id])
+  payment       Payment?                 @relation(fields: [paymentId], references: [id])
+
+  @@unique([subjectType, subjectId, type])
+  @@index([status, severity, detectedAt])
+  @@index([orderId, createdAt])
+  @@index([paymentId, createdAt])
+  @@map("payment_exceptions")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  actor        String   @default("admin-token") @db.VarChar(80)
+  action       String   @db.VarChar(80)
+  resourceType String?  @db.VarChar(40)
+  resourceId   String?  @db.VarChar(191)
+  method       String   @db.VarChar(12)
+  path         String   @db.VarChar(255)
+  requestId    String?  @db.VarChar(64)
+  ipAddress    String?  @db.VarChar(64)
+  userAgent    String?  @db.VarChar(500)
+  success      Boolean
+  statusCode   Int      @db.UnsignedSmallInt
+  errorCode    String?  @db.VarChar(80)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt, id])
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId, createdAt])
+  @@map("admin_audit_logs")
+}
+
+
+model McpClient {
+  id           String        @id @db.VarChar(64)
+  name         String        @db.VarChar(120)
+  tokenHash    String        @unique @db.Char(64)
+  tokenPrefix  String        @db.VarChar(20)
+  scope        String        @default("READ") @db.VarChar(16)
+  allowedTools Json
+  enabled      Boolean       @default(true)
+  revision     Int           @default(1)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  audits       McpAuditLog[]
+
+  @@index([enabled, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_clients")
+}
+
+model McpAuditLog {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  clientId         String?    @db.VarChar(64)
+  clientName       String     @db.VarChar(120)
+  scope            String     @db.VarChar(16)
+  tool             String     @db.VarChar(100)
+  argumentsSummary Json?
+  success          Boolean
+  durationMs       Int        @db.UnsignedInt
+  errorCode        String?    @db.VarChar(80)
+  requestId        String?    @db.VarChar(64)
+  ipAddress        String?    @db.VarChar(64)
+  userAgent        String?    @db.VarChar(500)
+  createdAt        DateTime   @default(now())
+  client           McpClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([tool, createdAt])
+  @@index([success, createdAt])
+  @@map("mcp_audit_logs")
+}
+
+model McpActionApproval {
+  id          String   @id @db.VarChar(64)
+  clientId    String?  @db.VarChar(64)
+  action      String   @db.VarChar(40)
+  arguments   Json
+  summary     String   @db.VarChar(500)
+  requestedBy String   @db.VarChar(120)
+  approvedBy  String?  @db.VarChar(120)
+  status      String   @default("PENDING") @db.VarChar(16)
+  expiresAt   DateTime
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  executedAt  DateTime?
+  result      Json?
+  lastError   String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId, createdAt])
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("mcp_action_approvals")
+}

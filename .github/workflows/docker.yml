@@ -1,0 +1,105 @@
+name: Build and Push Image
+
+# main 推送与 PR 只跑检查，不产出镜像，避免每个提交都在 GHCR 里留下一个无人使用的镜像；
+# 只有推 v* tag 才构建并推送镜像（docker job 另有 ref 判断兜底）。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build production frontend
+        run: npm run build --workspace @tuoxin-pay/web
+      - name: Validate appliance scripts
+        run: |
+          node --check docker/gateway.mjs
+          bash -n docker/entrypoint.sh
+      - name: Validate Compose
+        env:
+          DATABASE_URL: mysql://tuoxin:ci-password@mysql:3306/tuoxin_pay
+          ADMIN_TOKEN: ci-admin-token-000000000000000000
+          ADMIN_PASSWORD: ci-admin-password
+          ADMIN_SESSION_SECRET: ci-admin-session-secret-000000000000000000
+          SECRETS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000001
+        run: docker compose config -q
+
+  docker:
+    # 双保险：触发条件已经限定为 tag 推送，这里再按 ref 判断一次，PR 走到这里也会被拦住。
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve release version
+        id: version
+        # 版本号 = tag 去掉 v，形如 0.1.0，与 apps/api/src/lib/version.ts、
+        # apps/web/lib/app-version.ts 的契约一致：tag 就是发布标识，界面左下角、/health、
+        # 镜像 tag 三处同源。tag 不合语义化版本就直接失败，避免发布一个界面读不出来的版本号。
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::发布 tag 必须是 vMAJOR.MINOR.PATCH 形式（例如 v0.1.0），当前为 ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 发布版本号"
+            echo
+            echo "- tag：\`${GITHUB_REF_NAME}\`"
+            echo "- 版本号：\`v${version}\`（管理台左下角、\`/health\` 显示的值）"
+            echo "- 拉取：\`docker pull ${REGISTRY}/${IMAGE_NAME}:v${version}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # tag 名就是版本号，所以一次发布打两个 tag：版本号与 latest。
+          # 注意 tags 是 YAML 块标量，块内以 # 开头的行是字面内容、会被当成 tag 属性，所以注释只能写在这里。
+          tags: |
+            type=raw,value=v${{ steps.version.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

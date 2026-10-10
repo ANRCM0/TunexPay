@@ -1,0 +1,183 @@
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ demand: vi.fn(), query: vi.fn(), ingest: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn(), find: vi.fn(), cfg: {
+  ALIPAY_BILL_COLLECTOR_ENABLED: true, ALIPAY_APP_ID: "app", ALIPAY_BILL_USER_ID: "2088000000000000", ALIPAY_GATEWAY: "https://openapi.alipay.com/gateway.do", ALIPAY_BILL_QR_CONTENT: "qr", ALIPAY_BILL_LOOKBACK_SECONDS: 3600, ALIPAY_BILL_OVERLAP_SECONDS: 300, ALIPAY_BILL_LAG_SECONDS: 15, ALIPAY_BILL_POLL_SECONDS: 10,
+} }));
+vi.mock("../config.js", () => ({ config: () => mocks.cfg }));
+vi.mock("../db.js", () => {
+  const database = { payment: { findFirst: mocks.demand }, billCollectorState: { upsert: mocks.upsert, update: mocks.update, updateMany: mocks.updateMany, findUniqueOrThrow: mocks.find, findUnique: mocks.find } };
+  return { db: { ...database, $transaction: async (callback: (tx: typeof database) => Promise<unknown>) => callback(database) } };
+});
+vi.mock("../services/bill-settings-service.js", () => ({ billRuntimeConfig: async () => ({ ...mocks.cfg, billRevision: 1 }) }));
+vi.mock("../channels/alipay.js", () => ({ AlipayChannel: class { queryAccountLogs = mocks.query; } }));
+vi.mock("../services/receipt-flow-service.js", () => ({ ingestAlipayBillFlows: mocks.ingest }));
+vi.mock("../services/receipt-reservation-service.js", () => ({ ALIPAY_BILL_ACCOUNT_ID: "alipay-bill-default" }));
+vi.mock("../lib/logger.js", () => ({ log: vi.fn() }));
+
+import { runAlipayBillCollector, alipayBillCollectorStatus } from "../services/alipay-bill-collector-service.js";
+
+// In-memory database double exercises checkpoint ordering and lease predicates;
+// actual MySQL concurrent transaction tests remain a deployment acceptance step.
+let state: Record<string, any>;
+function apply(data: Record<string, any>) {
+  for (const [key, value] of Object.entries(data)) state[key] = value && typeof value === "object" && "increment" in value ? (state[key] || 0) + value.increment : value;
+}
+function matches(where: Record<string, any>): boolean {
+  return Object.entries(where).every(([key, value]) => {
+    if (key === "OR") return value.some(matches);
+    if (value && typeof value === "object" && !(value instanceof Date)) {
+      if ("lte" in value) return state[key] !== null && state[key] <= value.lte;
+      if ("gt" in value) return state[key] !== null && state[key] > value.gt;
+    }
+    return state[key] === value;
+  });
+}
+const row = { direction: "收入", trans_amount: "0.01", alipay_order_no: "trade-1", trans_dt: "2026-09-16 11:20:00", trans_memo: "TXA1B2C3D4E5", type: "交易" };
+beforeEach(() => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-16T04:00:00Z")); vi.clearAllMocks();
+  mocks.cfg.ALIPAY_BILL_COLLECTOR_ENABLED = true; mocks.cfg.ALIPAY_BILL_QR_CONTENT = "qr";
+  state = {};
+  mocks.demand.mockResolvedValue({ receiptValidFrom: new Date("2026-09-16T03:00:00Z") });
+  mocks.upsert.mockImplementation(async ({ create }) => {
+    if (!state.id) state = { ...create, nextRunAt: new Date(0), nextPage: 1, windowStart: null, windowEnd: null, leaseOwner: null, lockedUntil: null, consecutiveErrors: 0, processedRecords: 0, lastError: null, lastSuccessAt: null };
+    return structuredClone(state);
+  });
+  mocks.find.mockImplementation(async () => structuredClone(state));
+  mocks.update.mockImplementation(async ({ data }) => { apply(data); return structuredClone(state); });
+  mocks.updateMany.mockImplementation(async ({ where, data }) => { if (!matches(where)) return { count: 0 }; apply(data); return { count: 1 }; });
+  mocks.ingest.mockResolvedValue([{ status: "MATCHED" }]);
+  mocks.query.mockResolvedValue({ total_size: 1, detail_list: [row] });
+});
+afterEach(() => vi.useRealTimers());
+
+describe("independent Alipay collector", () => {
+  it("does not call Alipay or initialize a cursor without unpaid bill payments", async () => {
+    mocks.demand.mockResolvedValue(null);
+    await runAlipayBillCollector();
+    expect(mocks.query).not.toHaveBeenCalled(); expect(mocks.upsert).not.toHaveBeenCalled();
+    expect((await alipayBillCollectorStatus()).status).toBe("IDLE");
+    expect(mocks.demand).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      channel: "ALIPAY_BILL", status: { not: "SUCCESS" },
+      receiptValidUntil: { gte: new Date("2026-09-16T03:54:45Z") },
+    }) }));
+  });
+  it("wakes for new demand and skips idle history without replaying empty hours", async () => {
+    mocks.demand.mockResolvedValue(null); await runAlipayBillCollector();
+    mocks.demand.mockResolvedValue({ receiptValidFrom: new Date("2026-09-16T03:50:00Z") });
+    mocks.query.mockResolvedValue({ total_size: 0, detail_list: [] });
+    await runAlipayBillCollector();
+    expect(mocks.query).toHaveBeenCalledWith(expect.objectContaining({ start_time: "2026-09-16 11:45:00", end_time: "2026-09-16 11:59:45" }));
+    mocks.query.mockClear(); mocks.demand.mockResolvedValue(null);
+    vi.advanceTimersByTime(11000); await runAlipayBillCollector();
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+  it("persists a receipt before advancing a completed window", async () => {
+    mocks.ingest.mockImplementation(async () => { expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:00:00.000Z"); });
+    await runAlipayBillCollector();
+    expect(mocks.query).toHaveBeenCalledWith({ bill_user_id: "2088000000000000", start_time: "2026-09-16 10:55:00", end_time: "2026-09-16 11:30:00", page_no: 1, page_size: 100 });
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:30:00.000Z");
+    expect(state.windowEnd).toBeNull(); expect(state.leaseOwner).toBeNull();
+    expect((await alipayBillCollectorStatus()).status).toBe("RUNNING");
+  });
+  it("retains an unfinished page while idle and resumes it when demand returns", async () => {
+    mocks.ingest.mockRejectedValueOnce(new Error("temporary database failure"));
+    await runAlipayBillCollector();
+    const original = structuredClone(mocks.query.mock.calls[0]![0]);
+    mocks.query.mockClear(); mocks.demand.mockResolvedValue(null);
+    vi.advanceTimersByTime(21000); await runAlipayBillCollector();
+    expect(mocks.query).not.toHaveBeenCalled(); expect(state.nextPage).toBe(1);
+    mocks.demand.mockResolvedValue({ receiptValidFrom: new Date("2026-09-16T03:59:00Z") });
+    await runAlipayBillCollector();
+    expect(mocks.query).toHaveBeenCalledWith(original);
+  });
+  it("retains window and page after delivery failure and retries the same page", async () => {
+    mocks.ingest.mockRejectedValueOnce(new Error("temporary database failure"));
+    await runAlipayBillCollector();
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:00:00.000Z");
+    expect(state.nextPage).toBe(1); expect(state.consecutiveErrors).toBe(1);
+    const window = state.windowEnd.toISOString();
+    await runAlipayBillCollector(); expect(mocks.query).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(21000); await runAlipayBillCollector();
+    expect(mocks.query).toHaveBeenCalledTimes(2);
+    expect(mocks.query.mock.calls[0]![0]).toEqual(mocks.query.mock.calls[1]![0]);
+    expect(state.cursorAt.toISOString()).toBe(window);
+  });
+  it("keeps the cursor on provider/schema failures", async () => {
+    mocks.query.mockResolvedValue({ total_size: 10 });
+    await runAlipayBillCollector();
+    expect(state.lastError).toBe("ALIPAY_BILL_INVALID_PAGE");
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:00:00.000Z");
+    expect(mocks.ingest).not.toHaveBeenCalled();
+    expect((await alipayBillCollectorStatus()).status).toBe("ERROR");
+  });
+  it("continues a fixed window at page six after the five-page budget", async () => {
+    mocks.query.mockImplementation(async ({ page_no }) => ({ total_size: 501, detail_list: page_no <= 5 ? Array(100).fill({ ...row, direction: "支出", trans_amount: "-0.01" }) : [row] }));
+    await runAlipayBillCollector();
+    expect(state.nextPage).toBe(6); expect(state.windowEnd).not.toBeNull();
+    vi.advanceTimersByTime(11000); await runAlipayBillCollector();
+    expect(mocks.query.mock.calls[5]![0].page_no).toBe(6);
+    expect(mocks.query.mock.calls[0]![0].end_time).toBe(mocks.query.mock.calls[5]![0].end_time);
+    expect(state.windowEnd).toBeNull();
+  });
+  it("does not query while another owner holds a lease", async () => {
+    await runAlipayBillCollector(); mocks.query.mockClear(); vi.advanceTimersByTime(11000);
+    state.leaseOwner = "other"; state.lockedUntil = new Date(Date.now() + 60000);
+    await runAlipayBillCollector(); expect(mocks.query).not.toHaveBeenCalled();
+  });
+  it("pauses on account changes and never silently resets historical state", async () => {
+    await runAlipayBillCollector(); mocks.query.mockClear(); mocks.cfg.ALIPAY_BILL_QR_CONTENT = "another-account";
+    await runAlipayBillCollector(); expect(mocks.query).not.toHaveBeenCalled();
+    expect(state.lastError).toMatch(/^ACCOUNT_BINDING_CHANGED/);
+  });
+  it("does nothing when disabled and reports stale worker heartbeat", async () => {
+    mocks.cfg.ALIPAY_BILL_COLLECTOR_ENABLED = false; await runAlipayBillCollector(); expect(mocks.upsert).not.toHaveBeenCalled();
+    mocks.cfg.ALIPAY_BILL_COLLECTOR_ENABLED = true; await runAlipayBillCollector();
+    vi.advanceTimersByTime(100000); expect((await alipayBillCollectorStatus()).status).toBe("OFFLINE");
+  });
+  // 一页最多 100 条流水：先整页校验、再一次性交给 ingestAlipayBillFlows({records})
+  // （该函数支持 {records:[...]} 且上限与 PAGE_SIZE 一致）。
+  // 下面四条锁住这个投递顺序带来的可观察行为。
+  it("delivers a whole page in one batched call, in page order", async () => {
+    const tradeNos = Array.from({ length: 100 }, (_, index) => `page-${index + 1}`);
+    mocks.query.mockResolvedValue({ total_size: 100, detail_list: tradeNos.map(tradeNo => ({ ...row, alipay_order_no: tradeNo })) });
+    await runAlipayBillCollector();
+    expect(mocks.ingest).toHaveBeenCalledTimes(1);
+    const [payload, accountId] = mocks.ingest.mock.calls[0] as [{ records: Record<string, unknown>[] }, string];
+    expect(accountId).toBe("alipay-bill-default");
+    expect(payload.records.map(flow => flow.providerTradeNo)).toEqual(tradeNos);
+    expect(state.processedRecords).toBe(100);
+    expect(state.windowEnd).toBeNull();
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:30:00.000Z");
+  });
+  it("validates the window for every record before any delivery, so a violation delivers nothing", async () => {
+    mocks.query.mockResolvedValue({ total_size: 3, detail_list: [
+      { ...row, alipay_order_no: "in-1" },
+      { ...row, alipay_order_no: "outside", trans_dt: "2026-09-16 10:30:00" },
+      { ...row, alipay_order_no: "in-2" },
+    ] });
+    await runAlipayBillCollector();
+    expect(mocks.ingest).not.toHaveBeenCalled();
+    expect(state.lastError).toBe("ALIPAY_BILL_OUTSIDE_QUERY_WINDOW");
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:00:00.000Z");
+    expect(state.nextPage).toBe(1);
+    expect(state.consecutiveErrors).toBe(1);
+  });
+  it("keeps the batch delivery failure semantics of the previous per-record loop", async () => {
+    mocks.ingest.mockRejectedValueOnce(new Error("temporary database failure"));
+    await runAlipayBillCollector();
+    expect(mocks.ingest).toHaveBeenCalledTimes(1);
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:00:00.000Z");
+    expect(state.nextPage).toBe(1); expect(state.consecutiveErrors).toBe(1);
+    const window = state.windowEnd.toISOString();
+    vi.advanceTimersByTime(21000); await runAlipayBillCollector();
+    expect(mocks.query.mock.calls[0]![0]).toEqual(mocks.query.mock.calls[1]![0]);
+    expect(state.cursorAt.toISOString()).toBe(window);
+  });
+  it("does not call the ingest service for a page with no deliverable flow", async () => {
+    mocks.query.mockResolvedValue({ total_size: 1, detail_list: [{ ...row, direction: "支出" }] });
+    await runAlipayBillCollector();
+    expect(mocks.ingest).not.toHaveBeenCalled();
+    expect(state.nextPage).toBe(1);
+    expect(state.cursorAt.toISOString()).toBe("2026-09-16T03:30:00.000Z");
+  });
+});

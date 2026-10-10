@@ -1,0 +1,139 @@
+/* 公开界面专属样式（收银台 / 登录），仅由 app/(public)/layout.tsx 引入 */
+
+/* ---- 收银台 ---- */
+
+.cashier-shell { min-height: 100vh; background: var(--paper); padding: 0 0 48px; }
+.cashier-brand { display: flex; align-items: center; gap: 10px; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 22px; }
+.cashier-brand .brand-badge { margin: 0; width: 32px; height: 32px; border-radius: var(--radius-md); font-size: 14px; background: var(--primary); }
+.cashier-brand-copy { display: grid; gap: 1px; }
+.cashier-brand-copy strong { font-size: 14px; letter-spacing: .05em; }
+.cashier-brand-copy span { color: var(--muted); font-size: 11px; }
+.cashier-secure { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 11px; }
+.cashier-secure i, .cashier-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.cashier-loading { max-width: 720px; margin: 40px auto; }
+
+.cashier-layout { max-width: 560px; margin: 26px auto 0; padding: 0 18px; display: grid; gap: 18px; animation: cashier-in .25s ease; }
+@keyframes cashier-in { from { opacity: 0; transform: translateY(8px); } }
+.cashier-main { padding: 26px; }
+.cashier-main-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.cashier-main-head h1 { font-size: 19px; margin-top: 8px; }
+.cashier-amount-block { margin: 16px 0 20px; padding: 18px 16px 17px; border-radius: var(--radius-md); background: var(--primary-soft); border: 1px solid var(--primary-soft); text-align: center; }
+.cashier-amount-block > span { display: block; color: var(--ink-2); font-size: 12px; font-weight: 500; }
+.cashier-amount-block > strong { display: block; margin: 3px 0 1px; color: var(--ink); font-size: 36px; line-height: 1.25; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.cashier-amount-block > small { color: var(--muted); font-size: 11px; }
+.cashier-paybox { text-align: center; display: grid; justify-items: center; gap: 9px; }
+.cashier-scan-label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.cashier-foot { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }
+.qr { width: 210px; height: 210px; margin: 8px auto; border: 10px solid var(--panel); box-shadow: var(--shadow-pop); border-radius: var(--radius-sm); }
+.qr-placeholder { width: 210px; height: 210px; margin: 8px auto; padding: 10px; border-radius: var(--radius-md); background: var(--panel); box-shadow: var(--shadow); }
+.qr-skeleton { width: 100%; height: 100%; border-radius: var(--radius-sm); }
+.cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: var(--radius-md); display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; animation: notice-in .2s ease; }
+.cashier-state strong { font-size: 16px; }
+.cashier-state.success { background: var(--success-soft); color: var(--success-text); }
+.cashier-state.warning { background: var(--warning-soft); color: var(--warning-text); }
+.cashier-state.failure { background: var(--danger-soft); color: var(--danger-text); }
+.cashier-state.neutral { background: var(--fill-2); color: var(--ink-2); }
+.cashier-state .button { margin-top: 6px; }
+.cashier-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+.cashier-duo-item { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; display: grid; gap: 5px; }
+.cashier-duo-item span { color: var(--muted); font-size: 12px; }
+.cashier-duo-item strong { font-size: 17px; }
+.cashier-countdown { color: var(--primary-text); font-variant-numeric: tabular-nums; }
+.cashier-live { display: inline-flex; align-items: center; gap: 8px; color: var(--success-text); font-size: 13px !important; }
+.cashier-note { margin-top: 16px; font-size: 12px; line-height: 1.6; }
+
+/* ---- 登录：居中双栏卡片，对齐 MPAY 管理台登录页 ---- */
+
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--paper); }
+.login-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: min(880px, 100%); background: var(--panel); border-radius: var(--radius-md); border: 1px solid var(--line); box-shadow: var(--shadow); overflow: hidden; animation: cashier-in .25s ease; }
+.login-aside { display: flex; flex-direction: column; gap: 14px; padding: 40px 36px; background: var(--primary-soft); border-right: 1px solid var(--line); }
+.login-aside-brand { display: flex; align-items: center; gap: 10px; }
+.login-aside-name { font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+.login-aside h2 { margin: 6px 0 0; font-size: 22px; letter-spacing: -.01em; }
+.login-aside p { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.login-aside-list { margin: 4px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; line-height: 2; }
+.login-form-panel { padding: 40px 36px; }
+.login-form-head { display: flex; align-items: center; gap: 10px; }
+.login-form-head h1 { margin: 0; font-size: 22px; }
+.login-form { margin-top: 22px; display: grid; gap: 16px; }
+.login-note { margin: 20px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 720px) {
+  .login-card { grid-template-columns: 1fr; }
+  .login-aside { display: none; }
+  .login-form-panel { padding: 32px 22px; }
+}
+
+@media (max-width: 560px) {
+  .cashier-layout { margin-top: 18px; padding: 0 14px; gap: 14px; }
+  .cashier-main { padding: 20px; }
+  .cashier-main-head { flex-direction: column; gap: 10px; }
+  .cashier-amount-block > strong { font-size: 32px; }
+  .qr { width: 180px; height: 180px; }
+  .cashier-brand { padding: 11px 14px; }
+  .cashier-secure { font-size: 10px; }
+  .cashier-duo { grid-template-columns: 1fr; }
+  .cashier-foot { flex-direction: column; }
+}
+
+/* ============================================================
+   移动端适配层（公共页：收银台 / 登录）
+   ------------------------------------------------------------
+   收银台是用户真正用手机打开的页面，移动端优先级最高：
+   二维码要够大够清晰，金额要一眼可见，底部不能被手势条遮住。
+   ============================================================ */
+
+/* ---- 视口高度：dvh 跟随移动浏览器地址栏收放 ---- */
+.cashier-shell, .login-shell { min-height: 100dvh; }
+
+/* ---- 安全区：刘海屏左右 / 手势条底部 ---- */
+.cashier-brand {
+  padding-left: max(22px, env(safe-area-inset-left));
+  padding-right: max(22px, env(safe-area-inset-right));
+}
+.cashier-shell { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+.login-shell { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+
+/* ---- 触摸目标：按钮与输入框不小于 44px ---- */
+@media (max-width: 720px) {
+  .cashier-shell .button, .login-shell .button { min-height: 44px; }
+  /* Arco 按钮不受上面的 .button 规则影响（不同类名），单独覆盖。
+     large 尺寸实测 36px，在手机上偏小。 */
+  .login-shell .arco-btn,
+  .cashier-shell .arco-btn { min-height: 44px; }
+  .login-shell .arco-btn-large { height: 46px; }
+  /* Arco 输入框 large 尺寸实测 40px，提到 44 */
+  .login-shell .arco-input-size-large,
+  .cashier-shell .arco-input-size-large { height: 44px; }
+  /* 输入框字号提到 16px：iOS 在 <16px 时会自动放大整个页面 */
+  .login-shell input:not([type="checkbox"]):not([type="radio"]),
+  .login-shell select,
+  .login-shell .arco-input,
+  .login-shell .arco-input-inner-wrapper { font-size: 16px; }
+  .cashier-shell .arco-input { font-size: 16px; }
+  .cashier-foot { gap: 8px; }
+}
+
+/* ---- 二维码：窄屏保持可扫描的最小尺寸 ----
+   低于 160px 时部分机型扫码吃力，这里设下限并在超窄屏回退为自适应。 */
+@media (max-width: 380px) {
+  .qr, .qr-placeholder { width: min(180px, 70vw); height: min(180px, 70vw); }
+  .cashier-amount-block > strong { font-size: 28px; }
+  .cashier-layout { padding: 0 12px; }
+}
+
+/* ---- 登录页：窄屏卡片铺满、去掉阴影压迫感 ---- */
+@media (max-width: 560px) {
+  .login-shell { padding: 16px 14px; align-items: flex-start; }
+  .login-card { border-radius: var(--radius-sm); box-shadow: none; }
+  .login-form-panel { padding: 26px 18px; }
+  .login-form-head h1 { font-size: 20px; }
+  .login-form { margin-top: 18px; gap: 14px; }
+}
+
+/* ---- 收银台状态条与操作按钮：窄屏铺满更好点 ---- */
+@media (max-width: 560px) {
+  .cashier-state .button { width: 100%; justify-content: center; }
+  .cashier-paybox { gap: 12px; }
+  .cashier-scan-label { font-size: 14px; }
+}
