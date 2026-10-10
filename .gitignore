@@ -3,10 +3,8 @@ node_modules/
 dist/
 .env
 .env.local
-alipay.txt
 *.log
 *.tsbuildinfo
 next-env.d.ts
 coverage/
-*.zip
 .DS_Store
