@@ -29,17 +29,17 @@
 .qr-skeleton { width: 100%; height: 100%; border-radius: var(--radius-sm); }
 .cashier-state { margin: 14px 0 4px; padding: 14px; border-radius: var(--radius-md); display: grid; gap: 7px; font-size: 13px; text-align: center; justify-items: center; animation: notice-in .2s ease; }
 .cashier-state strong { font-size: 16px; }
-.cashier-state.success { background: var(--success-soft); color: var(--success); }
-.cashier-state.warning { background: var(--warning-soft); color: var(--warning); }
-.cashier-state.failure { background: var(--danger-soft); color: var(--danger); }
+.cashier-state.success { background: var(--success-soft); color: var(--success-text); }
+.cashier-state.warning { background: var(--warning-soft); color: var(--warning-text); }
+.cashier-state.failure { background: var(--danger-soft); color: var(--danger-text); }
 .cashier-state.neutral { background: var(--fill-2); color: var(--ink-2); }
 .cashier-state .button { margin-top: 6px; }
 .cashier-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
 .cashier-duo-item { border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; display: grid; gap: 5px; }
 .cashier-duo-item span { color: var(--muted); font-size: 12px; }
 .cashier-duo-item strong { font-size: 17px; }
-.cashier-countdown { color: var(--primary); font-variant-numeric: tabular-nums; }
-.cashier-live { display: inline-flex; align-items: center; gap: 8px; color: var(--success); font-size: 13px !important; }
+.cashier-countdown { color: var(--primary-text); font-variant-numeric: tabular-nums; }
+.cashier-live { display: inline-flex; align-items: center; gap: 8px; color: var(--success-text); font-size: 13px !important; }
 .cashier-note { margin-top: 16px; font-size: 12px; line-height: 1.6; }
 
 /* ---- 登录：居中双栏卡片，对齐 MPAY 管理台登录页 ---- */

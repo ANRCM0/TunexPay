@@ -91,6 +91,40 @@ function onColor(hex: string): string {
   return luminance(hex) > 0.55 ? "#1D2129" : "#FFFFFF";
 }
 
+/** 两色的 WCAG 对比度（1 ~ 21）。 */
+function contrast(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * 把一个颜色往白或黑调，直到与【所有】给定底色都达到目标对比度。
+ *
+ * 为什么需要它：同一个主色既要当按钮背景（配白字，越暗越好），
+ * 又要当深色底上的正文色（越亮越好）——两个诉求方向相反，一个值满足不了。
+ * 所以拆出「文字专用」变体，按底色实际算出来，而不是写死一个色号。
+ * 好处是用户换任何主色都能自动得到达标的文字色。
+ *
+ * 为什么校验全部底色而不是只挑「最差」的一个：底色之间明暗可能非常接近
+ * （如浅色模式的 paper #F7F8FA 与 fill-2 #F2F3F5），只按最差者调色会漏掉
+ * 其余底色；再加上 mix 会做整数取整，边缘值可能差 0.0x 不达标。
+ * 逐个校验能保证返回的颜色对所有底色都成立。
+ */
+function ensureContrast(hex: string, backgrounds: string[], target: number, dark: boolean): string {
+  const ok = (c: string) => backgrounds.every(bg => contrast(c, bg) >= target);
+  if (ok(hex)) return hex;
+  // 深色底往白调，浅色底往黑调；每次 2% 逼近，最多 50 步。
+  const toward = dark ? "#FFFFFF" : "#000000";
+  for (let step = 1; step <= 50; step++) {
+    const candidate = mix(hex, toward, step * 0.02);
+    if (ok(candidate)) return candidate;
+  }
+  return dark ? "#FFFFFF" : "#000000";
+}
+
 function rgbParts(hex: string): string {
   const rgb = hexToRgb(hex);
   return rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : "0, 0, 0";
@@ -107,14 +141,24 @@ function soft(hex: string, dark: boolean): string {
  */
 export function deriveVars(hex: string, prefix: string, dark: boolean): Record<string, string> {
   const lift = dark ? 0.22 : 0.16;
-  return {
+  const softBg = soft(hex, dark);
+  const vars: Record<string, string> = {
     [`--${prefix}`]: hex,
     [`--${prefix}-hover`]: mix(hex, dark ? "#FFFFFF" : "#FFFFFF", lift),
     [`--${prefix}-active`]: mix(hex, "#000000", dark ? 0.18 : 0.22),
-    [`--${prefix}-soft`]: soft(hex, dark),
+    [`--${prefix}-soft`]: softBg,
     [`--${prefix}-rgb`]: rgbParts(hex),
     [`--on-${prefix}`]: onColor(hex),
   };
+  // 主色额外派生一个「文字专用」变体：保证在所有实际出现的底色上都达到 AA。
+  // 必须传入【全部】可能的文字背景：漏掉任何一个（如 fill-2）都会让某个页面出现低对比文字。
+  if (prefix === "primary") {
+    const backgrounds = dark
+      ? [softBg, "#1F1633", "#150F23"]        // soft / panel / paper（fill-2 与 panel 同值）
+      : [softBg, "#FFFFFF", "#F7F8FA", "#F2F3F5"];  // soft / panel / paper / fill-2
+    vars[`--${prefix}-text`] = ensureContrast(hex, backgrounds, 4.5, dark);
+  }
+  return vars;
 }
 
 /** 一次算出主色 + 强调色的全部变量。 */
@@ -233,9 +277,15 @@ export const THEME_MODE_KEY = "tuoxin.theme";
  * 保证浏览器首屏用的公式和运行时用的完全一致，不会两边改着改着就对不上。
  */
 export function themeBootstrapScript(): string {
-  const helpers = [hexToRgb, normalizeHex, clamp, rgbToHex, mix, luminance, onColor, rgbParts, soft, deriveVars]
-    .map(fn => fn.toString())
-    .join("\n");
+  // 注意：这里必须把 deriveVars 依赖的【所有】函数都序列化进去。
+  // 漏一个（如 contrast / ensureContrast）会让 deriveVars 在浏览器里抛错，
+  // 而外层 try/catch 会把它静默吞掉 —— 表现为「自定义配色保存了但不生效」，
+  // 且控制台没有任何报错，极难排查。新增派生函数时务必同步加到这里。
+  const helpers = [
+    hexToRgb, normalizeHex, clamp, rgbToHex, mix,
+    luminance, onColor, contrast, ensureContrast,
+    rgbParts, soft, deriveVars,
+  ].map(fn => fn.toString()).join("\n");
 
   return `(function(){try{
 ${helpers}
