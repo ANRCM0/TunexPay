@@ -11,6 +11,16 @@
   --primary-hover: #8B7FD4;
   --primary-active: #4E44A0;
   --primary-soft: #F0EEFA;
+  --primary-rgb: 106, 95, 193;
+  --on-primary: #FFFFFF;
+
+  /* 强调色：Green，作为紫色的第二强调色 */
+  --accent-green: #00B42A;
+  --accent-green-hover: #23C343;
+  --accent-green-active: #009A29;
+  --accent-green-soft: #E8FFEA;
+  --accent-green-rgb: 0, 180, 42;
+  --on-accent-green: #FFFFFF;
 
   /* 文字：浅灰白上的深灰 */
   --ink: #1D2129;
@@ -24,9 +34,9 @@
   --line-strong: #C9CDD4;
   --panel: #FFFFFF;
 
-  /* 语义色：Sentry 风格 */
-  --success: #00A87E;
-  --success-soft: #E6F7F2;
+  /* 语义色：紫+绿双色主题 */
+  --success: #00B42A;
+  --success-soft: #E8FFEA;
   --warning: #EC7E00;
   --warning-soft: #FFF4E6;
   --danger: #E23B4A;
@@ -54,6 +64,15 @@
   --primary-hover: #8B7FD4;
   --primary-active: #4E44A0;
   --primary-soft: #2A2150;
+  --primary-rgb: 106, 95, 193;
+  --on-primary: #FFFFFF;
+
+  --accent-green: #23C343;
+  --accent-green-hover: #42D160;
+  --accent-green-active: #1AA83A;
+  --accent-green-soft: #1A2E1F;
+  --accent-green-rgb: 35, 195, 67;
+  --on-accent-green: #FFFFFF;
 
   --ink: #F7F8FA;
   --ink-2: #C9CDD4;
@@ -65,8 +84,8 @@
   --line-strong: #584674;
   --panel: #1F1633;
 
-  --success: #00A87E;
-  --success-soft: #0D2E26;
+  --success: #23C343;
+  --success-soft: #1A2E1F;
   --warning: #EC7E00;
   --warning-soft: #2E2418;
   --danger: #E23B4A;
@@ -86,7 +105,7 @@ body {
 }
 button, input, select { font: inherit; }
 a { color: inherit; text-decoration: none; }
-::selection { background: rgba(106, 95, 193, .3); }
+::selection { background: rgba(var(--primary-rgb), .3); }
 
 /* ---- 跨界面共享原语（admin / cashier / login 都可用） ---- */
 
@@ -103,9 +122,12 @@ h1 { font-size: 22px; font-weight: 600; margin: 5px 0 0; letter-spacing: -.015em
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow); transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
 
 /* Sentry 风格按钮：13px 圆角，inset 阴影，uppercase 标签 */
-.button { border: 0; border-radius: var(--radius-sm); background: var(--primary); color: #fff; padding: 8px 15px; font-weight: 500; cursor: pointer; font-size: 14px; transition: background .15s ease, box-shadow .15s ease; }
+.button { border: 0; border-radius: var(--radius-sm); background: var(--primary); color: var(--on-primary); padding: 8px 15px; font-weight: 500; cursor: pointer; font-size: 14px; transition: background .15s ease, box-shadow .15s ease; }
 .button:hover { background: var(--primary-hover); box-shadow: rgba(0, 0, 0, .18) 0 4px 12px; }
 .button:active { background: var(--primary-active); }
+.button-accent { background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-hover) 100%); }
+.button-accent:hover { background: linear-gradient(135deg, var(--accent-green-hover) 0%, var(--accent-green) 100%); }
+.button-accent:active { background: var(--accent-green-active); }
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .button.secondary { background: var(--fill-2); color: var(--ink-2); }
 .button.secondary:hover { background: var(--line); }
@@ -127,7 +149,7 @@ label { display: grid; gap: 6px; color: var(--ink-2); font-size: 13px; font-weig
 input, select { min-width: 0; border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); border-radius: var(--radius-xs); padding: 6px 11px; font-size: 14px; outline: none; transition: border-color .15s ease, box-shadow .15s ease; }
 input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; accent-color: var(--primary); }
 input:hover, select:hover { border-color: var(--primary-hover); }
-input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(106, 95, 193, .2); }
+input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), .2); }
 
 .operation-notice { margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--primary-soft); background: var(--primary-soft); color: var(--primary); font-size: 13px; animation: notice-in .18s ease; }
 .operation-notice.error { border-color: var(--danger-soft); background: var(--danger-soft); color: var(--danger); }
@@ -172,12 +194,12 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px 
 .data-link { color: var(--primary); }
 .data-link:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
 
-.brand-badge { margin: 0 auto 18px; width: 40px; height: 40px; display: grid; place-items: center; background: var(--primary); color: #fff; border-radius: var(--radius-md); font-weight: 900; font-size: 18px; }
+.brand-badge { margin: 0 auto 18px; width: 40px; height: 40px; display: grid; place-items: center; background: linear-gradient(135deg, var(--primary) 0%, var(--accent-green) 100%); color: var(--on-primary); border-radius: var(--radius-md); font-weight: 900; font-size: 18px; box-shadow: 0 2px 8px rgba(var(--primary-rgb), .25); }
 
 /* ---- 路由进度条 ---- */
 
 .route-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 200; background: transparent; }
-.route-progress-bar { display: block; height: 100%; background: var(--primary); box-shadow: 0 0 6px rgba(106, 95, 193, .5); }
+.route-progress-bar { display: block; height: 100%; background: var(--primary); box-shadow: 0 0 6px rgba(var(--primary-rgb), .5); }
 .route-progress-bar.running { width: 80%; transition: width 1.6s cubic-bezier(.1, .8, .2, 1); }
 .route-progress-bar.done { width: 100%; opacity: 0; transition: width .18s ease, opacity .22s ease; }
 
@@ -285,7 +307,7 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px 
 
 /* 骨架屏颜色统一为紫色调 */
 .cashier-loading .skeleton::after,
-.skeleton-card .skeleton::after { background: linear-gradient(90deg, transparent, rgba(106, 95, 193, .08), transparent); }
+.skeleton-card .skeleton::after { background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), .08), transparent); }
 
 /* 操作列按钮统一间距 */
 .list-table .row-actions { gap: 6px; }

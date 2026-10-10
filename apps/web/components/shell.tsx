@@ -11,6 +11,7 @@ import { useNavPush } from "../lib/nav-progress";
 import { VersionBadge } from "./version-badge";
 import { PageTabs } from "./page-tabs";
 import { RouteProgress } from "./route-progress";
+import { applyColors, getColors } from "../lib/theme";
 // 只取类型：app-version 里含 node:child_process，客户端组件不能把它拉进浏览器包。
 import type { AppVersion } from "../lib/app-version";
 
@@ -107,6 +108,10 @@ export function Shell({ children, version }: { children: React.ReactNode; versio
   const [navOpen, setNavOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // 主题/折叠只有用户主动改过才值得写回存储。
+  // 少了这个闸门，「写回」的副作用会在首帧用初始值（false）盖掉刚读出来的偏好 ——
+  // 开发模式下 React StrictMode 会双挂载，这个竞态稳定复现，表现为刷新后主题总是回到浅色。
+  const [prefsTouched, setPrefsTouched] = useState(false);
 
   // 折叠与主题都是“下次进来还想保持”的偏好，首帧先按默认值渲染再读存储，
   // 否则服务端渲染出的 HTML 与客户端不一致。
@@ -121,12 +126,16 @@ export function Shell({ children, version }: { children: React.ReactNode; versio
 
   useEffect(() => {
     document.body.setAttribute("arco-theme", dark ? "dark" : "light");
+    // 派生色（hover / soft）在深浅模式下算法不同，切模式时要按新底色重算一遍自定义配色
+    applyColors(getColors(), dark);
+    if (!prefsTouched) return;
     try { window.localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch { /* 同上 */ }
-  }, [dark]);
+  }, [dark, prefsTouched]);
 
   useEffect(() => {
+    if (!prefsTouched) return;
     try { window.localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* 同上 */ }
-  }, [collapsed]);
+  }, [collapsed, prefsTouched]);
 
   useEffect(() => { setNavOpen(false); }, [path]);
 
@@ -177,7 +186,11 @@ export function Shell({ children, version }: { children: React.ReactNode; versio
         <button
           type="button"
           className="header-icon"
-          onClick={() => (isNarrow ? setNavOpen(true) : setCollapsed(value => !value))}
+          onClick={() => {
+            setPrefsTouched(true);
+            if (isNarrow) setNavOpen(true);
+            else setCollapsed(value => !value);
+          }}
           aria-label={isNarrow ? "打开导航菜单" : collapsed ? "展开侧边栏" : "折叠侧边栏"}
           aria-expanded={isNarrow ? navOpen : !collapsed}
         >
@@ -195,7 +208,7 @@ export function Shell({ children, version }: { children: React.ReactNode; versio
             </button>
           </Tooltip>
           <Tooltip content={dark ? "切换为浅色" : "切换为深色"}>
-            <button type="button" className="header-icon" onClick={() => setDark(value => !value)} aria-label={dark ? "切换为浅色主题" : "切换为深色主题"}>
+            <button type="button" className="header-icon" onClick={() => { setPrefsTouched(true); setDark(value => !value); }} aria-label={dark ? "切换为浅色主题" : "切换为深色主题"}>
               {dark ? <IconSun style={{ fontSize: 17 }} aria-hidden="true" /> : <IconMoon style={{ fontSize: 17 }} aria-hidden="true" />}
             </button>
           </Tooltip>

@@ -1,4 +1,4 @@
-import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, KeyRound, LayoutDashboard, ListChecks, Puzzle, ReceiptText, RotateCcw, Shuffle, Webhook, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AppWindow, Bell, CreditCard, FileCheck2, Gauge, KeyRound, LayoutDashboard, ListChecks, Palette, Puzzle, ReceiptText, RotateCcw, Shuffle, Webhook, type LucideIcon } from "lucide-react";
 
 /**
  * 管理台导航配置。
@@ -78,6 +78,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/applications", title: "应用", icon: AppWindow, tone: "cyan" },
       { href: "/mcp-access", title: "MCP / Agent Access", icon: KeyRound, tone: "purple" },
       { href: "/audits", title: "操作审计", icon: ListChecks, tone: "green" },
+      { href: "/settings", title: "界面设置", icon: Palette, tone: "purple" },
     ],
   },
 ];

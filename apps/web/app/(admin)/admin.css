@@ -12,7 +12,7 @@
 /* 品牌区 60px，与顶栏等高 */
 .brand { flex: 0 0 auto; height: var(--header-h); display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow: hidden; }
 .brand.collapsed { justify-content: center; padding: 0; }
-.brand-mark { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--primary); color: #fff; font-weight: 800; font-size: 15px; }
+.brand-mark { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--primary); color: var(--on-primary); font-weight: 800; font-size: 15px; }
 .brand-text { display: grid; min-width: 0; }
 .brand-title { font-size: 15px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
 .brand-subtitle { color: var(--muted); font-size: 10px; white-space: nowrap; }
@@ -60,7 +60,7 @@
 /* 二级图标盒：固定 18px 且内容居中，图标视觉重心才落在同一条竖线上 */
 .menu-icon { flex: 0 0 auto; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 /* 一级图标做成 MPAY 那种彩色方块 */
-.menu-tile { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-sm); color: #fff; }
+.menu-tile { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--on-primary); }
 .menu-tile.tone-blue { background: var(--primary); }
 .menu-tile.tone-green { background: var(--success); }
 .menu-tile.tone-orange { background: var(--warning); }
@@ -72,7 +72,7 @@
 .app-menu .arco-menu-inline-header:hover,
 .app-menu .arco-menu-sub-menu-title:hover { background: var(--fill-2); color: var(--ink); }
 .app-menu .arco-menu-selected,
-.app-menu .arco-menu-item.arco-menu-selected { background: var(--fill-2); color: var(--primary); font-weight: 500; }
+.app-menu .arco-menu-item.arco-menu-selected { background: var(--primary-soft); color: var(--primary); font-weight: 500; border-left: 3px solid var(--accent-green); padding-left: 9px; }
 .app-menu .arco-menu-selected .menu-label { color: var(--primary); }
 .app-menu .arco-menu-selected .menu-icon { color: var(--primary); }
 
@@ -101,7 +101,7 @@
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .header-user { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; transition: background .15s ease; }
 .header-user:hover { background: var(--fill-2); }
-.header-avatar { background: var(--primary); color: #fff; font-size: 13px; }
+.header-avatar { background: var(--primary); color: var(--on-primary); font-size: 13px; }
 .header-name { font-size: 14px; }
 
 /* ---- 多页签栏（40px，对齐 SnowAdmin） ---- */
@@ -854,7 +854,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .app-menu .arco-menu-item { transition: background-color .12s ease, color .12s ease; }
 
 /* ---- 表单：输入框 focus 光晕 ---- */
-input:focus, select:focus { box-shadow: 0 0 0 3px rgba(106, 95, 193, .15); }
+input:focus, select:focus { box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .15); }
 
 /* ---- 表单：错误提示 ---- */
 .form-field-error { margin-top: 4px; }
@@ -880,3 +880,129 @@ input:focus, select:focus { box-shadow: 0 0 0 3px rgba(106, 95, 193, .15); }
   .button:active { transform: none; }
 }
 
+
+/* ============================================================
+   配色设置：源头色只有两个，派生色由 lib/theme.ts 现算
+   ============================================================ */
+
+.theme-intro { margin: 0 0 18px; max-width: 68ch; }
+
+.theme-fieldset { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.theme-field { display: grid; gap: 6px; min-width: 0; }
+.theme-field-label { color: var(--ink); font-size: 13px; font-weight: 500; }
+.theme-field-control { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+/* 原生取色器：去掉默认的圆角方框，做成和输入框同高的色块 */
+.theme-color-input {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.theme-color-input:hover { border-color: var(--primary-hover); }
+.theme-color-input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .18);
+  outline: none;
+}
+.theme-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.theme-color-input::-webkit-color-swatch { border: 0; border-radius: 3px; }
+.theme-color-input::-moz-color-swatch { border: 0; border-radius: 3px; }
+
+.theme-hex-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.theme-hex-input.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.theme-field-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.theme-field-hint.error { color: var(--danger); }
+
+/* ---- 效果预览：让用户改完立刻看到按钮/徽章长什么样 ---- */
+
+.theme-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--fill-2);
+}
+.theme-preview-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.theme-preview .button { cursor: default; }
+.theme-preview-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  margin-left: auto;
+}
+
+/* ---- 预设方案 ---- */
+
+.theme-presets { margin-top: 20px; display: grid; gap: 10px; }
+.theme-presets-label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.theme-presets-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.theme-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.theme-preset:hover { border-color: var(--primary-hover); color: var(--ink); }
+.theme-preset.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 500;
+}
+.theme-preset:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.theme-preset-dots { display: inline-flex; gap: 3px; }
+.theme-preset-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .12);
+}
+
+@media (max-width: 700px) {
+  .theme-fieldset { grid-template-columns: 1fr; }
+  .theme-preset { min-height: 40px; }
+  .theme-preview-swatch { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-color-input, .theme-preset { transition: none; }
+}
