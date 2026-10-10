@@ -1,10 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { themeBootstrapScript } from "../lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "TUOXIN Pay",
   description: "拓昕支付基础设施控制台",
+};
+
+// viewport-fit=cover 是 env(safe-area-inset-*) 生效的前提：
+// 不加它，刘海屏上安全区变量恒为 0，CSS 里的安全区适配全部失效。
+// 不使用 maximum-scale / user-scalable=no —— 禁止缩放会违反 WCAG 1.4.4
+// （内容需可放大到 200%），也让视力不佳的用户无法放大查看金额与订单号。
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
