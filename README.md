@@ -121,7 +121,7 @@ rm -f .env
 
 以 Git Tag `vMAJOR.MINOR.PATCH` 作为唯一**发布标识**。镜像在 CI 构建时注入 `APP_VERSION`，
 因此左下角版本徽标、`/health`、系统监控及 MCP `serverInfo` 使用同一发布版本。
-当前正式版本为 `v1.0.1`；不能仅修改 `package.json` 就假装发布成功。
+例如历史发布 `v1.0.1`；实际已发布版本以仓库的 Git Tags 和 GHCR 为准，不能仅修改 `package.json` 就假装发布成功。
 
 **下一次准备 `v1.0.2` 时，先同步文件，再合并，最后打 tag：**
 
