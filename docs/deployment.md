@@ -393,7 +393,7 @@ CI 先跑检查（版本一致性、typecheck、单测、脚本与 Compose 校�
 docker pull ghcr.io/anrcm0/tunexpay:v1.0.1
 ```
 
-本地构建想带上版本号时显式传 build-arg；不传（或留空）时镜像内是 `0.1.0-dev`，管理台会如实显示这不是一次发布：
+本地构建想带上版本号时显式传 build-arg；不传（或留空）时镜像内是 `0.0.0-dev`，管理台会如实显示这不是一次发布：
 
 ```bash
 APP_VERSION=1.0.1 docker compose build
