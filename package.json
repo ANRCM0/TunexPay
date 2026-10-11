@@ -1,6 +1,6 @@
 {
   "name": "tuoxin-pay",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "workspaces": [
     "apps/*"
@@ -19,7 +19,10 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "app:create": "npm run app:create --workspace @tuoxin-pay/api --"
+    "app:create": "npm run app:create --workspace @tuoxin-pay/api --",
+    "release:prepare": "node scripts/release-version.mjs --set",
+    "release:check": "node scripts/release-version.mjs --check",
+    "release:test": "node --test scripts/release-version.test.mjs"
   },
   "devDependencies": {
     "prisma": "6.12.0"
