@@ -25,6 +25,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Verify root, workspace and lockfile versions
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            node scripts/release-version.mjs --check "$GITHUB_REF_NAME"
+          else
+            node scripts/release-version.mjs --check
+          fi
+      - name: Test release version tooling
+        run: npm run release:test
       - run: npm ci --ignore-scripts
       - run: npm run db:generate
       - run: npm run typecheck
@@ -72,6 +82,9 @@ jobs:
             echo "::error::发布 tag 必须是 vMAJOR.MINOR.PATCH 形式（例如 v0.1.0），当前为 ${GITHUB_REF_NAME}"
             exit 1
           fi
+          # A tag is immutable; never silently rewrite package metadata after tagging.
+          # Fail before publishing GHCR images when any of the 7 fields disagree.
+          node scripts/release-version.mjs --check "$GITHUB_REF_NAME"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           {
             echo "### 发布版本号"
@@ -91,6 +104,10 @@ jobs:
           tags: |
             type=raw,value=v${{ steps.version.outputs.version }}
             type=raw,value=latest
+          # An OCI image pulled by digest can still identify its actual release.
+          labels: |
+            org.opencontainers.image.version=v${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build and push
         uses: docker/build-push-action@v6

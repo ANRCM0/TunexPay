@@ -28,8 +28,8 @@ describe("VersionBadge", () => {
   });
 
   it("degrades quietly when the build only knows a fallback version", () => {
-    const html = renderToStaticMarkup(<VersionBadge initial={{ version: "0.1.0-dev", commit: null, source: "fallback" }} />);
-    expect(html).toContain("v0.1.0-dev");
+    const html = renderToStaticMarkup(<VersionBadge initial={{ version: "0.0.0-dev", commit: null, source: "fallback" }} />);
+    expect(html).toContain("v0.0.0-dev");
     expect(html).not.toContain("null");
   });
 });

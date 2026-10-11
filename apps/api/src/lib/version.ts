@@ -7,7 +7,7 @@
 //      正好落在 tag 上得到 `0.1.0`，tag 之后 N 个提交得到 `0.1.0-N.g<提交号>`，工作区有未提交改动
 //      时追加 `.dirty`。三种形态都是合法 semver，且 `0.1.0-N.gXXXX` 在语义化排序里小于 `0.1.0`，
 //      与「这是 0.1.0 之后的提交」一致；
-//   3. 兜底值 0.1.0-dev —— 既没有注入、也没有可达的语义化 tag 时，明确表示「这不是一次发布」。
+//   3. 兜底值 0.0.0-dev —— 既没有注入、也没有可达的语义化 tag 时，明确表示「这不是一次发布」。
 //
 // 注意：apps/web/lib/app-version.ts 是本文件的对应实现，两侧契约必须一致，各自的单测覆盖同一张用例表。
 // 这里不做结果缓存：Docker 里走环境变量分支不会调用 Git，而本地开发需要跟随 HEAD / tag 实时变化。
@@ -25,7 +25,7 @@ export type AppVersion = {
 };
 
 export const VERSION_ENV_KEY = "APP_VERSION";
-export const FALLBACK_VERSION = "0.1.0-dev";
+export const FALLBACK_VERSION = "0.0.0-dev";
 
 /** 契约内的三种形态：0.1.0 / 0.1.0-dirty / 0.1.0-3.g4c26573[.dirty]。 */
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-((?:\d+\.g[0-9a-f]{7,40})(?:\.dirty)?|dirty))?$/;
