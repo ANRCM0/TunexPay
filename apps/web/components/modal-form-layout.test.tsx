@@ -172,3 +172,52 @@ describe("筛选条件与控件的标签关联", () => {
     expect(styled).toMatch(/display:\s*flex/);
   });
 });
+
+describe("表单列对齐：控件不因 label 长短而错位", () => {
+  // 用户反馈「输入框对齐不要左边上一点、右边下一点」。
+  // 成因：Arco 的 Form.Item 是 vertical 布局，控件在格内的位置由「本格 label 占几行」
+  // 决定，所以同一行两列 label 字数差得多时，两个输入框会上下错开（实测差 20px）。
+  // 修法：让 .arco-form-item 变 flex 列、wrapper 用 margin-top:auto 推到底，
+  // 两列控件就沿格底对齐。这些断言守的是「规则还在」，真实效果用浏览器量。
+  const source = css();
+
+  it("bill-settings-grid 的 Form.Item 是 flex 列", () => {
+    const blocks = source.split("}").filter((block) => block.includes("{"));
+    const rule = blocks.find((block) => /\.bill-settings-grid\s*>\s*\.arco-form-item\s*\{/.test(block));
+    expect(rule, "Form.Item 的 flex 列规则不见了").toBeDefined();
+    expect(rule).toMatch(/display:\s*flex/);
+    expect(rule).toMatch(/flex-direction:\s*column/);
+  });
+
+  it("控件 wrapper 用 margin-top:auto 推到底部（这是对齐的关键声明）", () => {
+    const blocks = source.split("}").filter((block) => block.includes("{"));
+    const rule = blocks.find((block) => /\.bill-settings-grid\s*>\s*\.arco-form-item\s*>\s*\.arco-form-item-wrapper\s*\{/.test(block));
+    expect(rule, "控件 wrapper 的 margin-top:auto 规则不见了").toBeDefined();
+    expect(rule).toMatch(/margin-top:\s*auto/);
+  });
+
+  it("label 区不参与推挤，保持固定高度", () => {
+    const blocks = source.split("}").filter((block) => block.includes("{"));
+    const rule = blocks.find((block) => /\.bill-settings-grid\s*>\s*\.arco-form-item\s*>\s*\.arco-form-label-item\s*\{/.test(block));
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/flex:\s*0 0 auto/);
+  });
+
+  it("选择器用的是实测类名，不是猜的 arco-form-item-label/-control", () => {
+    // 曾按直觉写成 .arco-form-item-label / .arco-form-item-control，实测 Arco 的真实 DOM 是
+    // .arco-form-label-item + .arco-form-item-wrapper（label 类名没有 item 后缀）。
+    // 这条断言防止以后有人"顺手改回顺眼但错的名字"。
+    const blocks = source.split("}");
+    expect(blocks.some((block) => /\.bill-settings-grid[^{]*arco-form-item-label[^a-z]/.test(block))).toBe(false);
+    expect(blocks.some((block) => /\.arco-form-item-wrapper\s*\{[^}]*margin-top:\s*auto/.test(block))).toBe(true);
+  });
+
+  it("通道 ID 不再挂 extra 小字（它会把本格撑高，造成同行错位）", () => {
+    // 小字里的字符规则已由 channelDraftErrors 在提交时给出，属重复提示。
+    const channelEditor = tsx("channel-editor.tsx");
+    const start = channelEditor.indexOf("creating\n");
+    const block = channelEditor.slice(start, channelEditor.indexOf("通道名称"));
+    expect(block).toContain("通道 ID（可选）");
+    expect(block).not.toContain("extra=");
+  });
+});

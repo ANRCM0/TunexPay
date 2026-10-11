@@ -380,6 +380,15 @@ html .app-modal-layer .arco-modal.app-modal-wide .dialog-actions {
 .bill-settings-section-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .bill-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .bill-settings-wide { grid-column: 1 / -1; }
+/* 表单列对齐：Arco 的 Form.Item 是 vertical 布局，控件位置由「本格 label 占几行」决定，
+   所以左列 label 长、右列 label 短时，两个输入框会一上一下差出十几像素
+   （实测差 20px）。让每格内容整体靠下、label 区固定在上，控件就能沿底线对齐。
+
+   真实 DOM：.arco-form-item > [.arco-form-label-item, .arco-form-item-wrapper]
+   （label 不是 .arco-form-item-label，控件包在 wrapper 里 —— 实测类名如此）。 */
+.bill-settings-grid > .arco-form-item { display: flex; flex-direction: column; }
+.bill-settings-grid > .arco-form-item > .arco-form-label-item { flex: 0 0 auto; }
+.bill-settings-grid > .arco-form-item > .arco-form-item-wrapper { margin-top: auto; }
 .bill-settings-grid textarea { width: 100%; resize: vertical; font-family: monospace; border: 1px solid var(--line-strong); border-radius: var(--radius-xs); padding: 8px 11px; background: var(--panel); color: inherit; }
 .bill-settings-switches, .bill-settings-actions { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; }
 .bill-settings-switches label { display: flex; flex-direction: row; align-items: center; gap: 8px; }

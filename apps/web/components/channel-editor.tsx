@@ -131,11 +131,17 @@ export function ChannelEditor({ plugin, channel, plugins, onSaved, onClose, onBu
               {fieldErrors.plugin && <p className="form-field-error" role="alert">{fieldErrors.plugin}</p>}
             </Form.Item>
             {creating
-              ? <Form.Item label="通道 ID（可选）" extra={<span className="muted">只能用小写字母、数字与中划线；创建后不可修改，接口与对账会引用它。</span>}>
+              ? <Form.Item label="通道 ID（可选）">
+                {/* 这里原来有一段 extra 小字说明字符规则。删除原因有二：
+                    一、规则已由提交校验覆盖（lib/settings-validation.ts 的
+                    channelDraftErrors 会在不合规时给出同样的提示），
+                    常驻小字属于重复；二、它把这一格撑高，导致同一行
+                    「对接插件」的输入框比本格高出 40px，两列对不齐。
+                    用法与例子由 placeholder 承担（"留空自动生成，例如 alipay-shop1"）。 */}
                 <Input aria-label="通道 ID（可选）" value={channelId} disabled={saving} maxLength={60} placeholder="留空自动生成，例如 alipay-shop1" autoComplete="off" spellCheck={false} onChange={(value) => { setChannelId(value); setFieldErrors(previous => { const next = { ...previous }; delete next.channelId; return next; }); }} aria-invalid={Boolean(fieldErrors.channelId)} />
                 {fieldErrors.channelId && <p className="form-field-error" role="alert">{fieldErrors.channelId}</p>}
               </Form.Item>
-              : <Form.Item label="通道 ID" extra={<span className="muted">通道 ID 创建后不可修改。</span>}>
+              : <Form.Item label="通道 ID">
                 <Input aria-label="通道 ID" value={channel.id} readOnly disabled />
               </Form.Item>}
             <Form.Item label="通道名称" required>
