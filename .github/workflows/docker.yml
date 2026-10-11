@@ -104,6 +104,10 @@ jobs:
           tags: |
             type=raw,value=v${{ steps.version.outputs.version }}
             type=raw,value=latest
+          # An OCI image pulled by digest can still identify its actual release.
+          labels: |
+            org.opencontainers.image.version=v${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
