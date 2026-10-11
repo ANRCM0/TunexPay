@@ -375,6 +375,7 @@ export function Applications() {
     {confirmDiscardCreate && <ConfirmModal title="放弃新建应用？" copy="应用名称、Webhook 地址和所选收款路由尚未保存。关闭后这些输入将丢失。" danger confirmLabel="放弃填写" onClose={() => setConfirmDiscardCreate(false)} onConfirm={discardCreate} />}
     {creating && <Modal
       className="app-modal"
+      wrapClassName="app-modal-layer"
       title={credentials ? "创建成功：请立即保存凭证" : "新建应用"}
       visible
       onCancel={closeCreate}
@@ -427,6 +428,7 @@ export function Applications() {
         真正可改的是收款路由 —— 它本来就是这一行唯一能在列表里改的字段。 */}
     {editing && <Modal
       className="app-modal"
+      wrapClassName="app-modal-layer"
       title={`编辑应用 · ${editing.name}`}
       visible
       onCancel={() => setEditing(null)}
@@ -475,7 +477,7 @@ export function Applications() {
     />}
 
     {/* 重置凭证沿用原来的可关闭规则：展示新凭证或正在重置时，遮罩 / Esc / 关闭按钮都不可用 */}
-    {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} visible onCancel={closeRotate} footer={null} closable={!rotated && busy !== rotating.id} maskClosable={!rotated && busy !== rotating.id} escToExit={!rotated && busy !== rotating.id} autoFocus focusLock alignCenter unmountOnExit>
+    {rotating && <Modal title={rotated ? "新凭证（仅显示一次）" : "重置应用凭证"} className="app-modal" wrapClassName="app-modal-layer" visible onCancel={closeRotate} footer={null} closable={!rotated && busy !== rotating.id} maskClosable={!rotated && busy !== rotating.id} escToExit={!rotated && busy !== rotating.id} autoFocus focusLock alignCenter unmountOnExit>
       {rotated ? <>
         <p className="muted">旧凭证已立即失效，请把新凭证更新到业务侧配置。离开本窗口后无法再次查看。</p>
         <CredentialBlock title="请立即保存以下凭证。" items={[
@@ -499,7 +501,7 @@ export function Applications() {
     </Modal>}
 
     {/* 删除弹窗保持原来「随时可关闭」的手感（遮罩 / Esc / 关闭按钮都保留默认值） */}
-    {removing && <Modal title="删除应用" visible onCancel={() => { if (busy !== removing.id) closeRemove(); }} closable={busy !== removing.id} maskClosable={busy !== removing.id} escToExit={busy !== removing.id} footer={null} autoFocus focusLock alignCenter unmountOnExit>
+    {removing && <Modal title="删除应用" className="app-modal" wrapClassName="app-modal-layer" visible onCancel={() => { if (busy !== removing.id) closeRemove(); }} closable={busy !== removing.id} maskClosable={busy !== removing.id} escToExit={busy !== removing.id} footer={null} autoFocus focusLock alignCenter unmountOnExit>
       {removed ? <>
         <p>应用「<strong>{removed.name}</strong>」已删除。</p>
         {removeError && <div className="operation-notice error" role="alert">{removeError}</div>}

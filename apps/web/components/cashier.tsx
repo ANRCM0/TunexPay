@@ -128,7 +128,7 @@ export function Cashier({ paymentNo }: { paymentNo: string }) {
           <div className="cashier-duo-item"><span>剩余时间</span><strong className="cashier-countdown">{remainText}</strong></div>
         </div>}
 
-        {actionError && <div className="operation-notice error" aria-live="polite">{actionError}</div>}
+        {actionError && <div className="operation-notice error" role="alert">{actionError}</div>}
         {data.channel === "ALIPAY_BILL" && canPay && <p className="muted cashier-note">请勿保存、转发收款码或在其他订单复用。款项直接进入支付宝收款账号；备注错误、金额不符或超时付款可能需要人工核对。</p>}
 
         <div className="cashier-foot">

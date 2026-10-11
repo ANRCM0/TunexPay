@@ -31,8 +31,16 @@ function ToneTag({ tone, text, code }: { tone: Tone; text: string; code?: string
   return <Tag color={TAG_COLOR[tone]} title={code}>{text}</Tag>;
 }
 
-// 数值型指标保留原有的配色语义（等待中=默认、投递中=绿、退避=橙、失败=红）
-const VALUE_COLOR: Record<Tone, string> = { ok: "var(--success)", warn: "var(--warning)", danger: "var(--danger)" };
+// 数值型指标保留原有的配色语义（等待中=默认、投递中=绿、退避=橙、失败=红）。
+// 必须用 --*-text 而不是 --success/--warning/--danger：后三者是为「填充 / 边框」设计的
+// 语义色，直接当文字色在白底上只有 2.78:1（AA 要求 4.5:1）。
+// --*-text 是 globals.css 里按底色单独算过的文字专用变体（5.02~6.47:1），
+// 深色模式下同样有一组更亮的对应值，所以深浅双模式都达标。
+const VALUE_COLOR: Record<Tone, string> = {
+  ok: "var(--success-text)",
+  warn: "var(--warning-text)",
+  danger: "var(--danger-text)",
+};
 
 function QueueStat({ label, value, note, tone }: { label: string; value: number; note: string; tone?: Tone }) {
   return <Statistic

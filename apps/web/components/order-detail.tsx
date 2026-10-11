@@ -67,6 +67,10 @@ export function OrderDetailBody({ orderNo }: { orderNo: string }) {
   return <LoadingState loading={loading} error={error}>
     {data && <>
       {notice && <Toast type={notice.type} text={notice.text} onClose={() => setNotice(null)} />}
+      {/* 这两条是「随数据一起呈现的常驻状态横幅」，不是操作反馈。
+          不加 role/aria-live：它们每次进入页面都会出现，屏幕阅读器会把它当成
+          页面内容正常朗读；做成 live region 反而会在轮询刷新时反复播报。
+          真正的操作结果走上面的 Toast（已带 role=status/alert）。 */}
       {data.paymentExceptions.some(item => ["OPEN", "PROCESSING"].includes(item.status)) && <div className="operation-notice error">这张订单存在待处理的资金异常，请前往“支付异常”核实，勿直接修改订单状态。</div>}
       {data.expirationError && <div className="operation-notice error">订单过期关闭暂未完成：{data.expirationError}。系统将在 {time(data.expirationNextAttemptAt)} 重试。</div>}
       <Tabs items={DETAIL_TABS} active={tab} onChange={setTab} />

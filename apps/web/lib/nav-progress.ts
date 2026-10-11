@@ -11,7 +11,7 @@ import { useCallback, useEffect, useSyncExternalStore, useTransition } from "rea
  * 真实的 pending：开始 push 时置为进行中，新路由渲染完成（transition 结束）
  * 时置回空闲，进度条因此对应真实等待。
  */
-let listeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 let pendingCount = 0;
 
 function emit() {

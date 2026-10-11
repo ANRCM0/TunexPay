@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Table, Tag } from "@arco-design/web-react";
+import { Button, Table } from "@arco-design/web-react";
 import type { ColumnProps } from "@arco-design/web-react/es/Table";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";

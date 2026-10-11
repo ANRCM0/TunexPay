@@ -74,7 +74,7 @@ export function BillSettingsPanel({ onSaved }: { onSaved: () => Promise<void> })
   return <Section title="支付宝账单收款配置" action={<span className="muted">数据库持久化 · 密钥加密 · 仅影响账单通道</span>} className="detail-section">
     {confirmReload && <ConfirmModal title="放弃未保存的账单配置？" copy="当前的配置修改和临时输入的密钥将丢失，并重新读取服务器已保存的内容。" danger confirmLabel="放弃并重新加载" onClose={() => setConfirmReload(false)} onConfirm={() => { setConfirmReload(false); void reload(); }} />}
     {confirmSecretClear && <ConfirmModal title="确认清除已保存密钥？" copy="你选择了清除已保存的密钥或令牌。保存后可能立即影响支付验签或账单采集，且无法从管理台恢复原密钥。" danger confirmLabel="确认清除并保存" working={saving} onClose={() => setConfirmSecretClear(false)} onConfirm={() => { setConfirmSecretClear(false); void save(true); }} />}
-    {notice && <div className={`operation-notice ${notice.ok ? "ok" : "error"}`}>{notice.text}</div>}
+    {notice && <div className={`operation-notice ${notice.ok ? "ok" : "error"}`} role={notice.ok ? "status" : "alert"}>{notice.text}</div>}
     <LoadingState loading={loading} error={error}>
       {draft && data && /* Arco Form 负责提交与校验编排；字段本身仍是受控的本地草稿，
         这样才能在「重新加载（放弃未保存修改）」时把服务端值整体回灌到一处状态。 */

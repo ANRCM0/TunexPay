@@ -56,9 +56,14 @@ async function writeClipboard(value: string): Promise<boolean> {
     node.style.opacity = "0";
     document.body.appendChild(node);
     node.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(node);
-    return ok;
+    try {
+      return document.execCommand("copy");
+    } finally {
+      // 无论 execCommand 成功、返回 false 还是抛错，这个隐藏 textarea 都必须移出 DOM。
+      // 漏掉它会留下一个视觉不可见但真实存在的幽灵节点；execCommand 已被废弃，
+      // 将来若改成直接抛错，异常路径下更容易遗忘这里的清理。
+      if (node.parentNode) node.parentNode.removeChild(node);
+    }
   } catch {
     return false;
   }
@@ -171,6 +176,10 @@ export function Drawer({ title, onClose, wide = false, dismissible = true, child
 export function Modal({ title, onClose, dismissible = true, children }: { title: string; onClose: () => void; dismissible?: boolean; children: React.ReactNode }) {
   return <ArcoModal
     className="app-modal"
+    // app-modal-layer 是高度接管规则的特权锚点：admin.css 用它把选择器抬到
+    // (0,4,0)，才能压过组件库 align-center 的 inline-block（详见 admin.css 注释）。
+    // 漏掉它，多字段弹窗的保存按钮会被顶出视口且页面不滚动。
+    wrapClassName="app-modal-layer"
     title={title}
     visible
     onCancel={onClose}

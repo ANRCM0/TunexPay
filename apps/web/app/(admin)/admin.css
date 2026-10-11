@@ -218,9 +218,133 @@ tbody tr:last-child td { border-bottom: 0; }
 .drawer-body { overflow-y: auto; padding: 20px; }
 .drawer-body .card { box-shadow: none; }
 
-.modal-mask { justify-content: center; align-items: center; padding: 24px; }
-.modal { width: min(640px, 100%); max-height: calc(100vh - 60px); background: var(--panel); border-radius: var(--radius-md); display: grid; grid-template-rows: auto 1fr; overflow: hidden; box-shadow: var(--shadow-pop); animation: modal-in .2s cubic-bezier(.2, .8, .3, 1); }
-.modal .drawer-head { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+/* ---- Arco Modal：高度与滚动（覆盖组件库默认）-------------------
+
+   组件库默认既不限高也不内部滚动：.arco-modal 固定 width:520px + top:100px，
+   .arco-modal-content 是 overflow:visible，wrapper 才负责 overflow:auto。
+   短内容看不出问题，内容一长（创建通道 / 编辑通知实例这类多字段表单）就只有两种结果：
+   wrapper 整页滚动（遮罩跟着一起滚，按钮在视口外），或者 alignCenter 下底部被顶出视口。
+   无论是哪种，「保存」都点不到。
+
+   本项目用 Modal 的两种方式，DOM 结构不同，要分别接管：
+   1) title + children（common.tsx 的 Modal / channels.tsx 的创建通道）：
+      .arco-modal 下是「header / content / 关闭图标」三个兄弟，
+      content 里直接塞我们自己的表单，没有 .arco-modal-body / footer。
+   2) 组件库默认的 header/body/footer 结构（有 footer 的确认框）。
+
+   所以规则按「content 自己成为滚动容器」来写：header 固定，content 吃掉剩余高度并
+   内部滚动。这样两种结构都成立，也不依赖 children 里具体放了什么标签。
+
+   width / maxHeight 作用在 .arco-modal 上 —— Arco 的 className 落在这一层
+   （Modal/modal.js: cs(prefixCls, ..., className)），不是 content 层。
+
+   特异性必须打赢 `.arco-modal-wrapper.arco-modal-wrapper-align-center .arco-modal`
+   （三个类，(0,3,0)）—— alignCenter 打开时它会把 .arco-modal 改成 display:inline-block
+   并 top:0，inline-block 会直接废掉这里的 flex 布局。等特异性只看先后顺序，而 Arco 的
+   样式表与本文件都由 arco-provider 注入、最终顺序不可依赖，所以必须再加一级：
+   `html .app-modal-layer .arco-modal.app-modal` 是 (0,4,0)，稳定取胜。
+   （这段教训与 docs/frontend-redesign.md 记的「Arco 反超」是同一类问题。） */
+html .app-modal-layer .arco-modal.app-modal,
+html .app-modal-layer .arco-modal.app-modal-wide {
+  width: min(640px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  top: auto;
+  margin: 0 auto;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+html .app-modal-layer .arco-modal.app-modal-wide { width: min(960px, calc(100vw - 48px)); }
+
+/* focusLock 的关键一环：开了 focusLock 之后，Arco 会在 .arco-modal 与内容之间
+   插入一个无类名的 div（react-focus-lock 的容器），header / content / 关闭图标都是它的子节点。
+   这个容器是 .arco-modal 这个 flex 列里唯一的有效子项，但它默认 display:block +
+   min-height:auto，会按内容长到 1791px，把 672px 的限高整个顶穿。
+   所以必须把它也变成一个 min-height:0 的 flex 列，高度才能一级级传下去。 */
+html .app-modal-layer .arco-modal.app-modal > *,
+html .app-modal-layer .arco-modal.app-modal-wide > * {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+html .app-modal-layer .arco-modal.app-modal > .arco-modal-close-icon,
+html .app-modal-layer .arco-modal.app-modal-wide > .arco-modal-close-icon { display: block; flex: 0 0 auto; }
+
+/* 页头固定不动，占自身高度。
+   注意用后代选择器而不是 >：focusLock 的容器层在中间，直接子选择器会落空。 */
+html .app-modal-layer .arco-modal.app-modal .arco-modal-header,
+html .app-modal-layer .arco-modal.app-modal-wide .arco-modal-header {
+  flex: 0 0 auto;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+/* 内容区吃掉剩余高度并成为滚动容器。
+   min-height:0 必须写：flex 子项默认 min-height:auto，长内容会把行高撑开、限高失效。
+   这里的目标元素是 .arco-modal-content —— 它自己就是滚动条容器，
+   里面放的是本项目表单（form/settings-group…），不再是组件库的 header/body/footer 三段式。 */
+html .app-modal-layer .arco-modal.app-modal .arco-modal-content,
+html .app-modal-layer .arco-modal.app-modal-wide .arco-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  border-radius: inherit;
+}
+
+/* 组件库自带三段式（header/body/footer 都在 content 里）时：
+   让 content 变成三行网格，中间 body 滚动，页头页脚常驻。
+   不适用本项目：common.tsx 的 Modal 一律传 footer={null}，
+   真正可滚的一直是 content 本身 —— 上面那条规则已经覆盖。 */
+html .app-modal-layer .arco-modal.app-modal .arco-modal-content:has(.arco-modal-footer),
+html .app-modal-layer .arco-modal.app-modal-wide .arco-modal-content:has(.arco-modal-footer) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  padding: 0;
+}
+html .app-modal-layer .arco-modal.app-modal .arco-modal-content:has(.arco-modal-footer) .arco-modal-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+html .app-modal-layer .arco-modal.app-modal .arco-modal-footer,
+html .app-modal-layer .arco-modal.app-modal-wide .arco-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---- 弹窗内长表单：操作栏常驻，字段区滚动 ----------------------
+   本项目弹窗里放的是自己的表单（channel-editor 的 Form/fieldset、
+   bill-settings 的 Form、owner-notifications 的编辑器），保存按钮在表单末尾。
+   如果只让 content 整体滚动，保存按钮会被滚到视口外 —— 表单越长越难按到，
+   这正是「创建通道」被反馈的问题。
+
+   做法：content 已经是滚动容器（见上面的接管规则），表单内部的层级
+   （Arco Form 的 div、fieldset、section…）深度不固定，逐个改成 flex 列很容易漏。
+   直接把末尾的操作栏做成 sticky 贴在滚动容器底部即可，与层级无关：
+   bottom:0 相对的是最近的滚动祖先（content），滚动到哪都在。
+   覆盖 .bill-settings-actions（通道表单）与 .dialog-actions（确认框内的操作）。
+   新表单沿用其中一个类名就自动获得同样行为。 */
+html .app-modal-layer .arco-modal.app-modal .bill-settings-actions,
+html .app-modal-layer .arco-modal.app-modal .dialog-actions,
+html .app-modal-layer .arco-modal.app-modal-wide .bill-settings-actions,
+html .app-modal-layer .arco-modal.app-modal-wide .dialog-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
+  margin: 18px -20px -20px;
+  padding: 16px 20px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
 @keyframes modal-in { from { opacity: 0; transform: scale(.97) translateY(10px); } }
 
 /* 自定义 tabs：保留 WAI-ARIA tabs 的 roving tabindex 行为，造型对齐 Arco Tabs */
@@ -508,7 +632,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .settings-events code, .table-wrap code { overflow-wrap: anywhere; word-break: break-word; }
 .danger-link { color: var(--danger-text); }
 .danger-link:hover { color: var(--danger-text); opacity: .85; }
-.modal { max-height: calc(100dvh - 48px); }
 
 @media (max-width: 560px) {
   .page-head-actions { width: 100%; justify-content: flex-start; }
@@ -830,9 +953,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .drawer-head { padding: 14px 20px; }
 .drawer-body { padding: 20px; }
 
-/* ---- 弹窗：内容间距 ---- */
-.modal .drawer-body { padding: 20px; }
-
 /* ---- 按钮：统一圆角与内边距 ---- */
 .button { border-radius: var(--radius-sm); padding: 7px 14px; }
 .button.secondary { background: var(--fill-2); color: var(--ink-2); }
@@ -1125,13 +1245,13 @@ input:focus, select:focus { box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .15);
 
 /* ---- 7. 弹窗：移动端接近全屏 ----------------------------------
    640px 宽的弹窗在 390px 屏上只剩边距，操作按钮容易挤成两行。
-   改为占满可用宽度并抬高高度上限，操作按钮在窄屏改为等宽铺满。 */
+   改为占满可用宽度并抬高高度上限，操作按钮在窄屏改为等宽铺满。
+   选择器与上面的接管规则保持同一加权（都要打赢 align-center 的三类特异性）。 */
 @media (max-width: 700px) {
-  .modal-mask { padding: 12px; align-items: flex-end; }
-  .modal {
+  html .app-modal-layer .arco-modal.app-modal,
+  html .app-modal-layer .arco-modal.app-modal-wide {
     width: 100%;
     max-height: calc(100dvh - 24px);
-    border-radius: var(--radius-md);
   }
   .dialog-actions { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
   .dialog-actions .button { width: 100%; justify-content: center; }

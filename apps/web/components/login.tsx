@@ -66,7 +66,7 @@ export function Login() {
             placeholder="请输入管理员口令"
             prefix={<IconLock aria-hidden="true" />}
           />
-          {error && <div className="operation-notice error" aria-live="polite">{error}</div>}
+          {error && <div className="operation-notice error" role="alert">{error}</div>}
           <Button type="primary" htmlType="submit" size="large" long loading={loading}>{loading ? "正在验证…" : "登录管理后台"}</Button>
         </form>
         <p className="login-note">会话保存在 HttpOnly Cookie 中，浏览器不会保存后台 API Token。</p>

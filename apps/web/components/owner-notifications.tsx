@@ -651,6 +651,7 @@ export function OwnerNotificationsPanel() {
     {/* 实例编辑放在弹窗里：表格负责"看"，改动集中在一处提交，和应用的编辑入口保持一致 */}
     {editor && editorPlugin && <Modal
       className="app-modal"
+      wrapClassName="app-modal-layer"
       title={`编辑通知实例 · ${editor.name}`}
       visible
       onCancel={requestEditorClose}

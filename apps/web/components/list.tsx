@@ -35,11 +35,16 @@ export function FilterCard({ children, onSearch, onReset, searchLabel = "查询"
   </div>;
 }
 
+// 筛选条件与控件的关联：用 <label> 包住「文案 + 控件」，控件自动获得可访问名，
+// 点文字也能把焦点带进输入框（原来的 span 包裹做不到这两点 ——
+// 屏幕阅读器只会念到一堆没有名字的输入框）。
+// 不用 htmlFor：控件由调用方传入（Arco 的 Input/Select/DatePicker…），id 在组件内部生成，
+// 拿不到也不该去猜；单控件场景下隐式关联与 htmlFor 完全等价。
 export function FilterItem({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="filter-item">
+  return <label className="filter-item">
     <span className="filter-label">{label}</span>
     <span className="filter-control">{children}</span>
-  </div>;
+  </label>;
 }
 
 /** 带标签的输入框，宽度撑满筛选格 */
@@ -142,8 +147,13 @@ export function Pager({ total, page, pageSize, onChange, onPageSizeChange }: {
   />;
 }
 
-/** 排序状态：与 lib/sort 共用同一套规则，表格列头点击后调用。 */
-export function useTableSort<T>() {
+/**
+ * 排序状态：与 lib/sort 共用同一套规则，表格列头点击后调用。
+ *
+ * 泛型 <T> 只服务于调用方写清「这张表排序的是哪一行类型」，
+ * 函数体里用不到（nextSortState 只按 key 字符串工作），所以参数名加 _ 前缀。
+ */
+export function useTableSort<_T>() {
   const [sort, setSort] = useState(() => null as ReturnType<typeof nextSortState>);
   return {
     sort,

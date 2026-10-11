@@ -38,6 +38,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run db:generate
       - run: npm run typecheck
+      # 放在 test 前面：a11y 规则能在写下的那一刻暴露（本项目之前全靠测试里的源码扫描，
+      # ESLint 负责其中通用那部分），且它比测试快得多，失败时反馈更短。
+      - run: npm run lint --workspace @tuoxin-pay/web
       - run: npm test
       - name: Build production frontend
         run: npm run build --workspace @tuoxin-pay/web
