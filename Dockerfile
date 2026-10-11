@@ -1,7 +1,7 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 
-# 发布版本号，由 CI / 发布方注入，格式：<提交日期 YYYYMMDD>-<7 位提交号>，例如 20260830-4f48e61。
+# 发布版本由 Git Tag (vMAJOR.MINOR.PATCH) 提取并注入，例如 v1.0.2 -> APP_VERSION=1.0.2。
 # 必须在 npm run build 之前声明：管理台侧边栏的版本徽标是预渲染的，构建期就要读到它。
 # 不传则为空，应用会退化成 0.0.0-dev（明确表示这不是一次发布），不会因此构建失败。
 ARG APP_VERSION=""
