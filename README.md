@@ -117,15 +117,30 @@ rm -f .env
 
 删除数据卷前务必先导出数据库：卷一旦删除，订单、支付、退款与审计记录都无法恢复；`SECRETS_ENCRYPTION_KEY` 丢失后，已加密的 ePay / Webhook 密钥也无法解密。
 
-## 版本号
+## 版本号与发布
 
-每次发布带一个语义化版本号 `vMAJOR.MINOR.PATCH`（如 `v0.1.0`）：**tag 就是版本号**，管理台左下角常驻显示，`/health`、系统监控页、MCP `serverInfo` 同源，发布镜像也用同一个版本号打 tag。本地开发没有 tag 时用 `git describe` 推导成 `v0.1.0-3.g4f48e61` 这种形态，一眼能看出不是发布版。
+以 Git Tag `vMAJOR.MINOR.PATCH` 作为唯一**发布标识**。镜像在 CI 构建时注入 `APP_VERSION`，
+因此左下角版本徽标、`/health`、系统监控及 MCP `serverInfo` 使用同一发布版本。
+当前正式版本为 `v1.0.1`；不能仅修改 `package.json` 就假装发布成功。
+
+**下一次准备 `v1.0.2` 时，先同步文件，再合并，最后打 tag：**
 
 ```bash
-docker pull ghcr.io/anrcm0/tunexpay:v0.1.0
+npm run release:prepare -- v1.0.2   # 一次同步根项目、API、Web 和 package-lock.json
+npm run release:check               # 检查 7 处版本信息
+npm run release:test                # 检查发布脚本的安全性
+git diff -- package.json apps/api/package.json apps/web/package.json package-lock.json
+# 提交上述四个文件并通过 PR 合并到 main 后：
+git switch main && git pull --ff-only
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
-发布即推 tag：CI 检查通过后构建镜像并推送到 GHCR，打「版本号」与「latest」两个 tag。完整约定见[版本号与发布](docs/deployment.md#版本号)。
+推送 tag 后 CI 会严格校验 `v1.0.2` 与所有版本字段一致；任何一项不符则阻止镜像发布，
+**不会静默改动已经打好的 tag**。检查通过后才构建并推送
+`ghcr.io/anrcm0/tunexpay:v1.0.2` 和 `:latest`。
+已发布的历史 tag 不会被修改。本地开发的非发布版本由 Git 记录推导。
+详情见[版本号与发布](docs/deployment.md#版本号)。
 
 ## 文档
 
