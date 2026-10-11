@@ -357,33 +357,49 @@ vMAJOR.MINOR.PATCH      例：v0.1.0
 - 本地开发（`npm run dev`）没有注入版本号时会用 `git describe` 推导：正好在 tag 上显示 `v0.1.0`，tag 之后有提交显示 `v0.1.0-3.g4f48e61`，工作区有未提交改动再追加 `.dirty`。这些形态都是合法 semver，一眼能看出「不是发布版」。
 - 版本号不带 `v` 前缀存储（`0.1.0`），展示层统一加 `v`。
 
-发布流程：
+发布流程（以 `v1.0.2` 为例）：
 
 ```bash
-git tag v0.1.0                   # 必须是 vMAJOR.MINOR.PATCH，不符合 CI 会直接失败
-git push origin v0.1.0
+# 在开发分支上准备、检查并提交版本文件
+npm run release:prepare -- v1.0.2
+npm run release:check
+npm run release:test
+git diff -- package.json apps/api/package.json apps/web/package.json package-lock.json
+git add package.json apps/api/package.json apps/web/package.json package-lock.json
+git commit -m "chore(release): prepare v1.0.2"
+# 发起 PR，等 CI 通过并合并到 main
+git switch main && git pull --ff-only
+git tag v1.0.2                    # 只在合并完成后的目标提交创建
+git push origin v1.0.2
 ```
 
-CI 先跑检查（typecheck、单测、脚本与 Compose 校验），通过后构建镜像并推送到 GHCR。同一个镜像打两个 tag：
+版本同步脚本同时更新 3 个 `package.json`、锁文件顶层版本及其 3 个 workspace
+记录，总计 **7 处字段**，不会更改第三方依赖版本和 lockfile 完整性哈希。
+`release:check` 会核对字段一致；正式 tag 推送还会运行
+`node scripts/release-version.mjs --check "$GITHUB_REF_NAME"`，
+发现标签与其中任意字段不一致时就中止构建，不产生 GHCR 镜像。
+**CI 不会修改已经发布的 Git Tag 或自动向仓库提交文件。**
+
+CI 先跑检查（版本一致性、typecheck、单测、脚本与 Compose 校验），通过后构建镜像并推送到 GHCR。同一个镜像打两个 tag：
 
 | 镜像 tag | 说明 |
 | --- | --- |
-| `v<版本号>` | 例如 `v0.1.0`，与管理台左下角显示的值逐字一致，**部署与回滚建议按它来** |
+| `v<版本号>` | 例如 `v1.0.2`，与管理台左下角显示的值逐字一致，**部署与回滚建议按它来** |
 | `latest` | 最新一次发布 |
 
 所以界面上看到的版本号可以直接拿去拉镜像：
 
 ```bash
-docker pull ghcr.io/anrcm0/tunexpay:v0.1.0
+docker pull ghcr.io/anrcm0/tunexpay:v1.0.1
 ```
 
 本地构建想带上版本号时显式传 build-arg；不传（或留空）时镜像内是 `0.1.0-dev`，管理台会如实显示这不是一次发布：
 
 ```bash
-APP_VERSION=v0.1.0 docker compose build
+APP_VERSION=1.0.1 docker compose build
 ```
 
-在开发机上直接跑 `npm run dev:web` 会从本地 Git 读出 `v<提交日期>-<提交号>-dirty`，`-dirty` 表示构建时工作区有未提交改动。
+在开发机上运行 `npm run dev:web` 会优先使用本地 `git describe` 推导语义化版本及提交号；`-dirty` 表示工作区有未提交改动。没有 Git Tag 时使用明确的开发兜底版本，不冒充正式发布。
 
 同一个版本号可以在三处独立核对，任何一处不一致都说明有多个版本在混跑（例如 Web 回滚了但 API 没回滚）：
 
